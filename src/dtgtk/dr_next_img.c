@@ -9,6 +9,7 @@
 //#include "dtgtk/thumbtable.h"
 //#include "common/darktable.h"
 
+// из src/views/darkroom.c
 static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 {
   // change active image
@@ -16,7 +17,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   darktable.view_manager->active_images = NULL;
   darktable.view_manager->active_images
       = g_slist_append(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
-  dt_control_signal_raise(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 
   // if the previous shown image is selected and the selection is unique
   // then we change the selected image to the new one
@@ -175,7 +176,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       // we cleanup the module
       dt_accel_disconnect_list(&module->accel_closures);
       dt_accel_cleanup_locals_iop(module);
-      module->accel_closures = NULL;
       dt_iop_cleanup_module(module);
       free(module);
     }
@@ -219,11 +219,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
         dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
       }
-
-      /* setup key accelerators */
-      module->accel_closures = NULL;
-      if(module->connect_key_accels) module->connect_key_accels(module);
-      dt_iop_connect_common_accels(module);
     }
     else
     {
@@ -281,7 +276,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   }
 
   // Signal develop initialize
-  dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   // release pixel pipe mutices
   dt_pthread_mutex_BAD_unlock(&dev->preview2_pipe_mutex);
@@ -295,6 +290,13 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   darktable.view_manager->accels_window.prevent_refresh = FALSE;
   if(darktable.view_manager->accels_window.window && darktable.view_manager->accels_window.sticky)
     dt_view_accels_refresh(darktable.view_manager);
+  // just make sure at this stage we have only history info into the undo, all automatic
+  // tagging should be ignored.
+  dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
+
+  //connect iop accelerators
+  dt_iop_connect_accels_all();
+
 
   // just make sure at this stage we have only history info into the undo, all automatic
   // tagging should be ignored.
