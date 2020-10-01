@@ -849,7 +849,7 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
 
     scale_factor = _num/_denum;
 
-    if ((0.0 < scale_factor && scale_factor < 1.0) || (scale_factor > 1.0 && upscale))
+    if (((0.0 < scale_factor && scale_factor < 1.0) || (scale_factor > 1.0 && upscale)) && !thumbnail_export)
     {
         scale = scale_factor;
     }
