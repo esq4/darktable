@@ -798,24 +798,15 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
      7. Never generate images larger than requested.
   */
 
-  const gboolean iscropped =
-    ((pipe.processed_width < (wd - img->crop_x - img->crop_width)) ||
-     (pipe.processed_height < (ht - img->crop_y - img->crop_height)));
-
-  const gboolean exact_size = (
-      iscropped ||
-      upscale ||
-      (format_params->max_width != 0) ||
-      (format_params->max_height != 0) ||
-      thumbnail_export);
-
-  int width = format_params->max_width > 0 ? format_params->max_width : 0;
-  int height = format_params->max_height > 0 ? format_params->max_height : 0;
-
-  if(iscropped && !thumbnail_export && width == 0 && height == 0)
+  const double scalex = width > 0 ? fminf(width / (double)pipe.processed_width, max_scale) : max_scale;
+  const double scaley = height > 0 ? fminf(height / (double)pipe.processed_height, max_scale) : max_scale;
+  //ab For free scale
+  double scale_t = fminf(scalex, scaley);
+  float scale_d = 0;
+  scale_d = dt_conf_get_float("plugins/lighttable/export/scale_divider");
+  if(scale_t==1 && scale_d>0)
   {
-    width = pipe.processed_width;
-    height = pipe.processed_height;
+      scale_t = 1/scale_d;
   }
 
   const double max_scale = ( upscale && ( width > 0 || height > 0 )) ? 100.0 : 1.0;
@@ -840,6 +831,20 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
 
     scale = fmin(width >  0 ? fmin((double)width / (double)pipe.processed_width, max_scale) : max_scale,
                  height > 0 ? fmin((double)height / (double)pipe.processed_height, max_scale) : max_scale);
+
+    //ab For free scale
+    double scale_factor = 1;
+    double _num, _denum;
+
+    dt_imageio_resizing_factor_splitup(&_num, &_denum);
+
+    scale_factor = _num/_denum;
+
+    if ((0.0 < scale_factor && scale_factor < 1.0) || (scale_factor > 1.0 && upscale))
+    {
+        scale = scale_factor;
+    }
+    //ba For free scale
 
     processed_width = scale * pipe.processed_width + 0.8f;
     processed_height = scale * pipe.processed_height + 0.8f;

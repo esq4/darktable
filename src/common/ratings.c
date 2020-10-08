@@ -78,6 +78,7 @@ static void _ratings_apply_to_image(const int imgid, const int rating)
     }
     // synch through:
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+
   }
   else
   {

@@ -35,6 +35,8 @@
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
 
+#include "dtgtk/thumbtable.h" //ab
+
 static void _thumb_resize_overlays(dt_thumbnail_t *thumb);
 
 static void _set_flag(GtkWidget *w, GtkStateFlags flag, gboolean over)
@@ -719,7 +721,8 @@ static gboolean _event_rating_release(GtkWidget *widget, GdkEventButton *event, 
       dt_ratings_apply_on_image(thumb->imgid, rating, TRUE, TRUE, TRUE);
       dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD,
                                  g_list_append(NULL, GINT_TO_POINTER(thumb->imgid)));
-    }
+      dr_event_rating_release(darktable.develop); //ab
+     }
   }
   return TRUE;
 }
@@ -1754,3 +1757,4 @@ void dt_thumbnail_reload_infos(dt_thumbnail_t *thumb)
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+

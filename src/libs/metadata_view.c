@@ -208,39 +208,6 @@ static void _metadata_update_value(GtkLabel *label, const char *value)
   gtk_widget_set_tooltip_text(GTK_WIDGET(label), str);
 }
 
-static void _metadata_update_timestamp(GtkLabel *label, const time_t *value)
-{
-  char datetime[200];
-  // just %c is too long and includes a time zone that we don't know from exif
-  const size_t datetime_len = strftime(datetime, sizeof(datetime), "%a %x %X", localtime(value));
-  if(datetime_len > 0)
-  {
-    const gboolean valid_utf = g_utf8_validate(datetime, datetime_len, NULL);
-    if(valid_utf)
-    {
-      _metadata_update_value(label, datetime);
-    }
-    else
-    {
-      GError *error = NULL;
-      gchar *local_datetime = g_locale_to_utf8(datetime,datetime_len,NULL,NULL, &error);
-      if(local_datetime)
-      {
-        _metadata_update_value(label, local_datetime);
-        g_free(local_datetime);
-      }
-      else
-      {
-        _metadata_update_value(label, NODATA_STRING);
-        fprintf(stderr, "[metadata timestamp] could not convert '%s' to UTF-8: %s\n", datetime, error->message);
-        g_error_free(error);
-      }
-    }
-  }
-  else
-    _metadata_update_value(label, NODATA_STRING);
-}
-
 
 #ifdef USE_LUA
 static int lua_update_metadata(lua_State*L);
@@ -309,24 +276,41 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
     _metadata_update_value(d->metadata[md_internal_local_copy], value);
 
     if (img->import_timestamp >=0)
-      _metadata_update_timestamp(d->metadata[md_internal_import_timestamp], &img->import_timestamp);
+    {
+      char datetime[200];
+      // just %c is too long and includes a time zone that we don't know from exif
+      strftime(datetime, sizeof(datetime), "%a %x %X", localtime(&img->import_timestamp));
+      _metadata_update_value(d->metadata[md_internal_import_timestamp], g_locale_to_utf8(datetime,-1,NULL,NULL,NULL));
+    }
     else
-      _metadata_update_value(d->metadata[md_internal_import_timestamp], NODATA_STRING);
+      _metadata_update_value(d->metadata[md_internal_import_timestamp], "-");
 
     if (img->change_timestamp >=0)
-      _metadata_update_timestamp(d->metadata[md_internal_change_timestamp], &img->change_timestamp);
+    {
+      char datetime[200];
+      strftime(datetime, sizeof(datetime), "%a %x %X", localtime(&img->change_timestamp));
+      _metadata_update_value(d->metadata[md_internal_change_timestamp], g_locale_to_utf8(datetime,-1,NULL,NULL,NULL));
+    }
     else
-      _metadata_update_value(d->metadata[md_internal_change_timestamp], NODATA_STRING);
+      _metadata_update_value(d->metadata[md_internal_change_timestamp], "-");
 
     if (img->export_timestamp >=0)
-      _metadata_update_timestamp(d->metadata[md_internal_export_timestamp], &img->export_timestamp);
+    {
+      char datetime[200];
+      strftime(datetime, sizeof(datetime), "%a %x %X", localtime(&img->export_timestamp));
+      _metadata_update_value(d->metadata[md_internal_export_timestamp], g_locale_to_utf8(datetime,-1,NULL,NULL,NULL));
+    }
     else
-      _metadata_update_value(d->metadata[md_internal_export_timestamp], NODATA_STRING);
+      _metadata_update_value(d->metadata[md_internal_export_timestamp], "-");
 
     if (img->print_timestamp >=0)
-      _metadata_update_timestamp(d->metadata[md_internal_print_timestamp], &img->print_timestamp);
+    {
+      char datetime[200];
+      strftime(datetime, sizeof(datetime), "%a %x %X", localtime(&img->print_timestamp));
+      _metadata_update_value(d->metadata[md_internal_print_timestamp], g_locale_to_utf8(datetime,-1,NULL,NULL,NULL));
+    }
     else
-      _metadata_update_value(d->metadata[md_internal_print_timestamp], NODATA_STRING);
+      _metadata_update_value(d->metadata[md_internal_print_timestamp], "-");
 
     // TODO: decide if this should be removed for a release. maybe #ifdef'ing to only add it to git compiles?
 
@@ -530,11 +514,14 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
     if(sscanf(img->exif_datetime_taken, "%d:%d:%d %d:%d:%d", &tt_exif.tm_year, &tt_exif.tm_mon,
       &tt_exif.tm_mday, &tt_exif.tm_hour, &tt_exif.tm_min, &tt_exif.tm_sec) == 6)
     {
+      char datetime[200];
       tt_exif.tm_year -= 1900;
       tt_exif.tm_mon--;
       tt_exif.tm_isdst = -1;
-      const time_t exif_timestamp = mktime(&tt_exif);
-      _metadata_update_timestamp(d->metadata[md_exif_datetime], &exif_timestamp);
+      mktime(&tt_exif);
+      // just %c is too long and includes a time zone that we don't know from exif
+      strftime(datetime, sizeof(datetime), "%a %x %X", &tt_exif);
+      _metadata_update_value(d->metadata[md_exif_datetime], g_locale_to_utf8(datetime,-1,NULL,NULL,NULL));
     }
     else
       _metadata_update_value(d->metadata[md_exif_datetime], img->exif_datetime_taken);
@@ -833,30 +820,30 @@ void gui_init(dt_lib_module_t *self)
   }
 
   /* lets signup for mouse over image change signals */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
   /* lets signup for develop image changed signals */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
   /* signup for develop initialize to update info of current
      image in darkroom when enter */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
   /* signup for tags changes */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TAG_CHANGED,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_TAG_CHANGED,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
   /* signup for metadata changes */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_METADATA_UPDATE,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_METADATA_UPDATE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  dt_control_signal_disconnect(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
   g_free(self->data);
   self->data = NULL;
 }
