@@ -21,6 +21,8 @@
 
 #include "develop/develop.h"//ab
 gboolean dr_event_rating_release(dt_develop_t *user_data); //ab
+// number of images per row in zoomable mode
+#define DT_ZOOMABLE_NB_PER_ROW 13
 
 typedef enum dt_thumbtable_mode_t
 {

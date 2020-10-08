@@ -365,6 +365,20 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   gtk_entry_set_text (GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor")); //ab
 }
 
+void _set_dimensions(dt_lib_export_t *d, int max_width, int max_height)
+{
+  gchar *max_width_char = g_strdup_printf("%d", max_width);
+  gchar *max_height_char = g_strdup_printf("%d", max_height);
+  g_signal_handlers_block_matched(d->width, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
+  g_signal_handlers_block_matched(d->height, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
+  gtk_entry_set_text(GTK_ENTRY(d->width), max_width_char);
+  gtk_entry_set_text(GTK_ENTRY(d->height), max_height_char);
+  g_signal_handlers_unblock_matched(d->width, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
+  g_signal_handlers_unblock_matched(d->height, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
+  g_free(max_width_char);
+  g_free(max_height_char);
+}
+
 //ab For free scale
 static void _scale_changed(GtkEntry *spin)
 {
@@ -1174,11 +1188,11 @@ void gui_init(dt_lib_module_t *self)
   d->width = gtk_entry_new();
   gtk_widget_set_tooltip_text(d->width, _("maximum output width\n"
                                           "click the middle mouse button sets to 0 for no resizing")); //ab
-  gtk_entry_set_width_chars(GTK_ENTRY(d->width), 6);
+  gtk_entry_set_width_chars(GTK_ENTRY(d->width), 5);
   d->height = gtk_entry_new();
   gtk_widget_set_tooltip_text(d->height, _("maximum output height\n"
                                            "click the middle mouse button sets to 0 for no resizing")); //ab
-  gtk_entry_set_width_chars(GTK_ENTRY(d->height), 6);
+  gtk_entry_set_width_chars(GTK_ENTRY(d->height), 5);
 
   gtk_widget_add_events(d->width, GDK_BUTTON_PRESS_MASK); //ab
   gtk_widget_add_events(d->height, GDK_BUTTON_PRESS_MASK); //ab

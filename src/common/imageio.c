@@ -798,15 +798,24 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
      7. Never generate images larger than requested.
   */
 
-  const double scalex = width > 0 ? fminf(width / (double)pipe.processed_width, max_scale) : max_scale;
-  const double scaley = height > 0 ? fminf(height / (double)pipe.processed_height, max_scale) : max_scale;
-  //ab For free scale
-  double scale_t = fminf(scalex, scaley);
-  float scale_d = 0;
-  scale_d = dt_conf_get_float("plugins/lighttable/export/scale_divider");
-  if(scale_t==1 && scale_d>0)
+  const gboolean iscropped =
+    ((pipe.processed_width < (wd - img->crop_x - img->crop_width)) ||
+     (pipe.processed_height < (ht - img->crop_y - img->crop_height)));
+
+  const gboolean exact_size = (
+      iscropped ||
+      upscale ||
+      (format_params->max_width != 0) ||
+      (format_params->max_height != 0) ||
+      thumbnail_export);
+
+  int width = format_params->max_width > 0 ? format_params->max_width : 0;
+  int height = format_params->max_height > 0 ? format_params->max_height : 0;
+
+  if(iscropped && !thumbnail_export && width == 0 && height == 0)
   {
-      scale_t = 1/scale_d;
+    width = pipe.processed_width;
+    height = pipe.processed_height;
   }
 
   const double max_scale = ( upscale && ( width > 0 || height > 0 )) ? 100.0 : 1.0;
