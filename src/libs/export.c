@@ -56,12 +56,8 @@ typedef struct dt_lib_export_t
   GtkBox *print_size;
   GtkWidget *unit_label;
   GtkWidget *width, *height;
-  GtkSpinButton *width, *height;
-  gulong width_chg1_handler_id, height_chg1_handler_id; //ab
-  gulong width_chg2_handler_id, height_chg2_handler_id; //ab
-  GtkWidget *scale; //ab
-  GtkBox *hbox, *hbox2; //ab
-  gulong scale_chg1_handler_id, scale_chg2_handler_id; //ab
+  GtkWidget *scale, *scale_label; //ab
+  GtkBox *hbox1, *hbox2, *hbox_scale; //ab
   GtkWidget *storage, *format;
   int format_lut[128];
   uint32_t max_allowed_width , max_allowed_height;
@@ -151,9 +147,6 @@ static inline float pixels2print(dt_lib_export_t *self, const uint32_t pix)
   // should never run this
   return (float)pix;
 }
-
-static void _width_changed(GtkEditable *entry, gpointer user_data); //ab
-static void _height_changed(GtkEditable *entry, gpointer user_data); //ab
 
 const char *name(dt_lib_module_t *self)
 {
@@ -353,7 +346,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   gchar *icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
   dt_iop_color_intent_t icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
 
-  gtk_entry_set_text (GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor")); //ab
+  gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor")); //ab
 
   GList *list = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
   dt_control_export(list, max_width, max_height, format_index, storage_index, high_quality, upscale, export_masks,
@@ -362,21 +355,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   g_free(icc_filename);
 
   _scale_optim(); //ab
-  gtk_entry_set_text (GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor")); //ab
-}
-
-void _set_dimensions(dt_lib_export_t *d, int max_width, int max_height)
-{
-  gchar *max_width_char = g_strdup_printf("%d", max_width);
-  gchar *max_height_char = g_strdup_printf("%d", max_height);
-  g_signal_handlers_block_matched(d->width, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
-  g_signal_handlers_block_matched(d->height, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
-  gtk_entry_set_text(GTK_ENTRY(d->width), max_width_char);
-  gtk_entry_set_text(GTK_ENTRY(d->height), max_height_char);
-  g_signal_handlers_unblock_matched(d->width, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
-  g_signal_handlers_unblock_matched(d->height, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, insert_text_handler, NULL);
-  g_free(max_width_char);
-  g_free(max_height_char);
+  gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor")); //ab
 }
 
 //ab For free scale
@@ -438,35 +417,38 @@ static void _scale_changed(GtkEntry *spin)
     }
   }
   dt_conf_set_string(CONFIG_PREFIX "resizing_factor", new_value);
-  gtk_entry_set_text (spin, new_value);
+  gtk_entry_set_text(spin, new_value);
 }
+
+static void _size_changed_reset_scale(GtkWidget *spin, dt_lib_export_t *d);
+static void _width_changed(GtkEditable *entry, gpointer user_data);
+static void _height_changed(GtkEditable *entry, gpointer user_data);
 
 static void _scale_changed_reset_sizes(GtkWidget *spin, dt_lib_export_t *d)
 {
+    g_signal_handlers_block_by_func(d->width, _width_changed, d);
+    g_signal_handlers_block_by_func(d->height, _height_changed, d);
+    g_signal_handlers_block_by_func(d->width, _size_changed_reset_scale, d);
+    g_signal_handlers_block_by_func(d->height, _size_changed_reset_scale, d);
     dt_conf_set_int(CONFIG_PREFIX "height", 0);
-    g_signal_handler_block(G_OBJECT(d->height), d->height_chg1_handler_id);
-    g_signal_handler_block(G_OBJECT(d->height), d->height_chg2_handler_id);
     gtk_entry_set_text(GTK_ENTRY(d->height), "0");
-    g_signal_handler_unblock(G_OBJECT(d->height), d->height_chg1_handler_id);
-    g_signal_handler_unblock(G_OBJECT(d->height), d->height_chg2_handler_id);
-
     dt_conf_set_int(CONFIG_PREFIX "width", 0);
-    g_signal_handler_block(G_OBJECT(d->width), d->width_chg1_handler_id);
-    g_signal_handler_block(G_OBJECT(d->width), d->width_chg2_handler_id);
     gtk_entry_set_text(GTK_ENTRY(d->width), "0");
-    g_signal_handler_unblock(G_OBJECT(d->width), d->width_chg1_handler_id);
-    g_signal_handler_unblock(G_OBJECT(d->width), d->width_chg2_handler_id);
+    g_signal_handlers_unblock_by_func(d->width, _width_changed, d);
+    g_signal_handlers_unblock_by_func(d->height, _height_changed, d);
+    g_signal_handlers_unblock_by_func(d->width, _size_changed_reset_scale, d);
+    g_signal_handlers_unblock_by_func(d->height, _size_changed_reset_scale, d);
 }
 
 static void _size_changed_reset_scale(GtkWidget *spin, dt_lib_export_t *d)
 {
   char new_value[2] = "1\0";
   dt_conf_set_string(CONFIG_PREFIX "resizing_factor", new_value);
-  g_signal_handler_block(G_OBJECT(d->scale), d->scale_chg1_handler_id);
-  g_signal_handler_block(G_OBJECT(d->scale), d->scale_chg2_handler_id);
-  gtk_entry_set_text (GTK_ENTRY(d->scale), new_value);
-  g_signal_handler_unblock(G_OBJECT(d->scale), d->scale_chg1_handler_id);
-  g_signal_handler_unblock(G_OBJECT(d->scale), d->scale_chg2_handler_id);
+  g_signal_handlers_block_by_func(d->scale, _scale_changed, d);
+  g_signal_handlers_block_by_func(d->scale, _scale_changed_reset_sizes, d);
+  gtk_entry_set_text(GTK_ENTRY(d->scale), new_value);
+  g_signal_handlers_unblock_by_func(d->scale, _scale_changed, d);
+  g_signal_handlers_unblock_by_func(d->scale, _scale_changed_reset_sizes, d);
 }
 
 static void _scale_mdlclick(GtkEntry *spin, GdkEventButton *event, dt_lib_export_t *d)
@@ -486,11 +468,11 @@ static void _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user
   if (event->button == 2)
   {
     dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-    g_signal_handler_block(GTK_ENTRY(spin), d->width_chg1_handler_id);
-    g_signal_handler_block(GTK_ENTRY(spin), d->width_chg2_handler_id);
+    g_signal_handlers_block_by_func(d->width, _width_changed, d);
+    g_signal_handlers_block_by_func(d->width, _size_changed_reset_scale, d);
     gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handler_unblock(GTK_ENTRY(spin), d->width_chg1_handler_id);
-    g_signal_handler_unblock(GTK_ENTRY(spin), d->width_chg2_handler_id);
+    g_signal_handlers_unblock_by_func(d->width, _width_changed, d);
+    g_signal_handlers_unblock_by_func(d->width, _size_changed_reset_scale, d);
     dt_conf_set_int(CONFIG_PREFIX "width", atoi(gtk_entry_get_text(GTK_ENTRY(spin))));
   }
   else
@@ -504,11 +486,11 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
   if (event->button == 2)
   {
     dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-    g_signal_handler_block(GTK_ENTRY(spin), d->height_chg1_handler_id);
-    g_signal_handler_block(GTK_ENTRY(spin), d->height_chg2_handler_id);
+    g_signal_handlers_block_by_func(d->height, _height_changed, d);
+    g_signal_handlers_block_by_func(d->height, _size_changed_reset_scale, d);
     gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handler_unblock(GTK_ENTRY(spin), d->height_chg1_handler_id);
-    g_signal_handler_unblock(GTK_ENTRY(spin), d->height_chg2_handler_id);
+    g_signal_handlers_unblock_by_func(d->height, _height_changed, d);
+    g_signal_handlers_unblock_by_func(d->height, _size_changed_reset_scale, d);
     dt_conf_set_int(CONFIG_PREFIX "height", atoi(gtk_entry_get_text(GTK_ENTRY(spin))));
   }
   else
@@ -523,15 +505,22 @@ static void _choice_changed(GtkWidget *spin, gpointer user_data)
   gint cv = gtk_combo_box_get_active(GTK_COMBO_BOX(spin));
   if (cv == 0)
   { // max size
-    gtk_widget_hide(GTK_WIDGET(d->hbox2));
-    gtk_widget_show(GTK_WIDGET(d->hbox));
+    gtk_widget_hide(GTK_WIDGET(d->scale));
+    gtk_widget_hide(GTK_WIDGET(d->scale_label));
+    gtk_widget_show(GTK_WIDGET(d->dimensions_type));
+    gtk_widget_show(GTK_WIDGET(d->hbox1));
+    gtk_widget_show(GTK_WIDGET(d->hbox2));
     _size_changed_reset_scale(spin, d);
     dt_conf_set_string(CONFIG_PREFIX "resizing", "max_size");
+    dt_bauhaus_combobox_set(d->dimensions_type, dt_conf_get_int(CONFIG_PREFIX "dimensions_type"));
   }
   else
   {  // scaling
-    gtk_widget_hide(GTK_WIDGET(d->hbox));
-    gtk_widget_show(GTK_WIDGET(d->hbox2));
+    gtk_widget_show(GTK_WIDGET(d->scale));
+    gtk_widget_show(GTK_WIDGET(d->scale_label));
+    gtk_widget_hide(GTK_WIDGET(d->dimensions_type));
+    gtk_widget_hide(GTK_WIDGET(d->hbox1));
+    gtk_widget_hide(GTK_WIDGET(d->hbox2));
     _scale_changed_reset_sizes(spin, d);
     dt_conf_set_string(CONFIG_PREFIX "resizing", "scaling");
   }
@@ -566,7 +555,10 @@ void _print_size_update_display(dt_lib_export_t *self)
   }
   else
   {
-    gtk_widget_set_visible(GTK_WIDGET(self->print_size), TRUE);
+    if (strcmp(dt_conf_get_string(CONFIG_PREFIX "resizing"),"scaling") != 0) //ab
+    { //ba max size
+      gtk_widget_set_visible(GTK_WIDGET(self->print_size), TRUE);
+    } //ab
     gtk_widget_set_sensitive(GTK_WIDGET(self->width), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(self->height), FALSE);
 
@@ -861,9 +853,28 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
   const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(widget);
 
   dt_conf_set_int(CONFIG_PREFIX "dimensions_type", d_type);
+  //ab
+  if (strcmp(dt_conf_get_string(CONFIG_PREFIX "resizing"),"scaling") != 0)
+  { //ba max size
+    if(d_type != DT_DIMENSIONS_PIXELS)
+    {
+      gtk_widget_show(GTK_WIDGET(d->hbox2));
+      gtk_widget_hide(GTK_WIDGET(d->hbox1));
+      _resync_print_dimensions(d);
+    }
+    else
+    {
+      gtk_widget_show(GTK_WIDGET(d->hbox1));
+      gtk_widget_hide(GTK_WIDGET(d->hbox2));
+    }
+  } //ab scaling
+  else
+  {
+    gtk_widget_hide(GTK_WIDGET(d->hbox1));
+    gtk_widget_hide(GTK_WIDGET(d->hbox2));
+  }
+ //ab
 
-  if(d_type != DT_DIMENSIONS_PIXELS)
-    _resync_print_dimensions(d);
 
   _print_size_update_display(d);
 }
@@ -1161,7 +1172,7 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_add_help_link(self->widget, "export_selected.html#export_selected_usage");
 
   d->dimensions_type = dt_bauhaus_combobox_new(NULL);
-  dt_bauhaus_widget_set_label(d->dimensions_type, NULL, _("unit"));
+  dt_bauhaus_widget_set_label(d->dimensions_type, NULL, _("units")); //ab "unit"
   gtk_widget_set_tooltip_text(d->dimensions_type, _("unit in which to input the image size"));
   dt_bauhaus_combobox_add(d->dimensions_type, _("pixels (file size)"));
   dt_bauhaus_combobox_add(d->dimensions_type, _("cm (print size)"));
@@ -1200,86 +1211,73 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_key_accel_block_on_focus_connect(d->width);
   dt_gui_key_accel_block_on_focus_connect(d->height);
 
-  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
-  gtk_widget_set_name(GTK_WIDGET(hbox), "export-max-size");
-  label = gtk_label_new(_("max size"));
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-  g_object_set(G_OBJECT(label), "xalign", 0.0, (gchar *)0);
-  gtk_box_pack_start(hbox, label, FALSE, FALSE, 0);
-
-  GtkBox *vbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 3));
-  gtk_box_pack_start(vbox, d->dimensions_type, TRUE, TRUE, 0);
-
-  GtkBox *hbox2 = d->print_size = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
-  gtk_box_pack_start(hbox2, d->print_width, TRUE, TRUE, 0);
-  gtk_box_pack_start(hbox2, gtk_label_new(_("x")), FALSE, FALSE, 0);
-  gtk_box_pack_start(hbox2, d->print_height, TRUE, TRUE, 0);
+  d->hbox2 = d->print_size = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
+  gtk_box_pack_start(d->hbox2, d->print_width, TRUE, TRUE, 0);
+  gtk_box_pack_start(d->hbox2, gtk_label_new(_("x")), FALSE, FALSE, 0);
+  gtk_box_pack_start(d->hbox2, d->print_height, TRUE, TRUE, 0);
   d->unit_label = gtk_label_new(_("cm"));
-  gtk_box_pack_start(hbox2, d->unit_label, FALSE, FALSE, 0);
-  gtk_box_pack_start(hbox2, d->print_dpi, TRUE, TRUE, 0);
-  gtk_box_pack_start(hbox2, gtk_label_new(_("dpi")), FALSE, FALSE, 0);
-  gtk_box_pack_start(vbox, GTK_WIDGET(hbox2), TRUE, TRUE, 0);
+  gtk_box_pack_start(d->hbox2, d->unit_label, FALSE, FALSE, 0);
+  gtk_box_pack_start(d->hbox2, d->print_dpi, TRUE, TRUE, 0);
+  gtk_box_pack_start(d->hbox2, gtk_label_new(_("dpi")), FALSE, FALSE, 0);
 
-  GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
-  gtk_box_pack_start(hbox1, d->width, TRUE, TRUE, 0);
-  gtk_box_pack_start(hbox1, gtk_label_new(_("x")), FALSE, FALSE, 0);
-  gtk_box_pack_start(hbox1, d->height, TRUE, TRUE, 0);
-  gtk_box_pack_start(hbox1, gtk_label_new(_("px")), FALSE, FALSE, 0);
-  gtk_box_pack_start(vbox, GTK_WIDGET(hbox1), TRUE, TRUE, 0);
-
-  gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(vbox), TRUE, TRUE, 0);
-
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), TRUE, TRUE, 0);
-
-  //ab GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
-  d->hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
-  gtk_widget_set_name(GTK_WIDGET(d->hbox), "export-max-size");
-  GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0)); //ab
-  gtk_box_pack_start(hbox1, d->width, FALSE, TRUE, 0);
-  gtk_box_pack_start(hbox1, gtk_label_new(_("x")), FALSE, FALSE, 0);
-  gtk_box_pack_start(hbox1, d->height, FALSE, TRUE, 0);
-  gtk_widget_set_halign(GTK_WIDGET(hbox1), GTK_ALIGN_END);
-  gtk_box_pack_start(d->hbox, GTK_WIDGET(hbox1), FALSE, TRUE, 0);
+  d->hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3));
+  gtk_box_pack_start(d->hbox1, d->width, TRUE, TRUE, 0);
+  gtk_box_pack_start(d->hbox1, gtk_label_new(_("x")), FALSE, FALSE, 0);
+  gtk_box_pack_start(d->hbox1, d->height, TRUE, TRUE, 0);
+  gtk_box_pack_start(d->hbox1, gtk_label_new(_("px")), FALSE, FALSE, 0);
 
   //ab For free scale
-  d->hbox2 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  //d->hbox_scale = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  d->scale_label = gtk_label_new(_("factor"));
+  gtk_label_set_ellipsize(GTK_LABEL(d->scale_label), PANGO_ELLIPSIZE_END);
+  g_object_set(G_OBJECT(d->scale_label), "xalign", 0.0, (gchar *)0);
   d->scale = gtk_entry_new();
-  gtk_entry_set_width_chars(GTK_ENTRY(d->scale), 11);
-  gtk_entry_set_text (GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor"));
-  gtk_widget_set_tooltip_text(d->scale, _("resizing factor.\n"
-                                          "it can be an integer, decimal fraction or simple fraction.\n"
+  //gtk_entry_set_width_chars(GTK_ENTRY(d->scale), 11);
+  gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string(CONFIG_PREFIX "resizing_factor"));
+  gtk_widget_set_tooltip_text(d->scale, _("it can be an integer, decimal fraction or simple fraction.\n"
                                           "zero or empty values are equal to 1.\n"
                                           "click the middle mouse button sets the value to 1."));
   dt_gui_key_accel_block_on_focus_connect(d->scale);
+  gtk_widget_set_halign(GTK_WIDGET(d->scale), GTK_ALIGN_END);
   gtk_widget_add_events(d->scale, GDK_BUTTON_PRESS_MASK);
-  gtk_box_pack_start(d->hbox2, d->scale, FALSE, TRUE, 0);
+  //gtk_box_pack_start(d->hbox_scale, d->scale, TRUE, TRUE, 0);
 
-  GtkBox *hbox4 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
-  GtkFrame *bgr = GTK_FRAME(gtk_frame_new(""));
-  GtkOverlay *lt = GTK_OVERLAY(gtk_overlay_new());
+  GtkGrid *grid_outer = GTK_GRID(gtk_grid_new());
+  gtk_grid_set_row_homogeneous(grid_outer, TRUE);
+
+  GtkFrame *bgr1 = GTK_FRAME(gtk_frame_new(""));
+  GtkFrame *bgr2 = GTK_FRAME(gtk_frame_new(""));
+  GtkOverlay *top_ovl = GTK_OVERLAY(gtk_overlay_new());
+  GtkOverlay *bottom_ovl = GTK_OVERLAY(gtk_overlay_new());
 
   GtkWidget *choice = gtk_combo_box_text_new();
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("max size"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("scaling"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("size"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("scale"));
   gtk_widget_set_tooltip_text(choice, _("choice of resizing method"));
   g_signal_connect(G_OBJECT(choice), "changed", G_CALLBACK(_choice_changed), (gpointer)d);
   gtk_widget_set_halign(GTK_WIDGET(choice), GTK_ALIGN_START);
   gtk_widget_set_valign(GTK_WIDGET(choice), GTK_ALIGN_START);
 
-  gtk_widget_set_halign(GTK_WIDGET(d->hbox), GTK_ALIGN_END);
-  gtk_widget_set_valign(GTK_WIDGET(d->hbox), GTK_ALIGN_START);
+  gtk_widget_set_valign(GTK_WIDGET(d->dimensions_type), GTK_ALIGN_END);
+  gtk_widget_set_valign(GTK_WIDGET(d->scale_label), GTK_ALIGN_BASELINE);
 
-  gtk_widget_set_halign(GTK_WIDGET(d->hbox2), GTK_ALIGN_END);
-  gtk_widget_set_valign(GTK_WIDGET(d->hbox2), GTK_ALIGN_START);
+  gtk_widget_set_halign(GTK_WIDGET(d->scale), GTK_ALIGN_FILL);
 
-  gtk_container_add(GTK_CONTAINER(lt), GTK_WIDGET(bgr));
-  gtk_overlay_add_overlay(lt, GTK_WIDGET(d->hbox2));
-  gtk_overlay_add_overlay(lt, GTK_WIDGET(d->hbox));
+  gtk_container_add(GTK_CONTAINER(top_ovl), GTK_WIDGET(bgr1));
+  gtk_overlay_add_overlay(top_ovl, GTK_WIDGET(d->dimensions_type));
+  gtk_overlay_add_overlay(top_ovl, GTK_WIDGET(d->scale_label));
 
-  gtk_box_pack_start(hbox4, GTK_WIDGET(choice), FALSE, TRUE, 0);
-  gtk_box_pack_start(hbox4, GTK_WIDGET(lt), TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(bottom_ovl), GTK_WIDGET(bgr2));
+  gtk_overlay_add_overlay(bottom_ovl, GTK_WIDGET(d->hbox1));
+  gtk_overlay_add_overlay(bottom_ovl, GTK_WIDGET(d->hbox2));
+  gtk_overlay_add_overlay(bottom_ovl, GTK_WIDGET(d->scale));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox4), TRUE, TRUE, 0);
+  gtk_grid_attach (grid_outer, GTK_WIDGET(choice), 0, 0, 1, 1);
+  gtk_grid_attach (grid_outer, GTK_WIDGET(top_ovl), 1, 0, 1, 1);
+  gtk_widget_set_hexpand(GTK_WIDGET(top_ovl), TRUE);
+  gtk_grid_attach (grid_outer, GTK_WIDGET(bottom_ovl), 0, 1, 2, 1);
+  gtk_widget_set_hexpand(GTK_WIDGET(bottom_ovl), TRUE);
+  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(grid_outer), TRUE, TRUE, 0);
   //ba test;
 
   d->upscale = dt_bauhaus_combobox_new(NULL);
@@ -1380,7 +1378,8 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_STYLE_CHANGED,
                             G_CALLBACK(_lib_export_styles_changed_callback), self);
 
-  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0)); //ab
+  //ab hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  GtkBox *hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, TRUE, 0);
 
   // Export button
@@ -1402,20 +1401,26 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->print_dpi), "changed", G_CALLBACK(_print_dpi_changed), (gpointer)d);
 
   g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(_metadata_export_clicked), (gpointer)d);
-  g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(export_button_clicked), (gpointer)d);
-  d->width_chg1_handler_id = g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d); //ab
-  d->height_chg1_handler_id = g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d); //ab
-  g_signal_connect(G_OBJECT(d->width), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "width");
-  g_signal_connect(G_OBJECT(d->height), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "height");
+  //ab g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(export_button_clicked), (gpointer)d);
+  //d->width_chg1_handler_id =
+  g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d); //ab
+  //d->height_chg1_handler_id =
+  g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d); //ab
+  //ab g_signal_connect(G_OBJECT(d->width), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "width");
+  //ab g_signal_connect(G_OBJECT(d->height), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "height");
 
-  d->width_chg2_handler_id = g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
-  d->height_chg2_handler_id = g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
+  //d->width_chg2_handler_id =
+  g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
+  //d->height_chg2_handler_id =
+  g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d); //ab
 
-  g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(metadata_export_clicked), (gpointer)d);
-  d->scale_chg1_handler_id = g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), NULL); //ab
-  d->scale_chg2_handler_id = g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed_reset_sizes), (gpointer)d); //ab
+  //ab g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(metadata_export_clicked), (gpointer)d);
+  //d->scale_chg1_handler_id =
+  g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), NULL); //ab
+  //d->scale_chg2_handler_id =
+  g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed_reset_sizes), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->scale), "button-press-event", G_CALLBACK(_scale_mdlclick), (gpointer)d); //ab
 
   // this takes care of keeping hidden widgets hidden
@@ -1427,15 +1432,11 @@ void gui_init(dt_lib_module_t *self)
   if (strcmp(dt_conf_get_string(CONFIG_PREFIX "resizing"),"scaling") == 0)
   {  // scaling
     gtk_combo_box_set_active(GTK_COMBO_BOX (choice), 1);
-    gtk_widget_hide(GTK_WIDGET(d->hbox));
-    gtk_widget_show(GTK_WIDGET(d->hbox2));
     _scale_changed_reset_sizes(d->scale, d);
   }
   else
   { // max size
     gtk_combo_box_set_active(GTK_COMBO_BOX (choice), 0);
-    gtk_widget_hide(GTK_WIDGET(d->hbox2));
-    gtk_widget_show(GTK_WIDGET(d->hbox));
     _size_changed_reset_scale(d->scale, d);
   }
   //ba
