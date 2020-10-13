@@ -1252,7 +1252,7 @@ void gui_init(dt_lib_module_t *self)
 
   GtkWidget *choice = gtk_combo_box_text_new();
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("size"));
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("scale"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT (choice), _("scaling"));
   gtk_widget_set_tooltip_text(choice, _("choice of resizing method"));
   g_signal_connect(G_OBJECT(choice), "changed", G_CALLBACK(_choice_changed), (gpointer)d);
   gtk_widget_set_halign(GTK_WIDGET(choice), GTK_ALIGN_START);
