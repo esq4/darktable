@@ -501,6 +501,13 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
     _height_changed(GTK_EDITABLE(spin), user_data);
   }
 }
+
+static void _size_in_px_update(dt_lib_export_t *d)
+{
+  gchar size_in_px_txt[25];
+  sprintf(size_in_px_txt, "or %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
+  gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
+}
 //ba For free scale
 
 void _set_dimensions(dt_lib_export_t *d, uint32_t max_width, uint32_t max_height)
@@ -526,24 +533,17 @@ void _print_size_update_display(dt_lib_export_t *self)
   gchar size_in_px_txt[25];
   sprintf(size_in_px_txt, "or %s x %s px", gtk_entry_get_text(GTK_ENTRY(self->width)), gtk_entry_get_text(GTK_ENTRY(self->height)));
 
-
   if(d_type == DT_DIMENSIONS_PIXELS)
   {
     gtk_widget_set_visible(GTK_WIDGET(self->print_size), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(self->width), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(self->height), TRUE);
-    gtk_label_set_text(GTK_LABEL(self->size_in_px), "");
   }
   else
   {
     if (strcmp(dt_conf_get_string(CONFIG_PREFIX "resizing"),"scaling") != 0) //ab
     { //ba max size
       gtk_widget_set_visible(GTK_WIDGET(self->print_size), TRUE);
-      gtk_label_set_text(GTK_LABEL(self->size_in_px), size_in_px_txt);
-    }
-    else
-    {
-      gtk_label_set_text(GTK_LABEL(self->size_in_px), "");
     }//ab
     gtk_widget_set_sensitive(GTK_WIDGET(self->width), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(self->height), FALSE);
@@ -850,12 +850,14 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
       gtk_widget_show(GTK_WIDGET(d->hbox2));
       gtk_widget_hide(GTK_WIDGET(d->hbox1));
       gtk_widget_hide(GTK_WIDGET(d->scale));
+      _size_in_px_update(d);
       _resync_print_dimensions(d);
     }
     else
     {
       gtk_widget_show(GTK_WIDGET(d->hbox1));
       gtk_widget_hide(GTK_WIDGET(d->hbox2));
+      gtk_label_set_text(GTK_LABEL(d->size_in_px), "");
     }
     dt_conf_set_string(CONFIG_PREFIX "resizing", "max_size");
     _print_size_update_display(d);
@@ -865,6 +867,7 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
     gtk_widget_show(GTK_WIDGET(d->scale));
     gtk_widget_hide(GTK_WIDGET(d->hbox1));
     gtk_widget_hide(GTK_WIDGET(d->hbox2));
+    gtk_label_set_text(GTK_LABEL(d->size_in_px), "");
     dt_conf_set_string(CONFIG_PREFIX "resizing", "scaling");
   }
 
@@ -940,6 +943,7 @@ static void _print_width_changed(GtkEditable *entry, gpointer user_data)
   gchar *pwidth = g_strdup_printf("%d", width);
   gtk_entry_set_text(GTK_ENTRY(d->width), pwidth);
   g_free(pwidth);
+  _size_in_px_update(d);
   --darktable.gui->reset;
 }
 
@@ -966,6 +970,7 @@ static void _print_height_changed(GtkEditable *entry, gpointer user_data)
   gchar *pheight = g_strdup_printf("%d", height);
   gtk_entry_set_text(GTK_ENTRY(d->height), pheight);
   g_free(pheight);
+  _size_in_px_update(d);
   --darktable.gui->reset;
 }
 
