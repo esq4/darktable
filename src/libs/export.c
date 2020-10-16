@@ -505,7 +505,7 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
 static void _size_in_px_update(dt_lib_export_t *d)
 {
   gchar size_in_px_txt[25];
-  sprintf(size_in_px_txt, "or %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
+  sprintf(size_in_px_txt, "that is equal %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
   gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
 }
 //ba For free scale
@@ -518,6 +518,7 @@ void _set_dimensions(dt_lib_export_t *d, uint32_t max_width, uint32_t max_height
   ++darktable.gui->reset;
   gtk_entry_set_text(GTK_ENTRY(d->width), max_width_char);
   gtk_entry_set_text(GTK_ENTRY(d->height), max_height_char);
+  _size_in_px_update(d);//ab
   --darktable.gui->reset;
 
   g_free(max_width_char);
@@ -530,9 +531,6 @@ void _print_size_update_display(dt_lib_export_t *self)
 {
   const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(self->dimensions_type);
 
-  gchar size_in_px_txt[25];
-  sprintf(size_in_px_txt, "or %s x %s px", gtk_entry_get_text(GTK_ENTRY(self->width)), gtk_entry_get_text(GTK_ENTRY(self->height)));
-
   if(d_type == DT_DIMENSIONS_PIXELS)
   {
     gtk_widget_set_visible(GTK_WIDGET(self->print_size), FALSE);
@@ -542,7 +540,7 @@ void _print_size_update_display(dt_lib_export_t *self)
   else
   {
     if (strcmp(dt_conf_get_string(CONFIG_PREFIX "resizing"),"scaling") != 0) //ab
-    { //ba max size
+    { //ab max size
       gtk_widget_set_visible(GTK_WIDGET(self->print_size), TRUE);
     }//ab
     gtk_widget_set_sensitive(GTK_WIDGET(self->width), FALSE);
