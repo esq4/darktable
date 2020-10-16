@@ -162,6 +162,8 @@ static void load_themes_dir(const char *basedir)
   GDir *dir = g_dir_open(themes_dir, 0, NULL);
   if(dir)
   {
+    dt_print(DT_DEBUG_DEV, "adding themes directory: %s\n", themes_dir);
+    
     const gchar *d_name;
     while((d_name = g_dir_read_name(dir)))
       darktable.themes = g_list_append(darktable.themes, g_strdup(d_name));
@@ -2004,7 +2006,7 @@ static void edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pre
     int format = 0;
     for(int k = 0; k < 5; k++)
       format += gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->format_btn[k])) * dt_gui_presets_format_flag[k];
-    format ^= DT_PRESETS_FOR_NOT;  
+    format ^= DT_PRESETS_FOR_NOT;
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 15, format);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 16, g->rowid);
     sqlite3_step(stmt);
