@@ -438,7 +438,7 @@ void dt_imageio_insert_storage(dt_imageio_module_storage_t *storage)
 }
 
 //ab
-gchar *dt_imageio_resizing_factor_splitup(double *num, double *denum)
+gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
 {
   double _num, _denum;
   gchar *scale_str = dt_conf_get_string("plugins/lighttable/export/resizing_factor");

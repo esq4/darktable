@@ -213,7 +213,7 @@ bool _is_int(double value)
 static void _scale_optim()
 {
   double num=1, denum=1;
-  dt_imageio_resizing_factor_splitup(&num, &denum);
+  dt_imageio_resizing_factor_get_and_parsing(&num, &denum);
   gchar *scale_str = dt_conf_get_string(CONFIG_PREFIX "resizing_factor");
   gchar _str[6] = "";
 
@@ -504,9 +504,18 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
 
 static void _size_in_px_update(dt_lib_export_t *d)
 {
-  gchar size_in_px_txt[25];
-  sprintf(size_in_px_txt, "that is equal %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
-  gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
+  const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(d->dimensions_type);
+
+  if ((d_type == DT_DIMENSIONS_SCALE) || (d_type == DT_DIMENSIONS_PIXELS))
+  {
+    gtk_label_set_text(GTK_LABEL(d->size_in_px), "");
+  }
+  else
+  {
+    gchar size_in_px_txt[25];
+    sprintf(size_in_px_txt, "that is equal %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
+    gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
+  }
 }
 //ba For free scale
 
@@ -851,14 +860,12 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
       gtk_widget_show(GTK_WIDGET(d->hbox2));
       gtk_widget_hide(GTK_WIDGET(d->hbox1));
       gtk_widget_hide(GTK_WIDGET(d->scale));
-      _size_in_px_update(d);
       _resync_print_dimensions(d);
     }
     else
     {
       gtk_widget_show(GTK_WIDGET(d->hbox1));
       gtk_widget_hide(GTK_WIDGET(d->hbox2));
-      gtk_label_set_text(GTK_LABEL(d->size_in_px), "");
     }
     dt_conf_set_string(CONFIG_PREFIX "resizing", "max_size");
     _print_size_update_display(d);
@@ -868,9 +875,9 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
     gtk_widget_show(GTK_WIDGET(d->scale));
     gtk_widget_hide(GTK_WIDGET(d->hbox1));
     gtk_widget_hide(GTK_WIDGET(d->hbox2));
-    gtk_label_set_text(GTK_LABEL(d->size_in_px), "");
     dt_conf_set_string(CONFIG_PREFIX "resizing", "scaling");
   }
+  _size_in_px_update(d);
 
 }
 

@@ -845,7 +845,7 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
     double scale_factor = 1;
     double _num, _denum;
 
-    dt_imageio_resizing_factor_splitup(&_num, &_denum);
+    dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
 
     scale_factor = _num/_denum;
 
