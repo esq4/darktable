@@ -857,8 +857,8 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
   {
     if(d_type != DT_DIMENSIONS_PIXELS)
     {
-      gtk_widget_show(GTK_WIDGET(d->hbox2));
       gtk_widget_hide(GTK_WIDGET(d->hbox1));
+      gtk_widget_show(GTK_WIDGET(d->hbox2));
       gtk_widget_hide(GTK_WIDGET(d->scale));
       _resync_print_dimensions(d);
     }
@@ -866,6 +866,7 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
     {
       gtk_widget_show(GTK_WIDGET(d->hbox1));
       gtk_widget_hide(GTK_WIDGET(d->hbox2));
+      gtk_widget_hide(GTK_WIDGET(d->scale)); //ab
     }
     dt_conf_set_string(CONFIG_PREFIX "resizing", "max_size");
     _print_size_update_display(d);
@@ -992,6 +993,7 @@ static void _print_dpi_changed(GtkWidget *widget, gpointer user_data)
   dt_conf_set_int(CONFIG_PREFIX "print_dpi", dpi);
 
   _resync_pixel_dimensions(d);
+  _size_in_px_update(d); //ab
 }
 
 static void _callback_bool(GtkWidget *widget, gpointer user_data)
@@ -1387,26 +1389,20 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->print_height), "changed", G_CALLBACK(_print_height_changed), (gpointer)d);
   g_signal_connect(G_OBJECT(d->print_dpi), "changed", G_CALLBACK(_print_dpi_changed), (gpointer)d);
 
-  g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(_metadata_export_clicked), (gpointer)d);
   //ab g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(export_button_clicked), (gpointer)d);
-  //d->width_chg1_handler_id =
+  //ab g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(metadata_export_clicked), (gpointer)d);
+  g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(_metadata_export_clicked), (gpointer)d);
   g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d); //ab
-  //d->height_chg1_handler_id =
   g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d); //ab
   //ab g_signal_connect(G_OBJECT(d->width), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "width");
   //ab g_signal_connect(G_OBJECT(d->height), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "height");
 
-  //d->width_chg2_handler_id =
   g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
-  //d->height_chg2_handler_id =
   g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d); //ab
 
-  //ab g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(metadata_export_clicked), (gpointer)d);
-  //d->scale_chg1_handler_id =
   g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), NULL); //ab
-  //d->scale_chg2_handler_id =
   g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed_reset_sizes), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->scale), "button-press-event", G_CALLBACK(_scale_mdlclick), (gpointer)d); //ab
 

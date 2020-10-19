@@ -842,16 +842,19 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                  height > 0 ? fmin((double)height / (double)pipe.processed_height, max_scale) : max_scale);
 
     //ab For free scale
-    double scale_factor = 1;
-    double _num, _denum;
 
-    dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
+    if (strcmp(dt_conf_get_string("plugins/lighttable/export/resizing"),"scaling") == 0)
+    { // scaling
+      double scale_factor = 1;
+      double _num, _denum;
+      dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
 
-    scale_factor = _num/_denum;
+      scale_factor = _num/_denum;
 
-    if (((0.0 < scale_factor && scale_factor < 1.0) || (scale_factor > 1.0 && upscale)) && !thumbnail_export)
-    {
-        scale = scale_factor;
+      if (((0.0 < scale_factor && scale_factor < 1.0) || (scale_factor > 1.0 && upscale)) && !thumbnail_export)
+      {
+          scale = scale_factor;
+      }
     }
     //ba For free scale
 
