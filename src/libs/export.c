@@ -362,7 +362,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
 }
 
 //ab For free scale
-static void _scale_changed(GtkEntry *spin)
+static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
 {
   const char *validSign = ",.0123456789";
   const gchar *value = gtk_entry_get_text(spin);
@@ -423,46 +423,21 @@ static void _scale_changed(GtkEntry *spin)
   gtk_entry_set_text(spin, new_value);
 }
 
-static void _size_changed_reset_scale(GtkWidget *spin, dt_lib_export_t *d);
 static void _width_changed(GtkEditable *entry, gpointer user_data);
 static void _height_changed(GtkEditable *entry, gpointer user_data);
-
-static void _scale_changed_reset_sizes(GtkWidget *spin, dt_lib_export_t *d)
-{
-    g_signal_handlers_block_by_func(d->width, _width_changed, d);
-    g_signal_handlers_block_by_func(d->height, _height_changed, d);
-    g_signal_handlers_block_by_func(d->width, _size_changed_reset_scale, d);
-    g_signal_handlers_block_by_func(d->height, _size_changed_reset_scale, d);
-    dt_conf_set_int(CONFIG_PREFIX "height", 0);
-    gtk_entry_set_text(GTK_ENTRY(d->height), "0");
-    dt_conf_set_int(CONFIG_PREFIX "width", 0);
-    gtk_entry_set_text(GTK_ENTRY(d->width), "0");
-    g_signal_handlers_unblock_by_func(d->width, _width_changed, d);
-    g_signal_handlers_unblock_by_func(d->height, _height_changed, d);
-    g_signal_handlers_unblock_by_func(d->width, _size_changed_reset_scale, d);
-    g_signal_handlers_unblock_by_func(d->height, _size_changed_reset_scale, d);
-}
-
-static void _size_changed_reset_scale(GtkWidget *spin, dt_lib_export_t *d)
-{
-  char new_value[2] = "1\0";
-  dt_conf_set_string(CONFIG_PREFIX "resizing_factor", new_value);
-  g_signal_handlers_block_by_func(d->scale, _scale_changed, d);
-  g_signal_handlers_block_by_func(d->scale, _scale_changed_reset_sizes, d);
-  gtk_entry_set_text(GTK_ENTRY(d->scale), new_value);
-  g_signal_handlers_unblock_by_func(d->scale, _scale_changed, d);
-  g_signal_handlers_unblock_by_func(d->scale, _scale_changed_reset_sizes, d);
-}
 
 static void _scale_mdlclick(GtkEntry *spin, GdkEventButton *event, dt_lib_export_t *d)
 {
   if (event->button == 2)
   {
-    _size_changed_reset_scale(GTK_WIDGET(spin), d);
+    dt_conf_set_string(CONFIG_PREFIX "resizing_factor", "1");
+    g_signal_handlers_block_by_func(spin, _scale_changed, d);
+    gtk_entry_set_text(GTK_ENTRY(spin), "1");
+    g_signal_handlers_unblock_by_func(spin, _scale_changed, d);
   }
   else
   {
-    _scale_changed(spin);
+    _scale_changed(spin, d);
   }
 }
 
@@ -470,13 +445,10 @@ static void _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user
 {
   if (event->button == 2)
   {
-    dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-    g_signal_handlers_block_by_func(d->width, _width_changed, d);
-    g_signal_handlers_block_by_func(d->width, _size_changed_reset_scale, d);
+    dt_conf_set_int(CONFIG_PREFIX "width", 0);
+    g_signal_handlers_block_by_func(spin, _width_changed, user_data);
     gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handlers_unblock_by_func(d->width, _width_changed, d);
-    g_signal_handlers_unblock_by_func(d->width, _size_changed_reset_scale, d);
-    dt_conf_set_int(CONFIG_PREFIX "width", atoi(gtk_entry_get_text(GTK_ENTRY(spin))));
+    g_signal_handlers_unblock_by_func(spin, _width_changed, user_data);
   }
   else
   {
@@ -488,13 +460,10 @@ static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer use
 {
   if (event->button == 2)
   {
-    dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-    g_signal_handlers_block_by_func(d->height, _height_changed, d);
-    g_signal_handlers_block_by_func(d->height, _size_changed_reset_scale, d);
+    dt_conf_set_int(CONFIG_PREFIX "height", 0);
+    g_signal_handlers_block_by_func(spin, _height_changed, user_data);
     gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handlers_unblock_by_func(d->height, _height_changed, d);
-    g_signal_handlers_unblock_by_func(d->height, _size_changed_reset_scale, d);
-    dt_conf_set_int(CONFIG_PREFIX "height", atoi(gtk_entry_get_text(GTK_ENTRY(spin))));
+    g_signal_handlers_unblock_by_func(spin, _height_changed, user_data);
   }
   else
   {
@@ -804,11 +773,7 @@ static void set_storage_by_name(dt_lib_export_t *d, const char *name)
   if(h > ch || h == 0) h = ch;
 
   // Set the recommended dimension
-  g_signal_handlers_block_by_func(d->width, _size_changed_reset_scale, d);
-  g_signal_handlers_block_by_func(d->height, _size_changed_reset_scale, d);
   _set_dimensions(d, w, h);
-  g_signal_handlers_unblock_by_func(d->width, _size_changed_reset_scale, d);
-  g_signal_handlers_unblock_by_func(d->height, _size_changed_reset_scale, d);
 
   // Let's update formats combobox with supported formats of selected storage module...
   _update_formats_combobox(d);
@@ -1192,10 +1157,14 @@ void gui_init(dt_lib_module_t *self)
   dt_bauhaus_combobox_set(d->dimensions_type, dt_conf_get_int(CONFIG_PREFIX "dimensions_type"));
 
   d->print_width = gtk_entry_new();
-  gtk_widget_set_tooltip_text(d->print_width, _("maximum output width\nset to 0 for no scaling"));
+  gtk_widget_set_tooltip_text(d->print_width, _("maximum output width limit.\n"
+                                                "click middle mouse button sets to 0\n"
+                                                " for cancel the constraint")); //ab
   gtk_entry_set_width_chars(GTK_ENTRY(d->print_width), 5);
   d->print_height = gtk_entry_new();
-  gtk_widget_set_tooltip_text(d->print_height, _("maximum output height\nset to 0 for no scaling"));
+  gtk_widget_set_tooltip_text(d->print_height, _("maximum output height limit.\n"
+                                                 "click middle mouse button sets to 0\n"
+                                                 " for cancel the constraint")); //ab
   gtk_entry_set_width_chars(GTK_ENTRY(d->print_height), 5);
   d->print_dpi = gtk_entry_new();
   gtk_widget_set_tooltip_text(d->print_dpi, _("resolution in dot per inch"));
@@ -1209,12 +1178,14 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_key_accel_block_on_focus_connect(d->print_dpi);
 
   d->width = gtk_entry_new();
-  gtk_widget_set_tooltip_text(d->width, _("maximum output width\n"
-                                          "click the middle mouse button sets to 0 for no resizing")); //ab
+  gtk_widget_set_tooltip_text(d->width, _("maximum output width limit.\n"
+                                          "click middle mouse button sets to 0\n"
+                                          " for cancel the constraint")); //ab
   gtk_entry_set_width_chars(GTK_ENTRY(d->width), 5);
   d->height = gtk_entry_new();
-  gtk_widget_set_tooltip_text(d->height, _("maximum output height\n"
-                                           "click the middle mouse button sets to 0 for no resizing")); //ab
+  gtk_widget_set_tooltip_text(d->height, _("maximum output height limit.\n"
+                                           "click middle mouse button sets to 0\n"
+                                           " for cancel the constraint")); //ab
   gtk_entry_set_width_chars(GTK_ENTRY(d->height), 5);
 
   gtk_widget_add_events(d->width, GDK_BUTTON_PRESS_MASK); //ab
@@ -1394,22 +1365,17 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->print_height), "changed", G_CALLBACK(_print_height_changed), (gpointer)d);
   g_signal_connect(G_OBJECT(d->print_dpi), "changed", G_CALLBACK(_print_dpi_changed), (gpointer)d);
 
-  //ab g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(export_button_clicked), (gpointer)d);
-  //ab g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(metadata_export_clicked), (gpointer)d);
   g_signal_connect(G_OBJECT(d->metadata_button), "clicked", G_CALLBACK(_metadata_export_clicked), (gpointer)d);
   g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d); //ab
-  //ab g_signal_connect(G_OBJECT(d->width), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "width");
-  //ab g_signal_connect(G_OBJECT(d->height), "insert-text", G_CALLBACK(insert_text_handler), CONFIG_PREFIX "height");
 
-  g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
-  g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_size_changed_reset_scale), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d); //ab
+  g_signal_connect(G_OBJECT(d->print_width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d); //ab
+  g_signal_connect(G_OBJECT(d->print_height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d); //ab
 
-  g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), NULL); //ab
-  g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed_reset_sizes), (gpointer)d); //ab
   g_signal_connect(G_OBJECT(d->scale), "button-press-event", G_CALLBACK(_scale_mdlclick), (gpointer)d); //ab
+  g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), (gpointer)d); //ab
 
   // this takes care of keeping hidden widgets hidden
   gtk_widget_show_all(self->widget);
