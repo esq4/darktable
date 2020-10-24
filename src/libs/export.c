@@ -1149,7 +1149,7 @@ void gui_init(dt_lib_module_t *self)
 
   d->dimensions_type = dt_bauhaus_combobox_new(NULL);
   dt_bauhaus_widget_set_label(d->dimensions_type, NULL, _("set size"));
-  gtk_widget_set_tooltip_text(d->dimensions_type, _("unit in which to input the image size"));
+  gtk_widget_set_tooltip_text(d->dimensions_type, _("choose a method for setting the output size"));
   dt_bauhaus_combobox_add(d->dimensions_type, _("in pixels (for file)"));
   dt_bauhaus_combobox_add(d->dimensions_type, _("in cm (for print)"));
   dt_bauhaus_combobox_add(d->dimensions_type, _("in inchs (for print)"));
