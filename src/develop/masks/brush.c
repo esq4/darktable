@@ -931,7 +931,7 @@ static void dt_brush_get_distance(float x, int y, float as, dt_masks_form_gui_t 
     int nb = 0;
     for(int i = corner_count * 3; i < gpt->border_count; i++)
     {
-      float yy = gpt->border[i * 2 + 1];
+      const float yy = gpt->border[i * 2 + 1];
       if (((yf<=yy && yf>last) || (yf>=yy && yf<last)) && (gpt->border[i * 2] > x)) nb++;
       last = yy;
     }
@@ -950,8 +950,8 @@ static void dt_brush_get_distance(float x, int y, float as, dt_masks_form_gui_t 
         current_seg = (current_seg + 1) % corner_count;
       }
       //distance from tested point to current form point
-      float yy = gpt->points[i * 2 + 1];
-      float xx = gpt->points[i * 2];
+      const float yy = gpt->points[i * 2 + 1];
+      const float xx = gpt->points[i * 2];
       if ((yy-yf)<as && (yy-yf)>-as && (xx-x)<as && (xx-x)>-as)
       {
         if(current_seg == 0)
@@ -996,12 +996,12 @@ static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *f
 
   for(int i = 0; i <= 100; i++)
   {
-    float t = i / 100.0f;
+    const float t = i / 100.0f;
     float sx, sy;
     _brush_get_XY(point0->corner[0], point0->corner[1], point1->corner[0], point1->corner[1],
                   point2->corner[0], point2->corner[1], point3->corner[0], point3->corner[1], t, &sx, &sy);
 
-    float d = (x - sx) * (x - sx) + (y - sy) * (y - sy);
+    const float d = (x - sx) * (x - sx) + (y - sy) * (y - sy);
     if(d < dmin)
     {
       dmin = d;
@@ -1418,6 +1418,7 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
     form->points = g_list_remove(form->points, point);
     free(point);
     gui->point_selected = -1;
+    gui->point_edited = -1;
     _brush_init_ctrl_points(form);
 
     dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
@@ -1851,10 +1852,10 @@ static int dt_brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx
                                        int which, dt_masks_form_t *form, int parentid,
                                        dt_masks_form_gui_t *gui, int index)
 {
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  int closeup = dt_control_get_dev_closeup();
-  float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
-  float as = 0.005f / zoom_scale * darktable.develop->preview_pipe->backbuf_width;
+  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
+  const int closeup = dt_control_get_dev_closeup();
+  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
+  const float as = 0.005f / zoom_scale * darktable.develop->preview_pipe->backbuf_width;
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
@@ -2145,7 +2146,8 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       const float radius2 = masks_border * min_iwd_iht;
 
       float xpos = 0.0f, ypos = 0.0f;
-      if((gui->posx == -1.0f && gui->posy == -1.0f) || gui->mouse_leaved_center)
+      if((gui->posx == -1.0f && gui->posy == -1.0f)
+         || gui->mouse_leaved_center)
       {
         xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
         ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
@@ -2170,7 +2172,8 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       if(form->type & DT_MASKS_CLONE)
       {
         float x = 0.0f, y = 0.0f;
-        dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+        dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, xpos, ypos,
+                                            xpos, ypos, &x, &y, FALSE);
         dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
       }
 
@@ -2274,7 +2277,8 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       cairo_set_line_width(cr, 3.0 / zoom_scale);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_arc(cr, guipoints[2 * (gui->guipoints_count - 1)],
-                guipoints[2 * (gui->guipoints_count - 1) + 1], radius, 0, 2.0 * M_PI);
+                guipoints[2 * (gui->guipoints_count - 1) + 1],
+                radius, 0, 2.0 * M_PI);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
@@ -2284,7 +2288,8 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                 2.0 * M_PI);
       cairo_stroke(cr);
 
-      if(darktable.develop->form_visible && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
+      if(darktable.develop->form_visible
+         && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
       {
         const int i = gui->guipoints_count - 1;
         float x = 0.0f, y = 0.0f;
@@ -2403,8 +2408,6 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // draw border and corners
   if((gui->group_selected == index) && gpt->border_count > nb * 3 + 2)
   {
-
-
     cairo_move_to(cr, gpt->border[nb * 6] + dx, gpt->border[nb * 6 + 1] + dy);
 
     for(int i = nb * 3 + 1; i < gpt->border_count; i++)

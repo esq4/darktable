@@ -308,7 +308,7 @@ if(TESTBUILD_OPENCL_PROGRAMS)
   endmacro()
 
   # 3.9 is the first version with which this works.
-  find_llvm("10;9;8;7;6.0;5.0;4.0;3.9")
+  find_llvm("11;10;9;8;7;6.0;5.0;4.0;3.9")
 
   if (LLVM_FOUND)
     message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -463,6 +463,7 @@ if(BUILD_TESTING)
   find_package(cmocka 1.1.0 CONFIG REQUIRED)
   include(AddCMockaTest)
   include(AddCMockaMockTest)
+  include_directories(${CMOCKA_INCLUDE_DIR} include)
 endif(BUILD_TESTING)
 
 #
