@@ -437,14 +437,13 @@ void dt_imageio_insert_storage(dt_imageio_module_storage_t *storage)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGEIO_STORAGE_CHANGE);
 }
 
-//ab
 gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
 {
   double _num, _denum;
   gchar *scale_str = dt_conf_get_string("plugins/lighttable/export/resizing_factor");
 
   char sep[4] = "";
-  snprintf(sep, 4, "%g", (double) 3/2);
+  snprintf( sep, 4, "%g", (double) 3/2);
   int i = -1;
   while(scale_str[++i])
   {
@@ -462,9 +461,9 @@ gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
   {
     _num = 1;
     _denum = atof(pdiv + 1);
-  }
+}
   else
-  {
+{
     _num = atof(scale_str);
     _denum = atof(pdiv+1);
   }
@@ -478,7 +477,6 @@ gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum)
   dt_conf_set_string("plugins/lighttable/export/resizing_factor", scale_str);
   return scale_str;
 }
-//ba
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

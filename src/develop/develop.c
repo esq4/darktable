@@ -1077,15 +1077,14 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
     {
       if(!dt_iop_is_hidden(module) && !module->expander)
       {
-        ++darktable.gui->reset;
-        module->gui_init(module);
-        dt_iop_reload_defaults(module);
-        --darktable.gui->reset;
+        dt_iop_gui_init(module);
 
         /* add module to right panel */
         GtkWidget *expander = dt_iop_gui_get_expander(module);
         dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
         dt_iop_gui_set_expanded(module, TRUE, FALSE);
+
+        dt_iop_reload_defaults(module);
         dt_iop_gui_update_blending(module);
 
         // the pipe need to be reconstruct
@@ -1381,18 +1380,23 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
   g_free(workflow);
 
   //  Add scene-referred workflow
-  //  Note that we cannot use the a preset for FilmicRGB as the default values are
+  //  Note that we cannot use a preset for FilmicRGB as the default values are
   //  dynamically computed depending on the actual exposure compensation
   //  (see reload_default routine in filmicrgb.c)
 
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
-  if(has_matrix && is_scene_referred)
+
+  const gboolean auto_apply_filmic = has_matrix && is_scene_referred;
+  const gboolean auto_apply_sharpen = dt_conf_get_bool("plugins/darkroom/sharpen/auto_apply");
+
+  if(auto_apply_filmic || auto_apply_sharpen)
   {
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
 
-      if(strcmp(module->op, "filmicrgb") == 0
+      if(((auto_apply_filmic && strcmp(module->op, "filmicrgb") == 0)
+          || (auto_apply_sharpen && strcmp(module->op, "sharpen") == 0))
          && !dt_history_check_module_exists(imgid, module->op)
          && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
       {
@@ -1411,16 +1415,16 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
            " SELECT ?1, 0, op_version, operation, op_params,"
            "       enabled, blendop_params, blendop_version, multi_priority, multi_name"
            " FROM %s"
-           " WHERE (autoapply=1"
-           "        AND ((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker))"
-           "        AND ?6 LIKE lens AND ?7 BETWEEN iso_min AND iso_max"
-           "        AND ?8 BETWEEN exposure_min AND exposure_max"
-           "        AND ?9 BETWEEN aperture_min AND aperture_max"
-           "        AND ?10 BETWEEN focal_length_min AND focal_length_max"
-           "        AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0))"
-           "        AND operation NOT IN"
-           "            ('ioporder', 'metadata', 'export', 'tagging', 'collect', '%s'))"
-           "  OR (name = ?13)"
+           " WHERE ( (autoapply=1"
+           "          AND ((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker))"
+           "          AND ?6 LIKE lens AND ?7 BETWEEN iso_min AND iso_max"
+           "          AND ?8 BETWEEN exposure_min AND exposure_max"
+           "          AND ?9 BETWEEN aperture_min AND aperture_max"
+           "          AND ?10 BETWEEN focal_length_min AND focal_length_max"
+           "          AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0)))"
+           "        OR (name = ?13))"
+           "   AND operation NOT IN"
+           "        ('ioporder', 'metadata', 'modulegroups', 'export', 'tagging', 'collect', '%s')"
            " ORDER BY writeprotect DESC, LENGTH(model), LENGTH(maker), LENGTH(lens)",
            preset_table[legacy],
            is_display_referred?"":"basecurve");

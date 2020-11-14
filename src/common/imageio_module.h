@@ -236,7 +236,7 @@ void dt_imageio_insert_storage(dt_imageio_module_storage_t *storage);
 // and its "num" and "denum" fraction's elements to calculate the scaling factor
 // and improve the readability of the displayed string itself in the "scale" field
 // of the settings export.
-gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum); //ab
+gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum);
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

@@ -90,6 +90,9 @@ typedef enum dt_gui_color_t
   DT_GUI_COLOR_MAP_COUNT_SAME_LOC,
   DT_GUI_COLOR_MAP_COUNT_DIFF_LOC,
   DT_GUI_COLOR_MAP_COUNT_BG,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_HIGH,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_LOW,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_DEF,
   DT_GUI_COLOR_LAST
 } dt_gui_color_t;
 
@@ -130,7 +133,8 @@ typedef struct dt_gui_gtk_t
   gint scroll_mask;
   guint sidebar_scroll_mask;
 
-  cairo_filter_t filter_image;
+  cairo_filter_t filter_image;    // filtering used for all modules expect darkroom
+  cairo_filter_t dr_filter_image; // filtering used in the darkroom
 
   dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;

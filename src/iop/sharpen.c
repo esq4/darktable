@@ -98,25 +98,6 @@ void init_presets(dt_iop_module_so_t *self)
                              1);
   // restrict to raw images
   dt_gui_presets_update_ldr(_("sharpen"), self->op, self->version(), FOR_RAW);
-  // make it auto-apply if needed for matching images:
-  const gboolean auto_apply = dt_conf_get_bool("plugins/darkroom/sharpen/auto_apply");
-  dt_gui_presets_update_autoapply(_("sharpen"), self->op, self->version(), auto_apply);
-}
-
-void init_key_accels(dt_iop_module_so_t *self)
-{
-  dt_accel_register_slider_iop(self, FALSE, NC_("accel", "radius"));
-  dt_accel_register_slider_iop(self, FALSE, NC_("accel", "amount"));
-  dt_accel_register_slider_iop(self, FALSE, NC_("accel", "threshold"));
-}
-
-void connect_key_accels(dt_iop_module_t *self)
-{
-  dt_iop_sharpen_gui_data_t *g = (dt_iop_sharpen_gui_data_t *)self->gui_data;
-
-  dt_accel_connect_slider_iop(self, "radius", g->radius);
-  dt_accel_connect_slider_iop(self, "amount", g->amount);
-  dt_accel_connect_slider_iop(self, "threshold", g->threshold);
 }
 
 #ifdef HAVE_OPENCL
@@ -701,9 +682,8 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_module_t *module = (dt_iop_module_t *)self;
   dt_iop_sharpen_gui_data_t *g = (dt_iop_sharpen_gui_data_t *)self->gui_data;
-  dt_iop_sharpen_params_t *p = (dt_iop_sharpen_params_t *)module->params;
+  dt_iop_sharpen_params_t *p = (dt_iop_sharpen_params_t *)self->params;
   dt_bauhaus_slider_set_soft(g->radius, p->radius);
   dt_bauhaus_slider_set(g->amount, p->amount);
   dt_bauhaus_slider_set(g->threshold, p->threshold);

@@ -199,6 +199,22 @@ static dt_darkroom_layout_t _lib_darkroom_get_layout(dt_view_t *self)
     return DT_DARKROOM_LAYOUT_EDITING;
 }
 
+static cairo_filter_t _get_filtering_level(dt_develop_t *dev)
+{
+  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
+  const int closeup = dt_control_get_dev_closeup();
+  const float scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 0);
+
+  // for pixel representation above 1:1, that is when a single pixel on the image
+  // is represented on screen by multiple pixels we want to disable any cairo filter
+  // which could only blur or smooth the output.
+
+  if(scale / darktable.gui->ppd > 1.0)
+    return CAIRO_FILTER_FAST;
+  else
+    return darktable.gui->dr_filter_image;
+}
+
 void expose(
     dt_view_t *self,
     cairo_t *cri,
@@ -342,7 +358,7 @@ void expose(
 
     cairo_rectangle(cr, 0, 0, wd, ht);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), _get_filtering_level(dev));
     cairo_paint(cr);
 
     if(darktable.gui->show_focus_peaking)
@@ -400,7 +416,7 @@ void expose(
 
     cairo_rectangle(cr, 0, 0, wd, ht);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), _get_filtering_level(dev));
     cairo_fill(cr);
     cairo_surface_destroy(surface);
     dt_pthread_mutex_unlock(mutex);
@@ -727,12 +743,6 @@ int try_enter(dt_view_t *self)
   return 0;
 }
 
-static void dt_dev_cleanup_module_accels(dt_iop_module_t *module)
-{
-  dt_accel_disconnect_list(&module->accel_closures);
-  dt_accel_cleanup_locals_iop(module);
-}
-
 static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
 {
   // stop crazy users from sleeping on key-repeat spacebar:
@@ -898,9 +908,8 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
       dev->iop = g_list_remove_link(dev->iop, g_list_nth(dev->iop, i));
 
       // we cleanup the module
-      dt_accel_disconnect_list(&module->accel_closures);
-      dt_accel_cleanup_locals_iop(module);
-      dt_iop_cleanup_module(module);
+      dt_accel_cleanup_closures_iop(module);
+
       free(module);
     }
   }
@@ -935,13 +944,14 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
       if(!dt_iop_is_hidden(module))
       {
         module->gui_init(module);
-        dt_iop_reload_defaults(module);
 
         /* add module to right panel */
         GtkWidget *expander = dt_iop_gui_get_expander(module);
         dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
         dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
+
+        dt_iop_reload_defaults(module);
       }
     }
     else
@@ -2187,7 +2197,7 @@ void gui_init(dt_view_t *self)
     /** let's fill the encapsulating widgets */
     /* mode of operation */
     GtkWidget *mode = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(mode, NULL, _("mode"));
+    dt_bauhaus_widget_set_label(mode, NULL, N_("mode"));
     dt_bauhaus_combobox_add(mode, _("mark with CFA color"));
     dt_bauhaus_combobox_add(mode, _("mark with solid color"));
     dt_bauhaus_combobox_add(mode, _("false color"));
@@ -2199,7 +2209,7 @@ void gui_init(dt_view_t *self)
 
     /* color scheme */
     GtkWidget *colorscheme = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(colorscheme, NULL, _("color scheme"));
+    dt_bauhaus_widget_set_label(colorscheme, NULL, N_("color scheme"));
     dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "red"));
     dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "green"));
     dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "blue"));
@@ -2215,7 +2225,7 @@ void gui_init(dt_view_t *self)
     /* threshold */
     GtkWidget *threshold = dt_bauhaus_slider_new_with_range(NULL, 0.0, 2.0, 0.01, 1.0, 3);
     dt_bauhaus_slider_set(threshold, dev->rawoverexposed.threshold);
-    dt_bauhaus_widget_set_label(threshold, NULL, _("clipping threshold"));
+    dt_bauhaus_widget_set_label(threshold, NULL, N_("clipping threshold"));
     gtk_widget_set_tooltip_text(
         threshold, _("threshold of what shall be considered overexposed\n1.0 - white level\n0.0 - black level"));
     g_signal_connect(G_OBJECT(threshold), "value-changed", G_CALLBACK(rawoverexposed_threshold_callback), dev);
@@ -2251,7 +2261,7 @@ void gui_init(dt_view_t *self)
     /** let's fill the encapsulating widgets */
     /* preview mode */
     GtkWidget *mode = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(mode, NULL, _("clipping preview mode"));
+    dt_bauhaus_widget_set_label(mode, NULL, N_("clipping preview mode"));
     dt_bauhaus_combobox_add(mode, _("full gamut"));
     dt_bauhaus_combobox_add(mode, _("any RGB channel"));
     dt_bauhaus_combobox_add(mode, _("luminance only"));
@@ -2265,7 +2275,7 @@ void gui_init(dt_view_t *self)
 
     /* color scheme */
     GtkWidget *colorscheme = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(colorscheme, NULL, _("color scheme"));
+    dt_bauhaus_widget_set_label(colorscheme, NULL, N_("color scheme"));
     dt_bauhaus_combobox_add(colorscheme, _("black & white"));
     dt_bauhaus_combobox_add(colorscheme, _("red & blue"));
     dt_bauhaus_combobox_add(colorscheme, _("purple & green"));
@@ -2279,7 +2289,7 @@ void gui_init(dt_view_t *self)
     GtkWidget *lower = dt_bauhaus_slider_new_with_range(NULL, -32., -4., 1., -12.69, 2);
     dt_bauhaus_slider_set(lower, dev->overexposed.lower);
     dt_bauhaus_slider_set_format(lower, "%+.2f EV");
-    dt_bauhaus_widget_set_label(lower, NULL, _("lower threshold"));
+    dt_bauhaus_widget_set_label(lower, NULL, N_("lower threshold"));
     gtk_widget_set_tooltip_text(lower, _("clipping threshold for the black point,\n"
                                          "in EV, relatively to white (0 EV).\n"
                                          "8 bits sRGB clips blacks at -12.69 EV,\n"
@@ -2296,7 +2306,7 @@ void gui_init(dt_view_t *self)
     GtkWidget *upper = dt_bauhaus_slider_new_with_range(NULL, 0.0, 100.0, 0.1, 99.99, 2);
     dt_bauhaus_slider_set(upper, dev->overexposed.upper);
     dt_bauhaus_slider_set_format(upper, "%.2f%%");
-    dt_bauhaus_widget_set_label(upper, NULL, _("upper threshold"));
+    dt_bauhaus_widget_set_label(upper, NULL, N_("upper threshold"));
     /* xgettext:no-c-format */
     gtk_widget_set_tooltip_text(upper, _("clipping threshold for the white point.\n"
                                          "100% is peak medium luminance."));
@@ -2352,7 +2362,7 @@ void gui_init(dt_view_t *self)
     const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
 
     GtkWidget *display_intent = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(display_intent, NULL, _("display intent"));
+    dt_bauhaus_widget_set_label(display_intent, NULL, N_("display intent"));
     gtk_box_pack_start(GTK_BOX(vbox), display_intent, TRUE, TRUE, 0);
     dt_bauhaus_combobox_add(display_intent, _("perceptual"));
     dt_bauhaus_combobox_add(display_intent, _("relative colorimetric"));
@@ -2360,7 +2370,7 @@ void gui_init(dt_view_t *self)
     dt_bauhaus_combobox_add(display_intent, _("absolute colorimetric"));
 
     GtkWidget *display2_intent = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(display2_intent, NULL, _("preview display intent"));
+    dt_bauhaus_widget_set_label(display2_intent, NULL, N_("preview display intent"));
     gtk_box_pack_start(GTK_BOX(vbox), display2_intent, TRUE, TRUE, 0);
     dt_bauhaus_combobox_add(display2_intent, _("perceptual"));
     dt_bauhaus_combobox_add(display2_intent, _("relative colorimetric"));
@@ -2379,10 +2389,10 @@ void gui_init(dt_view_t *self)
     GtkWidget *display2_profile = dt_bauhaus_combobox_new(NULL);
     GtkWidget *softproof_profile = dt_bauhaus_combobox_new(NULL);
     GtkWidget *histogram_profile = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(softproof_profile, NULL, _("softproof profile"));
-    dt_bauhaus_widget_set_label(display_profile, NULL, _("display profile"));
-    dt_bauhaus_widget_set_label(display2_profile, NULL, _("preview display profile"));
-    dt_bauhaus_widget_set_label(histogram_profile, NULL, _("histogram profile"));
+    dt_bauhaus_widget_set_label(softproof_profile, NULL, N_("softproof profile"));
+    dt_bauhaus_widget_set_label(display_profile, NULL, N_("display profile"));
+    dt_bauhaus_widget_set_label(display2_profile, NULL, N_("preview display profile"));
+    dt_bauhaus_widget_set_label(histogram_profile, NULL, N_("histogram profile"));
     gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), display_profile, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), display2_profile, TRUE, TRUE, 0);
@@ -2501,7 +2511,7 @@ void gui_init(dt_view_t *self)
 
     /** let's fill the encapsulating widget */
     GtkWidget *overlay_colors = dev->overlay_color.colors = dt_bauhaus_combobox_new(NULL);
-    dt_bauhaus_widget_set_label(overlay_colors, NULL, _("overlay color"));
+    dt_bauhaus_widget_set_label(overlay_colors, NULL, N_("overlay color"));
     dt_bauhaus_combobox_add(overlay_colors, _("gray"));
     dt_bauhaus_combobox_add(overlay_colors, _("red"));
     dt_bauhaus_combobox_add(overlay_colors, _("green"));
@@ -2886,8 +2896,6 @@ void enter(dt_view_t *self)
   /*
    * add IOP modules to plugin list
    */
-  // avoid triggering of events before plugin is ready:
-  ++darktable.gui->reset;
   char option[1024];
   GList *modules = g_list_last(dev->iop);
   while(modules)
@@ -2897,8 +2905,7 @@ void enter(dt_view_t *self)
     /* initialize gui if iop have one defined */
     if(!dt_iop_is_hidden(module))
     {
-      module->gui_init(module);
-      dt_iop_reload_defaults(module);
+      dt_iop_gui_init(module);
 
       /* add module to right panel */
       GtkWidget *expander = dt_iop_gui_get_expander(module);
@@ -2909,13 +2916,12 @@ void enter(dt_view_t *self)
         dt_iop_gui_set_expanded(module, TRUE, dt_conf_get_bool("darkroom/ui/single_module"));
       else
         dt_iop_gui_set_expanded(module, FALSE, FALSE);
+
+      dt_iop_reload_defaults(module);
     }
 
     modules = g_list_previous(modules);
   }
-
-  // make signals work again:
-  --darktable.gui->reset;
 
   /* signal that darktable.develop is initialized and ready to be used */
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE);
@@ -3074,7 +3080,7 @@ void leave(dt_view_t *self)
     dt_iop_module_t *module = (dt_iop_module_t *)(dev->iop->data);
     if(!dt_iop_is_hidden(module)) dt_iop_gui_cleanup_module(module);
 
-    dt_dev_cleanup_module_accels(module);
+    dt_accel_cleanup_closures_iop(module);
     module->accel_closures = NULL;
     dt_iop_cleanup_module(module);
     free(module);
@@ -4098,7 +4104,7 @@ static void second_window_expose(GtkWidget *widget, dt_develop_t *dev, cairo_t *
 
     cairo_rectangle(cr, 0, 0, wd, ht);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), _get_filtering_level(dev));
     cairo_fill(cr);
 
     if(darktable.gui->show_focus_peaking)
@@ -4137,7 +4143,7 @@ static void second_window_expose(GtkWidget *widget, dt_develop_t *dev, cairo_t *
     // avoid to draw the 1px garbage that sometimes shows up in the preview :(
     cairo_rectangle(cr, 0, 0, wd - 1, ht - 1);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), _get_filtering_level(dev));
     cairo_fill(cr);
     cairo_surface_destroy(surface);
     dt_pthread_mutex_unlock(mutex);
@@ -4423,8 +4429,8 @@ static gboolean _second_window_draw_callback(GtkWidget *widget, cairo_t *crf, dt
   int pointerx, pointery;
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
-  int32_t width = allocation.width;
-  int32_t height = allocation.height;
+  const int32_t width = allocation.width;
+  const int32_t height = allocation.height;
 
   dev->second_window.width = width;
   dev->second_window.height = height;
