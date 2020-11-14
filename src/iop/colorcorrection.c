@@ -71,6 +71,15 @@ const char *name()
   return _("color correction");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("correct white balance selectively for blacks and whites"),
+                                      _("corrective or creative"),
+                                      _("non-linear, Lab, display-referred"),
+                                      _("non-linear, Lab"),
+                                      _("non-linear, Lab, display-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
@@ -95,21 +104,24 @@ void init_presets(dt_iop_module_so_t *self)
   p.hia = 0.0f;
   p.hib = 3.0f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("warm tone"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("warm tone"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.loa = 3.55f;
   p.lob = 0.0f;
   p.hia = -0.95f;
   p.hib = 4.5f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("warming filter"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("warming filter"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.loa = -3.55f;
   p.lob = -0.0f;
   p.hia = 0.95f;
   p.hib = -4.5f;
   p.saturation = 1.0f;
-  dt_gui_presets_add_generic(_("cooling filter"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("cooling filter"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 }
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,

@@ -117,7 +117,7 @@ static void _lib_modulegroups_viewchanged_callback(gpointer instance, dt_view_t 
                                                    dt_view_t *new_view, gpointer data);
 
 static void _manage_preset_update_list(dt_lib_module_t *self);
-static void _manage_editor_load(char *preset, dt_lib_module_t *self);
+static void _manage_editor_load(const char *preset, dt_lib_module_t *self);
 
 const char *name(dt_lib_module_t *self)
 {
@@ -220,6 +220,9 @@ void view_enter(dt_lib_module_t *self, dt_view_t *old_view, dt_view_t *new_view)
     if(!dt_lib_presets_apply(preset, self->plugin_name, self->version()))
       dt_lib_presets_apply(_(FALLBACK_PRESET_NAME), self->plugin_name, self->version());
     g_free(preset);
+
+    //and set the current group
+    d->current = dt_conf_get_int("plugins/darkroom/groups");
   }
 }
 
@@ -339,6 +342,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->hbox_search_box, TRUE, TRUE, 0);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->active_btn), TRUE);
+  d->current = dt_conf_get_int("plugins/darkroom/groups");
   if(d->current == DT_MODULEGROUP_NONE) _lib_modulegroups_update_iop_visibility(self);
   gtk_widget_show_all(self->widget);
   gtk_widget_show_all(d->hbox_buttons);
@@ -505,9 +509,13 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
         }
         else
         {
-          const int is_match = (g_strstr_len(g_utf8_casefold(dt_iop_get_localized_name(module->op), -1), -1,
-                                             g_utf8_casefold(text_entered, -1))
-                                != NULL);
+           const int is_match = (g_strstr_len(g_utf8_casefold(dt_iop_get_localized_name(module->op), -1), -1,
+                                              g_utf8_casefold(text_entered, -1))
+                                 != NULL) ||
+                                 (g_strstr_len(g_utf8_casefold(dt_iop_get_localized_aliases(module->op), -1), -1,
+                                               g_utf8_casefold(text_entered, -1))
+                                 != NULL);
+
 
           if(is_match)
             gtk_widget_show(w);
@@ -998,8 +1006,9 @@ void init_presets(dt_lib_module_t *self)
                        "tone", "bilat|filmicrgb|globaltonemap|levels"
                        "|relight|rgbcurve|rgblevels|tonecurve|tonemap|zonesystem");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "color"), "color",
-                       "channelmixer|colorbalance|colorchecker|colorcontrast|colorcorrection"
-                       "|colorin|colorout|colorzones|lut3d|monochrome|profile_gamma|velvia|vibrance");
+                       "channelmixer|channelmixerrgb|colorbalance|colorchecker|colorcontrast"
+                       "|colorcorrection|colorin|colorout|colorzones|lut3d|monochrome"
+                       "|profile_gamma|velvia|vibrance");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "correct"), "correct",
                        "ashift|atrous|bilateral|cacorrect|defringe|denoiseprofile|dither"
                        "|hazeremoval|hotpixels|lens|liquify|nlmeans|rawdenoise|retouch|rotatepixels"
@@ -1007,7 +1016,7 @@ void init_presets(dt_lib_module_t *self)
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "effect"), "effect",
                        "bloom|borders|colorize|colormapping|graduatednd|grain|highpass|lowlight"
                        "|lowpass|soften|splittoning|vignette|watermark");
-  dt_lib_presets_add(_("all modules"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
+  dt_lib_presets_add(_("modules: all"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
   g_free(tx);
 
   // minimal / 3 tabs
@@ -1016,11 +1025,11 @@ void init_presets(dt_lib_module_t *self)
                        "basicadj|ashift|basecurve|clipping"
                        "|denoiseprofile|exposure|flip|lens|temperature");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "grading"), "grading",
-                       "channelmixer|colorbalance|colorzones|graduatednd|rgbcurve"
+                       "channelmixerrgb|colorzones|graduatednd|rgbcurve"
                        "|rgblevels|splittoning");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "effects"), "effect",
-                       "bordersmonochrome|retouch|sharpen|vignette|watermark");
-  dt_lib_presets_add(_("minimal"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
+                       "borders|monochrome|retouch|sharpen|vignette|watermark");
+  dt_lib_presets_add(_("workflow: beginner"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
   g_free(tx);
 
   // display referred
@@ -1035,21 +1044,21 @@ void init_presets(dt_lib_module_t *self)
                        "|lens|retouch|liquify|sharpen|nlmeans");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "effect"), "effect",
                        "borders|colorize|graduatednd|grain|splittoning|vignette|watermark");
-  dt_lib_presets_add(_("display referred"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
+  dt_lib_presets_add(_("workflow: display-referred"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
   g_free(tx);
 
   // scene referred
   tx = NULL;
   tx = dt_util_dstrcat(tx, "ꬹ1ꬹ%s|%s||%s", C_("modulegroup", "base"), "basic",
-                       "filmicrgb|toneequal|clipping|flip|exposure|temperature|rgbcurve|rgblevels|bilat");
+                       "filmicrgb|toneequal|clipping|flip|exposure|temperature|bilat");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "color"), "color",
-                       "channelmixer|colorbalance|colorzones|vibrance");
+                       "channelmixerrgb|colorbalance|colorzones");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "correct"), "correct",
                        "ashift|cacorrect|defringe|denoiseprofile|hazeremoval|hotpixels"
                        "|lens|retouch|liquify|sharpen|nlmeans");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "effect"), "effect",
-                       "borders|colorize|graduatednd|grain|splittoning|vignette|watermark");
-  dt_lib_presets_add(_("scene referred"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
+                       "atrous|borders|graduatednd|grain|vignette|watermark");
+  dt_lib_presets_add(_("workflow: scene-referred"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
   g_free(tx);
 
   // default / 3 tabs based on Aurélien's proposal
@@ -1059,17 +1068,18 @@ void init_presets(dt_lib_module_t *self)
                        "|colorreconstruct|defringe|demosaic|denoiseprofile|dither|exposure"
                        "|filmicrgb|finalscale|flip|hazeremoval|highlights|hotpixels|invert|lens"
                        "|lut3d|negadoctor|nlmeans|overexposed|rawdenoise"
-                       "|rawoverexposed|rotatepixels|scalepixels");
+                       "|rawoverexposed|rotatepixels||temperature|scalepixels");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "grading"), "grading",
-                       "basicadj|channelmixer|colisa|colorbalance|colorcontrast|colorcorrection"
-                       "|colorize|colorzones|globaltonemap|graduatednd|levels|relight|rgbcurve"
-                       "|rgblevels|shadhi|splittoning|temperature|tonecurve|toneequal|tonemap"
+                       "basicadj|channelmixer|channelmixerrgb|colisa|colorbalance"
+                       "|colorcontrast|colorcorrection|colorize|colorzones|globaltonemap"
+                       "|graduatednd|levels|relight|rgbcurve|rgblevels|shadhi|splittoning"
+                       "|tonecurve|toneequal|tonemap"
                        "|velvia|vibrance|zonesystem");
   tx = dt_util_dstrcat(tx, "ꬹ%s|%s||%s", C_("modulegroup", "effects"), "effect",
                        "atrous|bilat|bloom|borders|clahe|colormapping"
                        "|grain|highpass|liquify|lowlight|lowpass|monochrome|retouch|sharpen"
                        "|soften|spots|vignette|watermark");
-  dt_lib_presets_add(_("default"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
+  dt_lib_presets_add(_("modules: default"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
   g_free(tx);
 
   // if needed, we add a new preset, based on last user config
@@ -1175,7 +1185,7 @@ static void _manage_editor_module_remove(GtkWidget *widget, GdkEventButton *even
   GList *l = gr->modules;
   while(l)
   {
-    char *tx = (char *)l->data;
+    const char *tx = (char *)l->data;
     if(g_strcmp0(tx, module) == 0)
     {
       g_free(l->data);
@@ -1679,7 +1689,7 @@ static void _manage_editor_group_add(GtkWidget *widget, GdkEventButton *event, d
   _manage_editor_group_update_arrows(d->preset_groups_box);
 }
 
-static void _manage_editor_load(char *preset, dt_lib_module_t *self)
+static void _manage_editor_load(const char *preset, dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
 
@@ -1816,7 +1826,7 @@ static void _manage_editor_load(char *preset, dt_lib_module_t *self)
 
 static void _manage_preset_change(GtkWidget *widget, GdkEventButton *event, dt_lib_module_t *self)
 {
-  char *preset = g_strdup((char *)g_object_get_data(G_OBJECT(widget), "preset_name"));
+  const char *preset = (char *)g_object_get_data(G_OBJECT(widget), "preset_name");
   _manage_editor_load(preset, self);
 }
 
@@ -1856,7 +1866,7 @@ static void _manage_preset_add(GtkWidget *widget, GdkEventButton *event, dt_lib_
 
 static void _manage_preset_duplicate(GtkWidget *widget, GdkEventButton *event, dt_lib_module_t *self)
 {
-  char *preset = (char *)g_object_get_data(G_OBJECT(widget), "preset_name");
+  const char *preset = (char *)g_object_get_data(G_OBJECT(widget), "preset_name");
   gchar *nname = dt_lib_presets_duplicate(preset, self->plugin_name, self->version());
 
   // reload the window
@@ -1901,7 +1911,7 @@ static void _manage_preset_delete(GtkWidget *widget, GdkEventButton *event, dt_l
     while(l)
     {
       GtkWidget *ww = (GtkWidget *)l->data;
-      char *tx = g_strdup((char *)g_object_get_data(G_OBJECT(ww), "preset_name"));
+      const char *tx = (char *)g_object_get_data(G_OBJECT(ww), "preset_name");
       if(g_strcmp0(tx, gtk_entry_get_text(GTK_ENTRY(d->preset_name))) == 0)
       {
         _manage_editor_load(tx, self);
@@ -1916,7 +1926,7 @@ static void _manage_preset_delete(GtkWidget *widget, GdkEventButton *event, dt_l
       GtkWidget *ww = (GtkWidget *)g_list_nth_data(gtk_container_get_children(GTK_CONTAINER(d->presets_list)), 0);
       if(ww)
       {
-        char *firstn = g_strdup((char *)g_object_get_data(G_OBJECT(ww), "preset_name"));
+        const char *firstn = (char *)g_object_get_data(G_OBJECT(ww), "preset_name");
         _manage_editor_load(firstn, self);
       }
     }
@@ -2090,7 +2100,7 @@ static void _manage_show_window(dt_lib_module_t *self)
     while(l)
     {
       GtkWidget *w = (GtkWidget *)l->data;
-      char *tx = g_strdup((char *)g_object_get_data(G_OBJECT(w), "preset_name"));
+      const char *tx = (char *)g_object_get_data(G_OBJECT(w), "preset_name");
       if(g_strcmp0(tx, preset) == 0)
       {
         _manage_editor_load(preset, self);
@@ -2107,7 +2117,7 @@ static void _manage_show_window(dt_lib_module_t *self)
     GtkWidget *w = (GtkWidget *)g_list_nth_data(gtk_container_get_children(GTK_CONTAINER(d->presets_list)), 0);
     if(w)
     {
-      char *firstn = g_strdup((char *)g_object_get_data(G_OBJECT(w), "preset_name"));
+      const char *firstn = (char *)g_object_get_data(G_OBJECT(w), "preset_name");
       _manage_editor_load(firstn, self);
     }
   }

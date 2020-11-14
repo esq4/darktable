@@ -154,6 +154,15 @@ const char *name()
   return _("vignetting");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("simulate a lens fall-off close to edges"),
+                                      _("creative"),
+                                      _("non-linear, RGB, display-referred"),
+                                      _("non-linear, RGB"),
+                                      _("non-linear, RGB, display-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING
@@ -960,7 +969,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.shape = 1.0f;
   p.dithering = 0;
   p.unbound = TRUE;
-  dt_gui_presets_add_generic(_("lomo"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("lomo"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "COMMIT", NULL, NULL, NULL);
 }
 

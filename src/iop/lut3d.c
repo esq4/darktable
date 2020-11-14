@@ -132,6 +132,15 @@ const char *name()
   return _("lut 3D");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("perform color space corrections and apply look"),
+                                      _("corrective or creative"),
+                                      _("linear, RGB, display-referred"),
+                                      _("defined by profile, RGB"),
+                                      _("linear or non-linear, RGB, display-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING;
@@ -985,7 +994,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const dt_iop_order_iccprofile_info_t *const lut_profile
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
-    = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+    = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   gboolean transform = (work_profile != NULL && lut_profile != NULL) ? TRUE : FALSE;
   cl_mem clut_cl = NULL;
   const int devid = piece->pipe->devid;
@@ -1064,7 +1073,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const dt_iop_order_iccprofile_info_t *const lut_profile
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
-    = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+    = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const gboolean transform = (work_profile != NULL && lut_profile != NULL) ? TRUE : FALSE;
   if (clut)
   {

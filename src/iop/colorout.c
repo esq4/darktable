@@ -22,6 +22,7 @@
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/file_location.h"
+#include "common/iop_profile.h"
 #include "common/opencl.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -79,6 +80,18 @@ const char *name()
 {
   return _("output color profile");
 }
+
+
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("convert pipeline reference RGB to any display RGB\n"
+                                        "using color profiles to remap RGB values"),
+                                      _("mandatory"),
+                                      _("linear or non-linear, RGB or Lab, display-referred"),
+                                      _("defined by profile"),
+                                      _("non-linear, RGB, display-referred"));
+}
+
 
 int default_group()
 {
@@ -315,9 +328,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_release_mem_object(dev_b);
   dt_opencl_release_mem_object(dev_coeffs);
 
-  // we no longer use the working profile
-  piece->pipe->dsc.work_profile_info = NULL;
-
   return TRUE;
 
 error:
@@ -454,9 +464,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
   }
 
-  // we no longer use the working profile
-  piece->pipe->dsc.work_profile_info = NULL;
-
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
@@ -539,9 +546,6 @@ void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, c
     }
     _mm_sfence();
   }
-
-  // we no longer use the working profile
-  piece->pipe->dsc.work_profile_info = NULL;
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
@@ -650,8 +654,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *out_profile
-      = dt_colorspaces_get_profile(out_type, out_filename, DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY
-                                                               | DT_PROFILE_DIRECTION_DISPLAY2);
+      = dt_colorspaces_get_profile(out_type, out_filename,
+                                   DT_PROFILE_DIRECTION_OUT
+                                   | DT_PROFILE_DIRECTION_DISPLAY
+                                   | DT_PROFILE_DIRECTION_DISPLAY2);
   if(out_profile)
   {
     output = out_profile->profile;
@@ -659,9 +665,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
   else
   {
-    output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT
-                                                                    | DT_PROFILE_DIRECTION_DISPLAY
-                                                                    | DT_PROFILE_DIRECTION_DISPLAY2)
+    output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
+                                        DT_PROFILE_DIRECTION_OUT
+                                        | DT_PROFILE_DIRECTION_DISPLAY
+                                        | DT_PROFILE_DIRECTION_DISPLAY2)
                  ->profile;
     dt_control_log(_("missing output profile has been replaced by sRGB!"));
     fprintf(stderr, "missing output profile `%s' has been replaced by sRGB!\n",
@@ -671,16 +678,19 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   /* creating softproof profile if softproof is enabled */
   if(d->mode != DT_PROFILE_NORMAL && (pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
   {
-    const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile(
-        darktable.color_profiles->softproof_type, darktable.color_profiles->softproof_filename,
-        DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY | DT_PROFILE_DIRECTION_DISPLAY2);
+    const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
+      (darktable.color_profiles->softproof_type,
+       darktable.color_profiles->softproof_filename,
+       DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY | DT_PROFILE_DIRECTION_DISPLAY2);
+
     if(prof)
       softproof = prof->profile;
     else
     {
-      softproof = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT
-                                                                         | DT_PROFILE_DIRECTION_DISPLAY
-                                                                         | DT_PROFILE_DIRECTION_DISPLAY2)
+      softproof = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
+                                             DT_PROFILE_DIRECTION_OUT
+                                             | DT_PROFILE_DIRECTION_DISPLAY
+                                             | DT_PROFILE_DIRECTION_DISPLAY2)
                       ->profile;
       dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
       fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
@@ -712,7 +722,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    */
 
   /* get matrix from profile, if softproofing or high quality exporting always go xform codepath */
-  if(d->mode != DT_PROFILE_NORMAL || force_lcms2
+  if(d->mode != DT_PROFILE_NORMAL
+     || force_lcms2
      || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1], d->lut[2],
                                                       LUT_SAMPLES, out_intent))
   {
@@ -728,6 +739,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     dt_control_log(_("unsupported output profile has been replaced by sRGB!"));
     fprintf(stderr, "unsupported output profile `%s' has been replaced by sRGB!\n", out_profile->name);
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT)->profile;
+
     if(d->mode != DT_PROFILE_NORMAL
        || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1],
                                                         d->lut[2], LUT_SAMPLES, out_intent))
@@ -753,7 +765,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(d->lut[k][0] >= 0.0f)
     {
       const float x[4] = { 0.7f, 0.8f, 0.9f, 1.0f };
-      const float y[4] = { lerp_lut(d->lut[k], x[0]), lerp_lut(d->lut[k], x[1]), lerp_lut(d->lut[k], x[2]),
+      const float y[4] = { lerp_lut(d->lut[k], x[0]),
+                           lerp_lut(d->lut[k], x[1]),
+                           lerp_lut(d->lut[k], x[2]),
                            lerp_lut(d->lut[k], x[3]) };
       dt_iop_estimate_exp(x, y, 4, d->unbounded_coeffs[k]);
     }
@@ -764,6 +778,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // softproof is never the original but always a copy that went through _make_clipping_profile()
   dt_colorspaces_cleanup_profile(softproof);
 
+  dt_ioppr_set_pipe_output_profile_info(self->dev, piece->pipe, d->type, out_filename, p->intent);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

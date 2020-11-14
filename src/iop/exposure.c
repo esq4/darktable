@@ -108,6 +108,16 @@ const char *name()
   return _("exposure");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("redo the exposure of the shot as if you were still in-camera\n"
+                                        "using a color-safe brightening similar to increasing ISO setting"),
+                                      _("corrective and creative"),
+                                      _("linear, RGB, scene-referred"),
+                                      _("linear, RGB"),
+                                      _("linear, RGB, scene-referred"));
+}
+
 int default_group()
 {
   return IOP_GROUP_BASIC | IOP_GROUP_TECHNICAL;
@@ -133,14 +143,12 @@ void connect_key_accels(dt_iop_module_t *self)
   /* register hooks with current dev so that  histogram
      can interact with this module.
   */
-  dt_dev_proxy_exposure_t *instance = g_malloc0(sizeof(dt_dev_proxy_exposure_t));
+  dt_dev_proxy_exposure_t *instance = &darktable.develop->proxy.exposure;
   instance->module = self;
   instance->set_exposure = dt_iop_exposure_set_exposure;
   instance->get_exposure = dt_iop_exposure_get_exposure;
   instance->set_black = dt_iop_exposure_set_black;
   instance->get_black = dt_iop_exposure_get_black;
-  darktable.develop->proxy.exposure
-      = g_list_prepend(darktable.develop->proxy.exposure, instance);
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
@@ -248,14 +256,15 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 void init_presets (dt_iop_module_so_t *self)
 {
-  dt_gui_presets_add_generic(_("magic lantern defaults"), self->op, self->version(),
+  dt_gui_presets_add_generic(_("magic lantern defaults"), self->op,
+                             self->version(),
                              &(dt_iop_exposure_params_t){.mode = EXPOSURE_MODE_DEFLICKER,
                                                          .black = 0.0f,
                                                          .exposure = 0.0f,
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = FALSE},
-                             sizeof(dt_iop_exposure_params_t), 1);
+                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
 
   // For scene-referred workflow, since filmic doesn't brighten as base curve does,
@@ -268,9 +277,10 @@ void init_presets (dt_iop_module_so_t *self)
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = TRUE},
-                             sizeof(dt_iop_exposure_params_t), 1);
+                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_gui_presets_update_ldr(_("scene-referred default"), self->op, self->version(), FOR_RAW);
+  dt_gui_presets_update_ldr(_("scene-referred default"), self->op,
+                            self->version(), FOR_RAW);
 }
 
 static void deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histogram,
@@ -914,18 +924,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
-  GList *instances = darktable.develop->proxy.exposure;
-  while(instances != NULL)
-  {
-    GList *next = g_list_next(instances);
-    dt_dev_proxy_exposure_t *instance = (dt_dev_proxy_exposure_t *)instances->data;
-    if(instance->module == self)
-    {
-      g_free(instance);
-      darktable.develop->proxy.exposure = g_list_delete_link(darktable.develop->proxy.exposure, instances);
-    }
-    instances = next;
-  }
+  if(darktable.develop->proxy.exposure.module == self)
+    darktable.develop->proxy.exposure.module = NULL;
 
   free(g->deflicker_histogram);
   g->deflicker_histogram = NULL;

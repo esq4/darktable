@@ -129,6 +129,15 @@ const char *name()
   return _("lowpass");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("isolate low frequencies in the image"),
+                                      _("creative"),
+                                      _("linear or non-linear, Lab, scene-referred"),
+                                      _("frequential, Lab"),
+                                      _("special, Lab, scene-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
@@ -558,7 +567,7 @@ void init_presets(dt_iop_module_so_t *self)
 
   dt_gui_presets_add_generic(_("local contrast mask"), self->op, self->version(),
                              &(dt_iop_lowpass_params_t){ 0, 50.0f, -1.0f, 0.0f, 0.0f, LOWPASS_ALGO_GAUSSIAN, 1 },
-                             sizeof(dt_iop_lowpass_params_t), 1);
+                             sizeof(dt_iop_lowpass_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "COMMIT", NULL, NULL, NULL);
 }

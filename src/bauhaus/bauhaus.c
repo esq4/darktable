@@ -88,7 +88,6 @@ static inline float inner_height(GtkAllocation allocation)
   return allocation.height - 2.0f * darktable.bauhaus->widget_space;
 }
 
-
 static GdkRGBA * default_color_assign()
 {
   // helper to initialize a color pointer with red color as a default
@@ -99,7 +98,6 @@ static GdkRGBA * default_color_assign()
   color.alpha = 1.0f;
   return gdk_rgba_copy(&color);
 }
-
 
 static int show_pango_text(dt_bauhaus_widget_t *w, GtkStyleContext *context, cairo_t *cr,
                            char *text, float x_pos, float y_pos, float max_width,
@@ -536,6 +534,7 @@ void dt_bauhaus_load_theme()
   gtk_style_context_lookup_color(ctx, "graph_grid", &darktable.bauhaus->graph_grid);
   gtk_style_context_lookup_color(ctx, "graph_fg", &darktable.bauhaus->graph_fg);
   gtk_style_context_lookup_color(ctx, "graph_fg_active", &darktable.bauhaus->graph_fg_active);
+  gtk_style_context_lookup_color(ctx, "graph_overlay", &darktable.bauhaus->graph_overlay);
   gtk_style_context_lookup_color(ctx, "inset_histogram", &darktable.bauhaus->inset_histogram);
 
   PangoFontDescription *pfont = 0;
@@ -2047,6 +2046,7 @@ void dt_bauhaus_show_popup(dt_bauhaus_widget_t *w)
   int offset = 0;
   GtkAllocation tmp;
   gtk_widget_get_allocation(GTK_WIDGET(w), &tmp);
+  if(tmp.width == 1) return;
 
   gtk_widget_realize(darktable.bauhaus->popup_window);
   switch(darktable.bauhaus->current->type)

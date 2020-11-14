@@ -86,6 +86,15 @@ const char *name()
   return _("lowlight vision");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("simulate human night vision"),
+                                      _("creative"),
+                                      _("non-linear, Lab, display-referred"),
+                                      _("linear, XYZ"),
+                                      _("non-linear, Lab, display-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
@@ -312,7 +321,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 0.0f;
-  dt_gui_presets_add_generic(_("daylight"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("daylight"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -329,7 +339,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 30.0f;
-  dt_gui_presets_add_generic(_("indoor bright"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("indoor bright"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -346,7 +357,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 30.0f;
-  dt_gui_presets_add_generic(_("indoor dim"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("indoor dim"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -363,7 +375,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 40.0f;
-  dt_gui_presets_add_generic(_("indoor dark"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("indoor dark"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -380,7 +393,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 50.0f;
-  dt_gui_presets_add_generic(_("twilight"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("twilight"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -397,7 +411,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 30.0f;
-  dt_gui_presets_add_generic(_("night street lit"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("night street lit"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -414,7 +429,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 30.0f;
-  dt_gui_presets_add_generic(_("night street"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("night street"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.150000;
@@ -431,7 +447,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.transition_y[5] = 1.000000;
 
   p.blueness = 40.0f;
-  dt_gui_presets_add_generic(_("night street dark"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("night street dark"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -449,7 +466,8 @@ void init_presets(dt_iop_module_so_t *self)
 
 
   p.blueness = 50.0f;
-  dt_gui_presets_add_generic(_("night"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("night"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "COMMIT", NULL, NULL, NULL);
 }

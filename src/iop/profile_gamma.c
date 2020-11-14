@@ -94,6 +94,15 @@ const char *name()
   return _("unbreak input profile");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("correct input color profiles meant to be applied on non-linear RGB."),
+                                      _("corrective"),
+                                      _("linear, RGB, display-referred"),
+                                      _("non-linear, RGB"),
+                                      _("non-linear, RGB, display-referred"));
+}
+
 int default_group()
 {
   return IOP_GROUP_COLOR | IOP_GROUP_TECHNICAL;
@@ -122,28 +131,32 @@ void init_presets(dt_iop_module_so_t *self)
   // 16 EV preset
   p.dynamic_range = 16.0f;
   p.shadows_range = -12.0f;
-  dt_gui_presets_add_generic(_("16 EV dynamic range (generic)"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("16 EV dynamic range (generic)"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // 14 EV preset
   p.dynamic_range = 14.0f;
   p.shadows_range = -10.50f;
-  dt_gui_presets_add_generic(_("14 EV dynamic range (generic)"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("14 EV dynamic range (generic)"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // 12 EV preset
   p.dynamic_range = 12.0f;
   p.shadows_range = -9.0f;
-  dt_gui_presets_add_generic(_("12 EV dynamic range (generic)"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("12 EV dynamic range (generic)"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // 10 EV preset
   p.dynamic_range = 10.0f;
   p.shadows_range = -7.50f;
-  dt_gui_presets_add_generic(_("10 EV dynamic range (generic)"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("10 EV dynamic range (generic)"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // 08 EV preset
   p.dynamic_range = 8.0f;
   p.shadows_range = -6.0f;
-  dt_gui_presets_add_generic(_("08 EV dynamic range (generic)"), self->op, self->version(), &p, sizeof(p), 1);
-
+  dt_gui_presets_add_generic(_("08 EV dynamic range (generic)"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 }
 
 

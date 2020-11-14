@@ -149,13 +149,18 @@ const char *name()
   return _("color balance");
 }
 
-const char *description()
+const char *aliases()
 {
-  return _("affect color, brightness and contrast\n"
-           "for corrective and creative purposes.\n"
-           "works in RGB\n"
-           "takes preferably a linear RGB input,\n"
-           "outputs possibly non-linear RGB, depending on settings.");
+  return _("lift gamma gain|cdl|color grading|contrast|saturation|hue");
+}
+
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("affect color, brightness and contrast"),
+                                      _("corrective or creative"),
+                                      _("linear, Lab, scene-referred"),
+                                      _("non-linear, RGB"),
+                                      _("non-linear, Lab, scene-referred"));
 }
 
 int flags()

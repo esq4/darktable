@@ -180,6 +180,16 @@ const char *name()
   return _("framing");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("add solid borders or margins around the picture"),
+                                      _("creative"),
+                                      _("linear or non-linear, RGB, display-referred"),
+                                      _("geometric, RGB"),
+                                      _("linear or non-linear, RGB, display-referred"));
+}
+
+
 int default_group()
 {
   return IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS;
@@ -363,7 +373,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 static void set_outer_border_sse(float *buf, const float col[4], const int height, const int width,
                                  const int border_height, const int border_width)
 {
-  const __m128 color = _mm_load_ps(col);
+  const __m128 color = _mm_loadu_ps(col);  // use unalignd load since 'col' is not necessarily 16-byte aligned
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, col, border_height, height, width, color)  \
@@ -691,10 +701,13 @@ void init_presets(dt_iop_module_so_t *self)
                                                          0.5f,
                                                          { 0.0f, 0.0f, 0.0f },
                                                          TRUE };
-  dt_gui_presets_add_generic(_("15:10 postcard white"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("15:10 postcard white"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+
   p.color[0] = p.color[1] = p.color[2] = 0.0f;
   p.frame_color[0] = p.frame_color[1] = p.frame_color[2] = 1.0f;
-  dt_gui_presets_add_generic(_("15:10 postcard black"), self->op, self->version(), &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("15:10 postcard black"), self->op,
+                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)

@@ -90,6 +90,15 @@ const char *name()
   return _("highpass");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("isolate high frequencies in the image"),
+                                      _("creative"),
+                                      _("linear or non-linear, Lab, scene-referred"),
+                                      _("frequential, Lab"),
+                                      _("special, Lab, scene-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
@@ -344,7 +353,7 @@ static void blur_vertical_sse(float *buf, const int height, const int width, con
   for (size_t y = 0; y < radius && y < height; y++)
   {
     size_t index = y * width;
-    L += _mm_load_ps(buf + index);
+    L += _mm_loadu_ps(buf + index);	// use unaligned load since width is not necessarily a multiple of 4
     hits += one;
   }
   // process the blur up to the point where we start removing values
@@ -353,7 +362,7 @@ static void blur_vertical_sse(float *buf, const int height, const int width, con
     const int np = y + radius;
     if(np < height)
     {
-      L += _mm_load_ps(buf+np*width);
+      L += _mm_loadu_ps(buf+np*width);
       hits += one;
     }
     _mm_store_ps(scanline+4*y, L / hits);
@@ -363,11 +372,11 @@ static void blur_vertical_sse(float *buf, const int height, const int width, con
   {
     const int op = y - radius - 1;
     const int np = y + radius;
-    L -= _mm_load_ps(buf+op*width);
+    L -= _mm_loadu_ps(buf+op*width);
     hits -= one;
     if(np < height)
     {
-      L += _mm_load_ps(buf+np*width);
+      L += _mm_loadu_ps(buf+np*width);
       hits += one;
     }
     _mm_store_ps(scanline+4*y, L / hits);
@@ -377,6 +386,7 @@ static void blur_vertical_sse(float *buf, const int height, const int width, con
   for (size_t y = 0; y < height; y++)
   {
     // use unaligned store since width is not necessarily a multiple of four
+    // use the faster aligned load since we've ensured that scanline is aligned
     _mm_storeu_ps(buf + y*width, _mm_load_ps(scanline + 4*y));
   }
   return;
@@ -452,7 +462,7 @@ static void blur_vertical_4ch(float *buf, const int height, const int width, con
     scanline[4*y+2] = L[2] / hits;
     scanline[4*y+3] = L[3] / hits;
   }
-  
+
   // copy blurred values back to original location in buffer
   for (size_t y = 0; y < height; y++)
   {

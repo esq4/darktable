@@ -26,6 +26,7 @@ gboolean dr_event_rating_release(dt_develop_t *user_data); //ab
 
 typedef enum dt_thumbtable_mode_t
 {
+  DT_THUMBTABLE_MODE_NONE,
   DT_THUMBTABLE_MODE_FILEMANAGER,
   DT_THUMBTABLE_MODE_FILMSTRIP,
   DT_THUMBTABLE_MODE_ZOOM

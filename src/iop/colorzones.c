@@ -138,6 +138,15 @@ const char *name()
   return _("color zones");
 }
 
+const char *description(struct dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("selectively shift hues, saturation and brightness of pixels"),
+                                      _("creative"),
+                                      _("linear or non-linear, Lab, display-referred"),
+                                      _("non-linear, Lab"),
+                                      _("non-linear, Lab, display-referred"));
+}
+
 int flags()
 {
   return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
@@ -600,7 +609,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("red black white"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("red black white"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // black white and skin tones
   p.channel = DT_IOP_COLORZONES_h;
@@ -622,7 +632,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("black white and skin tones"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("black white and skin tones"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // polarizing filter
   p.channel = DT_IOP_COLORZONES_C;
@@ -644,7 +655,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("polarizing filter"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("polarizing filter"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // natural skin tone
   p.channel = DT_IOP_COLORZONES_h;
@@ -664,7 +676,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("natural skin tones"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("natural skin tones"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // black and white film
   p.channel = DT_IOP_COLORZONES_h;
@@ -694,7 +707,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = DT_IOP_COLORZONES_BANDS - 1;
     p.curve_type[c] = CATMULL_ROM;
   }
-  dt_gui_presets_add_generic(_("black & white film"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("black & white film"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   // neutral preset with just a set of nodes uniformly distributed along the hue axis
   const int colorzones_bands_hsl = 8;
@@ -713,7 +727,8 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_num_nodes[c] = colorzones_bands_hsl;
     p.curve_type[c] = MONOTONE_HERMITE;
   }
-  dt_gui_presets_add_generic(_("HSL base setting"), self->op, version, &p, sizeof(p), 1);
+  dt_gui_presets_add_generic(_("HSL base setting"), self->op,
+                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "COMMIT", NULL, NULL, NULL);
 }

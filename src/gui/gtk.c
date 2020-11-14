@@ -3047,11 +3047,23 @@ static void notebook_size_callback(GtkNotebook *notebook, GdkRectangle *allocati
   g_free(sizes);
 }
 
+void dt_ui_notebook_clear(GtkNotebook *notebook)
+{
+  gint notebook_pages = gtk_notebook_get_n_pages(notebook);
+  if(notebook_pages >= 2)
+    g_signal_handlers_disconnect_by_func(G_OBJECT(notebook), G_CALLBACK(notebook_size_callback), NULL);
+  for(gint tabs = notebook_pages; tabs > 0; --tabs)
+  {
+    gtk_notebook_remove_page(notebook, tabs - 1);
+  }
+}
+
 GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const char *tooltip)
 {
   GtkWidget *label = gtk_label_new(text);
   GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  if(strlen(text) > 2)
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
   if(tooltip || strlen(text) > 1)
     gtk_widget_set_tooltip_text(label, tooltip ? tooltip : text);
   gtk_notebook_append_page(notebook, page, label);

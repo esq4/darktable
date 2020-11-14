@@ -487,8 +487,9 @@ static void _size_in_px_update(dt_lib_export_t *d)
   }
   else
   {
-    gchar size_in_px_txt[25];
-    sprintf(size_in_px_txt, "that is equal %s x %s px", gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
+    gchar size_in_px_txt[120];
+    snprintf(size_in_px_txt, sizeof(size_in_px_txt) / sizeof(size_in_px_txt[0]), _("which is equal to %s × %s px"),
+             gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
     gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
   }
 }
@@ -1302,6 +1303,32 @@ void gui_init(dt_lib_module_t *self)
   dt_bauhaus_combobox_add(d->intent, C_("rendering intent", "saturation"));
   dt_bauhaus_combobox_add(d->intent, _("absolute colorimetric"));
   gtk_box_pack_start(GTK_BOX(self->widget), d->intent, FALSE, TRUE, 0);
+
+  tooltip = g_strdup_printf(_("• perceptual : "
+                              "smoothly moves out-of-gamut colors into gamut,"
+                              "preserving gradations, but distorts in-gamut colors in the process."
+                              " note that perceptual is often a proprietary LUT that depends"
+                              " on the destination space."
+                              "\n\n"
+
+                              "• relative colorimetric : "
+                              "keeps luminance while reducing as little as possible saturation"
+                              " until colors fit in gamut."
+                              "\n\n"
+
+                              "• saturation : "
+                              "designed to present eye-catching business graphics"
+                              " by preserving the saturation. (not suited for photography)."
+                              "\n\n"
+
+                              "• absolute colorimetric : "
+                              "adapt white point of the image to the white point of the"
+                              " destination medium and do nothing else. mainly used when"
+                              " proofing colors. (not suited for photography)."
+                              ""
+                              ));
+  gtk_widget_set_tooltip_text(d->intent, tooltip);
+  g_free(tooltip);
 
   //  Add style combo
 
