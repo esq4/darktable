@@ -12,6 +12,9 @@
 // из src/views/darkroom.c
 static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 {
+  // stop crazy users from sleeping on key-repeat spacebar:
+  if(dev->image_loading) return;
+
   // change active image
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = NULL;
@@ -21,7 +24,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
   // if the previous shown image is selected and the selection is unique
   // then we change the selected image to the new one
-  //
   if(dev->image_storage.id > 0)
   {
     sqlite3_stmt *stmt;
@@ -58,7 +60,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   }
   else
   {
-      dt_image_set_aspect_ratio(dev->image_storage.id, TRUE);
+    dt_image_set_aspect_ratio(dev->image_storage.id, TRUE);
   }
 
   // clean the undo list
@@ -100,7 +102,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
   dt_iop_request_focus(NULL);
 
-  //ab
   g_assert(dev->gui_attached);
 
   // commit image ops to db
@@ -174,9 +175,8 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       dev->iop = g_list_remove_link(dev->iop, g_list_nth(dev->iop, i));
 
       // we cleanup the module
-      dt_accel_disconnect_list(&module->accel_closures);
-      dt_accel_cleanup_locals_iop(module);
-      dt_iop_cleanup_module(module);
+      dt_accel_cleanup_closures_iop(module);
+
       free(module);
     }
   }
@@ -211,13 +211,14 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       if(!dt_iop_is_hidden(module))
       {
         module->gui_init(module);
-        dt_iop_reload_defaults(module);
 
         /* add module to right panel */
         GtkWidget *expander = dt_iop_gui_get_expander(module);
         dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
         dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
+
+        dt_iop_reload_defaults(module);
       }
     }
     else
@@ -290,17 +291,13 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   darktable.view_manager->accels_window.prevent_refresh = FALSE;
   if(darktable.view_manager->accels_window.window && darktable.view_manager->accels_window.sticky)
     dt_view_accels_refresh(darktable.view_manager);
+
   // just make sure at this stage we have only history info into the undo, all automatic
   // tagging should be ignored.
   dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
 
   //connect iop accelerators
   dt_iop_connect_accels_all();
-
-
-  // just make sure at this stage we have only history info into the undo, all automatic
-  // tagging should be ignored.
-  dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
 }
 
 // set offset and redraw if needed
