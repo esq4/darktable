@@ -137,7 +137,6 @@ static void default_init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
                               dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(self->params_size);
-  default_commit_params(self, self->default_params, pipe, piece);
 }
 
 static void default_cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
@@ -604,8 +603,6 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
 {
   module->init_pipe(module, pipe, piece);
   piece->blendop_data = calloc(1, sizeof(dt_develop_blend_params_t));
-  /// FIXME: Commit params is already done in module
-  dt_iop_commit_params(module, module->default_params, module->default_blendop_params, pipe, piece);
 }
 
 static gboolean _header_motion_notify_show_callback(GtkWidget *eventbox, GdkEventCrossing *event, GtkWidget *header)
@@ -655,7 +652,7 @@ static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *modul
                             dt_ioppr_iop_order_copy_deep(darktable.develop->iop_order_list));
 
   // we must pay attention if priority is 0
-  gboolean is_zero = (module->multi_priority == 0);
+  const gboolean is_zero = (module->multi_priority == 0);
 
   // we set the focus to the other instance
   dt_iop_gui_set_expanded(next, TRUE, FALSE);
@@ -1364,9 +1361,8 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
 {
   if(darktable.gui) ++darktable.gui->reset;
   if(module->reload_defaults) module->reload_defaults(module);
-  if(darktable.gui) --darktable.gui->reset;
-
   dt_iop_load_default_params(module);
+  if(darktable.gui) --darktable.gui->reset;
 
   if(module->header) _iop_gui_update_header(module);
 }
@@ -1647,7 +1643,6 @@ int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, d
     free(module);
     return 1;
   }
-  dt_iop_reload_defaults(module);
   return 0;
 }
 
@@ -1670,7 +1665,6 @@ GList *dt_iop_load_modules_ext(dt_develop_t *dev, gboolean no_image)
     res = g_list_insert_sorted(res, module, dt_sort_iop_by_order);
     module->global_data = module_so->data;
     module->so = module_so;
-    if(!no_image) dt_iop_reload_defaults(module);
     iop = g_list_next(iop);
   }
 
@@ -1972,7 +1966,7 @@ static void dt_iop_gui_reset_callback(GtkButton *button, GdkEventButton *event, 
       if(grp) dt_masks_form_remove(module, NULL, grp);
     }
     /* reset to default params */
-    memcpy(module->params, module->default_params, module->params_size);
+    dt_iop_reload_defaults(module);
     dt_iop_commit_blend_params(module, module->default_blendop_params);
 
     /* reset ui to its defaults */
@@ -2680,6 +2674,10 @@ static gboolean enable_module_callback(GtkAccelGroup *accel_group, GObject *acce
 
 {
   dt_iop_module_t *module = (dt_iop_module_t *)data;
+
+  //cannot toggle module if there's no enable button
+  if(module->hide_enable_button) return TRUE;
+
   gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(module->off));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), !active);
 
@@ -3148,10 +3146,22 @@ char *dt_iop_warning_message(char *message)
 char *dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,
                              const char *output)
 {
+#define TAB_SIZE 4.0
+#define P_TAB(n) (nb_tab + 1 - (int)ceilf((float)n / TAB_SIZE))
+
   const char *str_purpose = _("purpose");
-  const char *str_input = _("input");
+  const char *str_input   = _("input");
   const char *str_process = _("process");
-  const char *str_output = _("output");
+  const char *str_output  = _("output");
+
+  const int len_purpose = strlen(str_purpose);
+  const int len_input   = strlen(str_input);
+  const int len_process = strlen(str_process);
+  const int len_output  = strlen(str_output);
+
+  const int max = MAX(len_purpose,
+                      MAX(len_input, MAX(len_process, len_output)));
+  const int nb_tab = ceilf((float)max / TAB_SIZE);
 
 #ifdef _WIN32
   // TODO: a windows dev is needed to find 4 icons properly rendered
@@ -3174,18 +3184,25 @@ char *dt_iop_set_description(dt_iop_module_t *module, const char *main_text, con
     icon_purpose = icon_input = icon_process = icon_output = "";
   */
 
-  char *str_out = g_strdup_printf("%s.\n\n"
-                                  "%s\t%s\t:\t%s.\n"
-                                  "%s\t%s\t:\t%s.\n"
-                                  "%s\t%s\t:\t%s.\n"
-                                  "%s\t%s\t:\t%s.",
-                                  main_text,
-                                  icon_purpose, str_purpose, purpose,
-                                  icon_input, str_input, input,
-                                  icon_process, str_process, process,
-                                  icon_output, str_output, output);
+  // align on tabs
+  const char *tabs = "\t\t\t\t\t\t\t\t\t\t";
+
+  char *str_out = g_strdup_printf
+    ("%s.\n\n"
+     "%s\t%s%.*s:\t%s\n"
+     "%s\t%s%.*s:\t%s\n"
+     "%s\t%s%.*s:\t%s\n"
+     "%s\t%s%.*s:\t%s",
+     main_text,
+     icon_purpose, str_purpose, P_TAB(len_purpose), tabs, purpose,
+     icon_input,   str_input,   P_TAB(len_input),   tabs, input,
+     icon_process, str_process, P_TAB(len_process), tabs, process,
+     icon_output,  str_output,  P_TAB(len_output),  tabs, output);
 
   return str_out;
+
+#undef P_TAB
+#undef TAB_SIZE
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
