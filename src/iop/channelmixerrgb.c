@@ -26,8 +26,10 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
 #include "common/illuminants.h"
+#include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "develop/imageop_math.h"
+#include "develop/openmp_maths.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
@@ -396,24 +398,6 @@ static inline float scalar_product(const float v_1[4], const float v_2[4])
 
 
 #ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline float sqf(const float x)
-{
-  return x * x;
-}
-
-
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline float clamp_simd(const float x)
-{
-  return fminf(fmaxf(x, 0.0f), 1.0f);
-}
-
-
-#ifdef _OPENMP
 #pragma omp declare simd aligned(vector:16)
 #endif
 static inline float euclidean_norm(const float vector[4])
@@ -564,19 +548,14 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       {
         // Convert from RGB to XYZ
         dot_product(temp_two, RGB_to_XYZ, temp_one);
-
-        // Normalize by Y
         Y = temp_one[1];
-        downscale_vector(temp_one, Y);
-
-        // Convert from XYZ to LMS
-        convert_XYZ_to_bradford_LMS(temp_one, temp_two);
 
         // Do white balance in LMS
-        bradford_adapt_D50(temp_two, illuminant, p, TRUE, temp_one);
-
-        // Compute the 3D mix in LMS - this is a rotation + homothety of the vector base
-        dot_product(temp_one, MIX, temp_two);
+        downscale_vector(temp_one, Y);
+          convert_XYZ_to_bradford_LMS(temp_one, temp_two);
+            bradford_adapt_D50(temp_two, illuminant, p, TRUE, temp_one);
+          convert_bradford_LMS_to_XYZ(temp_one, temp_two);
+        upscale_vector(temp_two, Y);
 
         break;
       }
@@ -584,19 +563,14 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       {
         // Convert from RGB to XYZ
         dot_product(temp_two, RGB_to_XYZ, temp_one);
-
-         // Normalize by Y
         Y = temp_one[1];
-        downscale_vector(temp_one, Y);
-
-        // Convert from XYZ to LMS
-        convert_XYZ_to_bradford_LMS(temp_one, temp_two);
 
         // Do white balance in LMS
-        bradford_adapt_D50(temp_two, illuminant, p, FALSE, temp_one);
-
-        // Compute the 3D mix in LMS - this is a rotation + homothety of the vector base
-        dot_product(temp_one, MIX, temp_two);
+        downscale_vector(temp_one, Y);
+          convert_XYZ_to_bradford_LMS(temp_one, temp_two);
+            bradford_adapt_D50(temp_two, illuminant, p, FALSE, temp_one);
+          convert_bradford_LMS_to_XYZ(temp_one, temp_two);
+        upscale_vector(temp_two, Y);
 
         break;
       }
@@ -604,19 +578,14 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       {
         // Convert from RGB to XYZ
         dot_product(temp_two, RGB_to_XYZ, temp_one);
-
-         // Normalize by Y
         Y = temp_one[1];
-        downscale_vector(temp_one, Y);
-
-        // Convert from XYZ to LMS
-        convert_XYZ_to_CAT16_LMS(temp_one, temp_two);
 
         // Do white balance in LMS
-        CAT16_adapt_D50(temp_two, illuminant, 1.0f, TRUE, temp_one); // force full-adaptation
-
-        // Compute the 3D mix in LMS - this is a rotation + homothety of the vector base
-        dot_product(temp_one, MIX, temp_two);
+        downscale_vector(temp_one, Y);
+          convert_XYZ_to_CAT16_LMS(temp_one, temp_two);
+            CAT16_adapt_D50(temp_two, illuminant, 1.0f, TRUE, temp_one); // force full-adaptation
+          convert_CAT16_LMS_to_XYZ(temp_one, temp_two);
+        upscale_vector(temp_two, Y);
 
         break;
       }
@@ -624,42 +593,33 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       {
         // Convert from RGB to XYZ
         dot_product(temp_two, RGB_to_XYZ, temp_one);
-
-         // Normalize by Y
         Y = temp_one[1];
-        downscale_vector(temp_one, Y);
 
         // Do white balance in XYZ
-        XYZ_adapt_D50(temp_one, illuminant, temp_two);
-
-        // Compute the 3D mix in XYZ - this is a rotation + homothety of the vector base
-        dot_product(temp_two, MIX, temp_one);
-        dt_simd_memcpy(temp_one, temp_two, 4);
+        downscale_vector(temp_one, Y);
+          XYZ_adapt_D50(temp_one, illuminant, temp_two);
+        upscale_vector(temp_two, Y);
 
         break;
       }
       case DT_ADAPTATION_RGB:
       case DT_ADAPTATION_LAST:
       {
-        // No white balance.
-        // Compute the 3D mix in RGB - this is a rotation + homothety of the vector base
-        dot_product(temp_two, MIX, temp_one);
-
         // Convert from RGB to XYZ
-        dot_product(temp_one, RGB_to_XYZ, temp_two);
-
-        // Normalize by Y
-        Y = temp_one[1];
-        downscale_vector(temp_two, Y);
+        dot_product(temp_two, RGB_to_XYZ, temp_one);
+        for(size_t c = 0; c < 3; ++c) temp_two[c] = temp_one[c];
+        // No white balance.
         break;
       }
     }
 
-    // Gamut mapping happens in XYZ space no matter what
+    // Compute the 3D mix in LMS - this is a rotation + homothety of the vector base
+    convert_any_XYZ_to_LMS(temp_two, temp_one, kind);
+      dot_product(temp_one, MIX, temp_two);
     convert_any_LMS_to_XYZ(temp_two, temp_one, kind);
-      upscale_vector(temp_one, Y);
-        gamut_mapping(temp_one, gamut, clip, temp_two);
-      downscale_vector(temp_two, Y);
+
+    // Gamut mapping happens in XYZ space no matter what
+    gamut_mapping(temp_one, gamut, clip, temp_two);
     convert_any_XYZ_to_LMS(temp_two, temp_one, kind);
 
     // Clip in LMS
@@ -671,13 +631,11 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     // Clip in LMS
     if(clip) for(size_t c = 0; c < 3; c++) temp_two[c] = fmaxf(temp_two[c], 0.0f);
 
-    // Convert back LMS to XYZ to RGB
+    // Convert back LMS to XYZ
     convert_any_LMS_to_XYZ(temp_two, temp_one, kind);
 
     // Clip in XYZ
     if(clip) for(size_t c = 0; c < 3; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
-
-    upscale_vector(temp_one, Y);
 
     // Save
     if(apply_grey)
@@ -902,10 +860,6 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
   // Advertise to the pipeline that we are doing chromatic adaptation here
   // preset = TRUE allows to capture the CAT a priori at init time
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  dt_iop_order_entry_t *this
-      = dt_ioppr_get_iop_order_entry(self->dev->iop_order_list, "channelmixerrgb", self->multi_priority);
-
-  if(this == NULL) return; // there is no point then
 
   if((self->enabled && !(p->adaptation == DT_ADAPTATION_RGB || p->illuminant == DT_ILLUMINANT_PIPE)) || preset)
   {
@@ -913,14 +867,17 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
     if(self->dev->proxy.chroma_adaptation == NULL)
     {
       // We are the first to try to register, let's go !
-      self->dev->proxy.chroma_adaptation = this;
+      self->dev->proxy.chroma_adaptation = self;
+    }
+    else if(self->dev->proxy.chroma_adaptation == self)
+    {
     }
     else
     {
       // Another instance already registered.
       // If we are lower in the pipe than it, register in its place.
-      if(this->o.iop_order < self->dev->proxy.chroma_adaptation->o.iop_order)
-        self->dev->proxy.chroma_adaptation = this;
+      if(dt_iop_is_first_instance(self->dev->iop, self))
+        self->dev->proxy.chroma_adaptation = self;
     }
   }
   else
@@ -929,7 +886,7 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
     {
       // We do NOT do CAT here.
       // Deregister this instance as CAT-handler if it previously registered
-      if(self->dev->proxy.chroma_adaptation == this)
+      if(self->dev->proxy.chroma_adaptation == self)
         self->dev->proxy.chroma_adaptation = NULL;
     }
   }
@@ -937,13 +894,9 @@ static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
 
 static inline gboolean is_module_cat_on_pipe(struct dt_iop_module_t *self)
 {
-  // Check on the pipeline that we are doing chromatic adaptation here
-  dt_iop_order_entry_t *this
-      = dt_ioppr_get_iop_order_entry(self->dev->iop_order_list, "channelmixerrgb", self->multi_priority);
-
-  if(this == NULL) return FALSE; // there is no point then
-
-  return (self->dev->proxy.chroma_adaptation == this);
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  if(!g) return FALSE;
+  return self->dev->proxy.chroma_adaptation == self;
 }
 
 
@@ -1028,6 +981,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const struct dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
+  if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
+                                         g ? g->warning_label : NULL,
+                                         ivoid, ovoid, roi_in, roi_out))
+    return; // image has been copied through to output and module's trouble flag has been updated
+
   float DT_ALIGNED_ARRAY RGB_to_XYZ[3][4];
   float DT_ALIGNED_ARRAY XYZ_to_RGB[3][4];
 
@@ -1059,7 +1017,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       }
 
       // passthrough pixels
-      dt_simd_memcpy(in, out, roi_in->width * roi_in->height * ch);
+      dt_iop_image_copy_by_size(out, in, roi_in->width, roi_in->height, ch);
 
       dt_control_log(_("auto-detection of white balance completed"));
       return;
@@ -1142,7 +1100,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       break;
     }
   }
-  declare_cat_on_pipe(self, FALSE);
 }
 
 static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
@@ -1252,8 +1209,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // reference illuminant is hard-set D50 for darktable's pipeline
   // test illuminant is user params
   d->p = powf(0.818155f / d->illuminant[2], 0.0834f);
-
-  declare_cat_on_pipe(self, FALSE);
 }
 
 
@@ -1892,7 +1847,6 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_grey), p->normalize_grey);
 
   gui_changed(self, NULL, NULL);
-
 }
 
 void init(dt_iop_module_t *module)
@@ -1922,9 +1876,11 @@ void reload_defaults(dt_iop_module_t *module)
   // try to register the CAT here
   declare_cat_on_pipe(module, is_modern);
   // check if we could register
-  gboolean CAT_already_applied = !is_module_cat_on_pipe(module);
-  module->default_enabled = FALSE;
+  gboolean CAT_already_applied =
+    (module->dev->proxy.chroma_adaptation != NULL)       // CAT exists
+    && (module->dev->proxy.chroma_adaptation != module); // and it is not us
 
+  module->default_enabled = FALSE;
 
   const dt_image_t *img = &module->dev->image_storage;
 
@@ -2059,59 +2015,40 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     update_B_colors(self);
   }
 
+  declare_cat_on_pipe(self, FALSE);
+
   if(self->enabled && !(p->illuminant == DT_ILLUMINANT_PIPE || p->adaptation == DT_ADAPTATION_RGB))
   {
     // this module instance is doing chromatic adaptation
-    dt_iop_order_entry_t *CAT_instance = self->dev->proxy.chroma_adaptation;
-    dt_iop_order_entry_t *current_instance
-        = dt_ioppr_get_iop_order_entry(self->dev->iop_order_list, "channelmixerrgb", self->multi_priority);
-
-    if(CAT_instance && CAT_instance->o.iop_order != current_instance->o.iop_order)
+    if(!is_module_cat_on_pipe(self))
     {
       // our second biggest problem : another channelmixerrgb instance is doing CAT earlier in the pipe
-      dt_iop_set_module_in_trouble(self, TRUE);
-      char *wmes = dt_iop_warning_message(_("double CAT applied"));
-      gtk_label_set_text(GTK_LABEL(g->warning_label), wmes);
-      g_free(wmes);
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->warning_label),
-                                  _("you have 2 instances or more of color calibration,\n"
-                                    "all performing chromatic adaptation.\n"
-                                    "this can lead to inconsistencies, unless you\n"
-                                    "use them with masks or know what you are doing."));
-      gtk_widget_set_visible(GTK_WIDGET(g->warning_label), TRUE);
+      dt_iop_set_module_trouble_message(self, g->warning_label,_("double CAT applied"),
+                                        _("you have 2 instances or more of color calibration,\n"
+                                          "all performing chromatic adaptation.\n"
+                                          "this can lead to inconsistencies, unless you\n"
+                                          "use them with masks or know what you are doing."));
     }
     else if(!self->dev->proxy.wb_is_D65)
     {
       // our first and biggest problem : white balance module is being clever with WB coeffs
-      dt_iop_set_module_in_trouble(self, TRUE);
-      char *wmes = dt_iop_warning_message(_("white balance module error"));
-      gtk_label_set_text(GTK_LABEL(g->warning_label), wmes);
-      g_free(wmes);
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->warning_label),
-                                  _("the white balance module is not using the camera\n"
-                                    "reference illuminant, which will cause issues here\n"
-                                    "with chromatic adaptation. either set it to reference\n"
-                                    "or disable chromatic adaptation here."));
-      gtk_widget_set_visible(GTK_WIDGET(g->warning_label), TRUE);
+      dt_iop_set_module_trouble_message(self, g->warning_label,_("white balance module error"),
+                                        _("the white balance module is not using the camera\n"
+                                          "reference illuminant, which will cause issues here\n"
+                                          "with chromatic adaptation. either set it to reference\n"
+                                          "or disable chromatic adaptation here."));
     }
     else
     {
-      dt_iop_set_module_in_trouble(self, FALSE);
-      gtk_label_set_text(GTK_LABEL(g->warning_label), "");
-      gtk_widget_set_tooltip_text(GTK_WIDGET(g->warning_label), "");
-      gtk_widget_set_visible(GTK_WIDGET(g->warning_label), FALSE);
+      dt_iop_set_module_trouble_message(self, g->warning_label, NULL, NULL);
     }
   }
   else
   {
-    dt_iop_set_module_in_trouble(self, FALSE);
-    gtk_label_set_text(GTK_LABEL(g->warning_label), "");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(g->warning_label), "");
-    gtk_widget_set_visible(GTK_WIDGET(g->warning_label), FALSE);
+    dt_iop_set_module_trouble_message(self, g->warning_label, NULL, NULL);
   }
 
   --darktable.gui->reset;
-
 }
 
 
@@ -2155,7 +2092,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   ++darktable.gui->reset;
 
-  check_if_close_to_daylight(p->x, p->y, &p->temperature, &p->illuminant, &p->adaptation);
+  check_if_close_to_daylight(p->x, p->y, &p->temperature, &p->illuminant, NULL);
 
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);

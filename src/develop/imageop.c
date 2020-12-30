@@ -21,6 +21,7 @@
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/dtpthread.h"
+#include "common/imagebuf.h"
 #include "common/imageio_rawspeed.h"
 #include "common/interpolation.h"
 #include "common/iop_group.h"
@@ -922,15 +923,14 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
     dt_iop_gui_init(module);
 
     /* add module to right panel */
-    GtkWidget *expander = dt_iop_gui_get_expander(module);
-    dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+    dt_iop_gui_set_expander(module);
     GValue gv = { 0, { { 0 } } };
     g_value_init(&gv, G_TYPE_INT);
     gtk_container_child_get_property(
         GTK_CONTAINER(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER)),
         base->expander, "position", &gv);
     gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                          expander, g_value_get_int(&gv) + pos_base - pos_module + 1);
+                          module->expander, g_value_get_int(&gv) + pos_base - pos_module + 1);
     dt_iop_gui_set_expanded(module, TRUE, FALSE);
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
@@ -1204,10 +1204,8 @@ static void dt_iop_gui_off_callback(GtkToggleButton *togglebutton, gpointer user
     {
       module->enabled = 0;
 
-      //if current module is set as the CAT instance, remove that setting
-      dt_iop_order_entry_t *CAT_instance = module->dev->proxy.chroma_adaptation;
-
-      if(CAT_instance != NULL && CAT_instance->o.iop_order == module->iop_order)
+      //  if current module is set as the CAT instance, remove that setting
+      if(module->dev->proxy.chroma_adaptation == module)
         module->dev->proxy.chroma_adaptation = NULL;
 
       dt_iop_set_module_in_trouble(module, FALSE);
@@ -1292,6 +1290,8 @@ static void _iop_panel_label(GtkWidget *lab, dt_iop_module_t *module)
 
 static void _iop_gui_update_header(dt_iop_module_t *module)
 {
+  if (!module->header)                  /* some modules such as overexposed don't actually have a header */
+    return;
   GList *childs = gtk_container_get_children(GTK_CONTAINER(module->header));
 
   /* get the enable button and button */
@@ -1356,6 +1356,37 @@ void dt_iop_set_module_in_trouble(dt_iop_module_t *module, const gboolean state)
 
   _iop_gui_update_header(module);
 }
+
+void dt_iop_set_module_trouble_message(dt_iop_module_t *const module, GtkWidget *label_widget,
+                                       char* const trouble_msg, const char* const trouble_tooltip)
+{
+  if (trouble_msg && *trouble_msg)
+  {
+    // set the module's trouble flag
+    dt_iop_set_module_in_trouble(module, TRUE);
+    if (label_widget)
+    {
+      // set the warning message in the module's message area just below the header
+      char *msg = dt_iop_warning_message(trouble_msg);
+      gtk_label_set_text(GTK_LABEL(label_widget), msg);
+      g_free(msg);
+      gtk_widget_set_tooltip_text(GTK_WIDGET(label_widget), trouble_tooltip ? trouble_tooltip : "");
+      gtk_widget_set_visible(GTK_WIDGET(label_widget), TRUE);
+    }
+  }
+  else
+  {
+    // no trouble, so clear the trouble flag and hide the message area
+    dt_iop_set_module_in_trouble(module, FALSE);
+    if (label_widget)
+    {
+      gtk_label_set_text(GTK_LABEL(label_widget), "");
+      gtk_widget_set_tooltip_text(GTK_WIDGET(label_widget), "");
+      gtk_widget_set_visible(GTK_WIDGET(label_widget), FALSE);
+    }
+  }
+}
+
 
 static void _iop_gui_update_label(dt_iop_module_t *module)
 {
@@ -2452,7 +2483,7 @@ gboolean dt_iop_show_hide_header_buttons(GtkWidget *header, GdkEventCrossing *ev
   return TRUE;
 }
 
-GtkWidget *dt_iop_gui_get_expander(dt_iop_module_t *module)
+void dt_iop_gui_set_expander(dt_iop_module_t *module)
 {
   char tooltip[512];
 
@@ -2549,8 +2580,6 @@ GtkWidget *dt_iop_gui_get_expander(dt_iop_module_t *module)
   for(int i = IOP_MODULE_LAST - 1; i > IOP_MODULE_LABEL; i--)
     if(hw[i]) gtk_box_pack_end(GTK_BOX(header), hw[i], FALSE, FALSE, 0);
 
-  dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, FALSE);
-
   dt_gui_add_help_link(header, "interacting.html");
 
   gtk_widget_set_halign(hw[IOP_MODULE_LABEL], GTK_ALIGN_START);
@@ -2585,7 +2614,8 @@ GtkWidget *dt_iop_gui_get_expander(dt_iop_module_t *module)
   dt_iop_connect_common_accels(module);
   if(module->connect_key_accels) module->connect_key_accels(module);
 
-  return module->expander;
+  dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+  dt_iop_show_hide_header_buttons(header, NULL, FALSE, FALSE);
 }
 
 GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module)
@@ -2738,7 +2768,6 @@ static gboolean enable_module_callback(GtkAccelGroup *accel_group, GObject *acce
 
 void dt_iop_connect_common_accels(dt_iop_module_t *module)
 {
-
   GClosure *closure = NULL;
   if(module->flags() & IOP_FLAGS_DEPRECATED) return;
   // Connecting the (optional) module show accelerator
@@ -3087,6 +3116,24 @@ int dt_iop_count_instances(dt_iop_module_so_t *module)
   return inst_count;
 }
 
+gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
+{
+  gboolean is_first = TRUE;
+  GList *iop = modules;
+  while(iop)
+  {
+    dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
+    if(!strcmp(m->op, module->op))
+    {
+      is_first = (m == module);
+      break;
+    }
+    iop = g_list_next(iop);
+  }
+
+  return is_first;
+}
+
 void dt_iop_refresh_center(dt_iop_module_t *module)
 {
   if(darktable.gui->reset) return;
@@ -3241,6 +3288,35 @@ char *dt_iop_set_description(dt_iop_module_t *module, const char *main_text, con
 
 #undef P_TAB
 #undef TAB_SIZE
+}
+
+gboolean dt_iop_have_required_input_format(const int req_ch, struct dt_iop_module_t *const module,
+                                           const int ch, GtkWidget *warn_label,
+                                           const void *const restrict ivoid, void *const restrict ovoid,
+                                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  if (!module) return FALSE;
+  if (ch == req_ch)
+  {
+    dt_iop_set_module_trouble_message(module, warn_label, NULL, NULL);
+    return TRUE;
+  }
+  else
+  {
+    // copy the input buffer to the output
+    dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
+    // set trouble message
+    if (module)
+      dt_iop_set_module_trouble_message(module, warn_label, _("unsupported input"),
+                                        _("you have placed this module at\n"
+                                          "a position in the pipeline where\n"
+                                          "the data format does not match\n"
+                                          "its requirements."));
+    // and print an error message to the console
+    const char *name = module ? module->name() : "?";
+    fprintf(stderr,"[%s] unsupported data format\n",name);
+    return FALSE;
+  }
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

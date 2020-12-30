@@ -31,6 +31,7 @@
 #include "control/jobs.h"
 #include "dtgtk/button.h"
 #include "gui/gtk.h"
+#include "gui/preferences_dialogs.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
@@ -487,8 +488,17 @@ static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
     if (dt_control_remove_images())
     {
       gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model), &model_iter, &iter);
-      gtk_tree_store_remove(GTK_TREE_STORE(gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model))),
-                            &model_iter);
+
+      if (gtk_tree_model_get_flags(model) == GTK_TREE_MODEL_LIST_ONLY)
+      {
+        gtk_list_store_remove(GTK_LIST_STORE(gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model))),
+                              &model_iter);
+      }
+      else
+      {
+        gtk_tree_store_remove(GTK_TREE_STORE(gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model))),
+                              &model_iter);
+      }
     }
 
     g_free(fullq);
@@ -523,7 +533,8 @@ static void view_popup_menu(GtkWidget *treeview, GdkEventButton *event, dt_lib_c
 
 static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_collect_t *d)
 {
-  if((d->view_rule == DT_COLLECTION_PROP_FOLDERS && event->type == GDK_BUTTON_PRESS && event->button == 3)
+  if(((d->view_rule == DT_COLLECTION_PROP_FOLDERS || d->view_rule == DT_COLLECTION_PROP_FILMROLL)
+      && event->type == GDK_BUTTON_PRESS && event->button == 3)
      || (!d->singleclick && event->type == GDK_2BUTTON_PRESS && event->button == 1)
      || (d->singleclick && event->type == GDK_BUTTON_PRESS && event->button == 1))
   {
@@ -562,10 +573,16 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
     }
 
     /* single click on folder with the right mouse button? */
-    if(d->view_rule == DT_COLLECTION_PROP_FOLDERS && (event->type == GDK_BUTTON_PRESS && event->button == 3))
-      view_popup_menu(treeview, event, d);
-    else
+    if(((d->view_rule == DT_COLLECTION_PROP_FOLDERS) || (d->view_rule == DT_COLLECTION_PROP_FILMROLL))
+       && (event->type == GDK_BUTTON_PRESS && event->button == 3))
+    {
       row_activated_with_event(GTK_TREE_VIEW(treeview), path, NULL, event, d);
+      view_popup_menu(treeview, event, d);
+    }
+    else
+    {
+      row_activated_with_event(GTK_TREE_VIEW(treeview), path, NULL, event, d);
+    }
 
     gtk_tree_path_free(path);
 
@@ -586,7 +603,10 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
 
 static gboolean view_onPopupMenu(GtkWidget *treeview, dt_lib_collect_t *d)
 {
-  if(d->view_rule != DT_COLLECTION_PROP_FOLDERS) return FALSE;
+  if(d->view_rule != DT_COLLECTION_PROP_FOLDERS)
+  {
+    return FALSE;
+  }
 
   view_popup_menu(treeview, NULL, d);
 
@@ -1044,7 +1064,7 @@ static char **split_path(const char *path)
   // there are size + 1 elements in tokens -- the final NULL! we want to ignore it.
   const unsigned int size = g_strv_length(tokens);
 
-  result = malloc(size * sizeof(char *));
+  result = malloc(sizeof(char *) * size);
   for(unsigned int i = 0; i < size; i++)
     result[i] = tokens[i + 1];
 
@@ -1185,15 +1205,30 @@ static void tree_view(dt_lib_collect_rule_t *dr)
                                 " GROUP BY folder, film_rolls_id", where_ext);
         break;
       case DT_COLLECTION_PROP_TAG:
-        query = g_strdup_printf("SELECT name, tag_id, COUNT(*) AS count"
-                                " FROM main.images AS mi"
-                                " JOIN main.tagged_images"
-                                "   ON id = imgid "
-                                " JOIN (SELECT name, id AS tag_id FROM data.tags)"
-                                "   ON tagid = tag_id"
-                                " WHERE %s"
-                                " GROUP BY name,tag_id", where_ext);
-        break;
+      {
+        char *sensitive = dt_conf_get_string("plugins/lighttable/tagging/case_sensitivity");
+        if(!strcmp(sensitive, _("insensitive")))
+          query = g_strdup_printf("SELECT name, 1 AS tagid , COUNT(*) AS count"
+                                  " FROM (SELECT DISTINCT name, id"
+                                  "   FROM main.images AS mi"
+                                  "   JOIN main.tagged_images"
+                                  "     ON id = imgid "
+                                  "   JOIN (SELECT lower(name) AS name, id AS tag_id FROM data.tags)"
+                                  "     ON tagid = tag_id"
+                                  "   WHERE %s)"
+                                  " GROUP BY name", where_ext);
+        else
+          query = g_strdup_printf("SELECT name, tagid, COUNT(*) AS count"
+                                  " FROM main.images AS mi"
+                                  " JOIN main.tagged_images"
+                                  "   ON id = imgid "
+                                  " JOIN (SELECT name, id AS tag_id FROM data.tags)"
+                                  "   ON tagid = tag_id"
+                                  " WHERE %s"
+                                  " GROUP BY name,tag_id", where_ext);
+        g_free(sensitive);
+      }
+      break;
       case DT_COLLECTION_PROP_GEOTAGGING:
         query = g_strdup_printf("SELECT "
                                 " CASE WHEN mi.longitude IS NULL"
@@ -1219,13 +1254,13 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       case DT_COLLECTION_PROP_DAY:
         query = g_strdup_printf("SELECT SUBSTR(datetime_taken, 1, 10) AS date, 1, COUNT(*) AS count"
                                 " FROM main.images AS mi"
-                                " WHERE %s"
+                                " WHERE datetime_taken IS NOT NULL AND %s"
                                 " GROUP BY date", where_ext);
         break;
       case DT_COLLECTION_PROP_TIME:
         query = g_strdup_printf("SELECT datetime_taken AS date, 1, COUNT(*) AS count"
                                 " FROM main.images AS mi"
-                                " WHERE %s"
+                                " WHERE datetime_taken IS NOT NULL AND %s"
                                 " GROUP BY date", where_ext);
         break;
       case DT_COLLECTION_PROP_IMPORT_TIMESTAMP:
@@ -1296,36 +1331,47 @@ static void tree_view(dt_lib_collect_rule_t *dr)
                                              ) ? neg_sort_folder_tag : sort_folder_tag
                               );
 
+    gboolean no_uncategorized = (property == DT_COLLECTION_PROP_TAG) ?
+                                dt_conf_get_bool("plugins/lighttable/tagging/no_uncategorized")
+                                : TRUE;
+
     for(GList *names = sorted_names; names; names = g_list_next(names))
     {
       name_key_tuple_t *tuple = (name_key_tuple_t *)names->data;
       char *name = tuple->name;
       const int count = tuple->count;
       if(name == NULL) continue; // safeguard against degenerated db entries
-      // this is just for tags
-      char *next_name = g_strdup(names->next ? ((name_key_tuple_t *)names->next->data)->name : "");
-      if(strlen(next_name) >= strlen(name) + 1 && next_name[strlen(name)] == '|')
-        next_name[strlen(name)] = '\0';
-        
-      if(property == DT_COLLECTION_PROP_TAG && strchr(name, '|') == NULL
-        && (g_strcmp0(next_name, name)))
-      {
-        /* add uncategorized root iter if not exists */
-        if(!uncategorized.stamp)
-        {
-          gtk_tree_store_insert(GTK_TREE_STORE(model), &uncategorized, NULL, 0);
-          gtk_tree_store_set(GTK_TREE_STORE(model), &uncategorized, DT_LIB_COLLECT_COL_TEXT,
-                             _(UNCATEGORIZED_TAG), DT_LIB_COLLECT_COL_PATH, "", DT_LIB_COLLECT_COL_VISIBLE,
-                             TRUE, -1);
-        }
 
-        /* adding an uncategorized tag */
-        gtk_tree_store_insert(GTK_TREE_STORE(model), &temp, &uncategorized, -1);
-        gtk_tree_store_set(GTK_TREE_STORE(model), &temp, DT_LIB_COLLECT_COL_TEXT, name,
-                           DT_LIB_COLLECT_COL_PATH, name, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
-                           DT_LIB_COLLECT_COL_COUNT, count, -1);
+      // this is just for tags
+      gboolean uncategorized_found = FALSE;
+      if(!no_uncategorized && strchr(name, '|') == NULL)
+      {
+        char *next_name = g_strdup(names->next ? ((name_key_tuple_t *)names->next->data)->name : "");
+        if(strlen(next_name) >= strlen(name) + 1 && next_name[strlen(name)] == '|')
+          next_name[strlen(name)] = '\0';
+
+        if(g_strcmp0(next_name, name))
+        {
+          /* add uncategorized root iter if not exists */
+          if(!uncategorized.stamp)
+          {
+            gtk_tree_store_insert(GTK_TREE_STORE(model), &uncategorized, NULL, 0);
+            gtk_tree_store_set(GTK_TREE_STORE(model), &uncategorized, DT_LIB_COLLECT_COL_TEXT,
+                               _(UNCATEGORIZED_TAG), DT_LIB_COLLECT_COL_PATH, "", DT_LIB_COLLECT_COL_VISIBLE,
+                               TRUE, -1);
+          }
+
+          /* adding an uncategorized tag */
+          gtk_tree_store_insert(GTK_TREE_STORE(model), &temp, &uncategorized, -1);
+          gtk_tree_store_set(GTK_TREE_STORE(model), &temp, DT_LIB_COLLECT_COL_TEXT, name,
+                             DT_LIB_COLLECT_COL_PATH, name, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
+                             DT_LIB_COLLECT_COL_COUNT, count, -1);
+          uncategorized_found = TRUE;
+        }
+        g_free(next_name);
       }
-      else
+
+      if(!uncategorized_found)
       {
         char **tokens;
         if(property == DT_COLLECTION_PROP_FOLDERS)
@@ -1417,7 +1463,6 @@ static void tree_view(dt_lib_collect_rule_t *dr)
           last_tokens_length = tokens_length;
         }
       }
-      g_free(next_name);
     }
     g_list_free_full(sorted_names, free_tuple);
 
@@ -1791,6 +1836,13 @@ static void list_view(dt_lib_collect_rule_t *dr)
                            escaped_text, DT_LIB_COLLECT_COL_PATH, value, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
                            DT_LIB_COLLECT_COL_COUNT, count,
                            -1);
+
+        if(property == DT_COLLECTION_PROP_FILMROLL)
+        {
+          gtk_list_store_set(GTK_LIST_STORE(model), &iter,
+                             DT_LIB_COLLECT_COL_UNREACHABLE, !(g_file_test(value, G_FILE_TEST_IS_DIR)), -1);
+        }
+
         g_free(text);
         g_free(escaped_text);
       }
@@ -2160,6 +2212,16 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
         }
         else dt_collection_set_tag_id((dt_collection_t *)darktable.collection, 0);
       }
+    }
+    else if(item == DT_COLLECTION_PROP_FILMROLL && event->state & GDK_SHIFT_MASK)
+    {
+      // go to corresponding folder collection
+      _combo_set_active_collection(d->rule[active].combo, DT_COLLECTION_PROP_FOLDERS);
+    }
+    else if(item == DT_COLLECTION_PROP_FOLDERS && event->state & GDK_SHIFT_MASK)
+    {
+      // go to corresponding filmroll collection
+      _combo_set_active_collection(d->rule[active].combo, DT_COLLECTION_PROP_FILMROLL);
     }
   }
 
@@ -2630,6 +2692,30 @@ static void _populate_collect_combo(GtkWidget *w)
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_ORDER);
 
 #undef ADD_COLLECT_ENTRY
+}
+
+void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
+{
+  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("collect images settings"), GTK_WINDOW(win),
+                                                  GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 _("cancel"), GTK_RESPONSE_NONE,
+                                                 _("save"), GTK_RESPONSE_YES, NULL);
+  dt_prefs_init_dialog_collect(dialog);
+
+#ifdef GDK_WINDOWING_QUARTZ
+  dt_osx_disallow_fullscreen(dialog);
+#endif
+  gtk_widget_show_all(dialog);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+}
+
+void set_preferences(void *menu, dt_lib_module_t *self)
+{
+  GtkWidget *mi = gtk_menu_item_new_with_label(_("preferences..."));
+  g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_preferences), self);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 }
 
 void gui_init(dt_lib_module_t *self)

@@ -748,6 +748,12 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   // stop crazy users from sleeping on key-repeat spacebar:
   if(dev->image_loading) return;
 
+  // Pipe reset needed when changing image
+  // FIXME: synch with dev_init() and dev_cleanup() instead of redoing it
+  dev->proxy.chroma_adaptation = NULL;
+  dev->proxy.wb_is_D65 = TRUE;
+  dev->proxy.wb_coeffs[0] = 0.f;
+
   // change active image
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = NULL;
@@ -946,8 +952,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
         module->gui_init(module);
 
         /* add module to right panel */
-        GtkWidget *expander = dt_iop_gui_get_expander(module);
-        dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+        dt_iop_gui_set_expander(module);
         dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
       }
@@ -2941,8 +2946,7 @@ void enter(dt_view_t *self)
       dt_iop_gui_init(module);
 
       /* add module to right panel */
-      GtkWidget *expander = dt_iop_gui_get_expander(module);
-      dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+      dt_iop_gui_set_expander(module);
 
       snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
       if(dt_conf_get_bool(option))

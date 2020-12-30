@@ -164,6 +164,12 @@
 @define-color graph_green rgb(28,235,26);
 @define-color graph_blue rgb(14,14,233);
 
+@define-color colorlabel_red rgb(230,0,0);
+@define-color colorlabel_green rgb(0,230,0);
+@define-color colorlabel_blue rgb(0,0,230);
+@define-color colorlabel_yellow rgb(230,230,0);
+@define-color colorlabel_purple rgb(230,0,230);
+
 /* Reset GTK defaults - Otherwise dt inherits Adwaita default theme dark */
 *
 {
@@ -996,7 +1002,6 @@ notebook tabs,
 #modules-tabs #dt-toggle-button
 {
   min-height: 2em;
-  min-width: 2em;
   padding: 0.1em;
 }
 
@@ -1009,8 +1014,15 @@ notebook tabs,
 {
   font-size: 0.8em;
   min-height: 1.55em;
-  min-width: 1.55em;
   padding: 0.45em;
+}
+
+#modules-tabs #dt-toggle-button,   /* This is needed separately to set a minimal width if panel is really narrow */
+#blending-tabs #dt-toggle-button
+{
+  min-width: 0em;
+  padding-left: 0.2em;
+  padding-right: 0.2em;
 }
 
 #blending-tabs #dt-button
@@ -1260,7 +1272,8 @@ dialog scrollbar
   margin-left: 5px;
 }
 
-#preferences_box #shortcut_controls button
+#preferences_box #shortcut_controls button,
+#preferences_box #preset_controls button
 {
 margin: 0 2px;
 }
@@ -1323,7 +1336,8 @@ margin: 0 2px;
 #modulegroups-header #dt-button,
 #modulegroups-preset #dt-button,
 #modulegroups-preset-activated #dt-button,
-#modulegroups-iop-popup-name
+#modulegroups-iop-popup-name,
+#modulegroups-iop-popup-cb
 {
   border: 0;
 }
@@ -1332,6 +1346,11 @@ margin: 0 2px;
 #modulegroups-iop-popup-name
 {
    padding: 0.2em 0.5em;
+}
+
+#modulegroups-iop-popup-cb
+{
+  margin-left: 2em;
 }
 
 #modulegroups-groups-title

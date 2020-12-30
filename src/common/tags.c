@@ -1320,15 +1320,7 @@ static gchar *dt_cleanup_synonyms(gchar *synonyms_entry)
     gchar **entry = tokens;
     while (*entry)
     {
-      // remove leading and trailing spaces
-      char *e = *entry + strlen(*entry) - 1;
-      while(*e == ' ' && e > *entry)
-      {
-        *e = '\0';
-        e--;
-      }
-      e = *entry;
-      while(*e == ' ') e++;
+      char *e = g_strstrip(*entry);
       if(*e)
       {
         synonyms = dt_util_dstrcat(synonyms, "%s, ", e);
@@ -1689,8 +1681,8 @@ char *dt_tag_get_subtags(const gint imgid, const char *category, const int level
       // check we have not yet this subtag in the list
       if(tags && strlen(tags) >= strlen(subtag) + 1)
       {
-        char *found = g_strstr_len(tags, strlen(tags), subtag);
-        if(found[strlen(subtag)] == ',')
+        gchar *found = g_strstr_len(tags, strlen(tags), subtag);
+        if(found && found[strlen(subtag)] == ',')
           valid = FALSE;
       }
       if(valid)
