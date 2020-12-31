@@ -15,6 +15,12 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   // stop crazy users from sleeping on key-repeat spacebar:
   if(dev->image_loading) return;
 
+  // Pipe reset needed when changing image
+  // FIXME: synch with dev_init() and dev_cleanup() instead of redoing it
+  dev->proxy.chroma_adaptation = NULL;
+  dev->proxy.wb_is_D65 = TRUE;
+  dev->proxy.wb_coeffs[0] = 0.f;
+
   // change active image
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = NULL;
@@ -167,8 +173,8 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
     {
       if(!dt_iop_is_hidden(module))
       {
-        gtk_widget_destroy(module->expander);
         dt_iop_gui_cleanup_module(module);
+        gtk_widget_destroy(module->expander);
       }
 
       // we remove the module from the list
@@ -213,12 +219,9 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
         module->gui_init(module);
 
         /* add module to right panel */
-        GtkWidget *expander = dt_iop_gui_get_expander(module);
-        dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+        dt_iop_gui_set_expander(module);
         dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
-
-        dt_iop_reload_defaults(module);
       }
     }
     else
@@ -299,55 +302,3 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   //connect iop accelerators
   dt_iop_connect_accels_all();
 }
-
-// set offset and redraw if needed
-//gboolean dr_thumbtable_set_offset(dt_thumbtable_t *table, const int offset, const gboolean redraw)
-//{
-//  if(offset < 1 || offset == table->offset) return FALSE;
-//  table->offset = offset;
-//  dt_conf_set_int("plugins/lighttable/recentcollect/pos0", table->offset);
-//  if(redraw) dt_thumbtable_full_redraw(table, TRUE);
-//  return TRUE;
-//}
-
-//gboolean dr_event_rating_release(dt_develop_t *user_data)
-//{
-////  dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
-////  const int imgid = thumb->imgid;
-//  const int imgid = 1;
-//  int new_offset = 1;
-//  int new_id = -1;
-//  int diff = 1;
-//  new_offset = 1;
-
-//  dt_develop_t *dev = (dt_develop_t *)user_data;
-
-//  // we new offset and imgid after the jump
-//  sqlite3_stmt *stmt;
-//  gchar *query = dt_util_dstrcat(NULL, "SELECT rowid, imgid "
-//                                          "FROM memory.collected_images "
-//                                          "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
-//                                 imgid, diff);
-//  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-//  if(sqlite3_step(stmt) == SQLITE_ROW)
-//  {
-//    new_offset = sqlite3_column_int(stmt, 0);
-//    new_id = sqlite3_column_int(stmt, 1);
-//  }
-//  else
-//  {
-//    // if we are here, that means that the current is not anymore in the list
-//    // in this case, let's use the current offset image
-////    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
-////    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
-//  }
-//  g_free(query);
-//  sqlite3_finalize(stmt);
-
-//  if(new_id < 0 || new_id == imgid) return FALSE;
-//  dr_dev_change_image(dev, new_id);
-//  //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
-////  dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
-//  return TRUE;
-
-//}
