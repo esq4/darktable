@@ -659,7 +659,8 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
     }
     else
     {
-      gchar *txt = dt_util_dstrcat(NULL, "%s (%s)\n\n%s", item->widget_name, item->module->name(), item->tooltip);
+      gchar *txt = dt_util_dstrcat(NULL, "%s (%s)\n\n%s\n\n%s", item->widget_name, item->module->name(),
+                                   item->tooltip, _("(some features may only be available in the full module)"));
       gtk_widget_set_tooltip_text(item->widget, txt);
       g_free(txt);
     }
@@ -1904,7 +1905,8 @@ static void _manage_editor_module_update_list(dt_lib_module_t *self, dt_lib_modu
           gtk_widget_set_name(btn, "module-reset-button");
           gtk_widget_set_tooltip_text(btn, _("remove this module"));
           g_object_set_data(G_OBJECT(btn), "module_name", module->op);
-          g_signal_connect(G_OBJECT(btn), "button-press-event", G_CALLBACK(_manage_editor_module_remove), gr);
+          g_object_set_data(G_OBJECT(btn), "group", gr);
+          g_signal_connect(G_OBJECT(btn), "button-press-event", G_CALLBACK(_manage_editor_module_remove), self);
           gtk_box_pack_end(GTK_BOX(hb), btn, FALSE, TRUE, 0);
         }
         gtk_box_pack_start(GTK_BOX(gr->iop_box), hb, FALSE, TRUE, 0);
