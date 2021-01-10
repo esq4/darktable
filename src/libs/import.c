@@ -26,6 +26,7 @@
 #include "common/imageio_jpeg.h"
 #include "common/mipmap_cache.h"
 #include "common/metadata.h"
+#include "common/ratings.h"
 #include "control/conf.h"
 #include "control/control.h"
 #ifdef HAVE_GPHOTO2
@@ -811,6 +812,7 @@ static char *_get_current_configuration(dt_lib_module_t *self)
   pref = dt_util_dstrcat(pref, "apply_metadata=%d,", dt_conf_get_bool("ui_last/import_apply_metadata") ? 1 : 0);
   pref = dt_util_dstrcat(pref, "recursive=%d,", dt_conf_get_bool("ui_last/import_recursive") ? 1 : 0);
   pref = dt_util_dstrcat(pref, "rating=%d,", dt_conf_get_int("ui_last/import_initial_rating"));
+  pref = dt_util_dstrcat(pref, "ignore_exif_rating=%d,", dt_conf_get_bool("ui_last/ignore_exif_rating") ? 1 : 0);
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {
     if(dt_metadata_get_type_by_display_order(i) != DT_METADATA_TYPE_INTERNAL)
@@ -847,6 +849,7 @@ const struct
   {"ui_last/import_apply_metadata", "apply_metadata", DT_BOOL},
   {"ui_last/import_recursive", "recursive", DT_BOOL},
   {"ui_last/import_initial_rating", "rating", DT_INT},
+  {"ui_last/ignore_exif_rating", "ignore_exif_rating", DT_BOOL},
   {"ui_last/import_last_tags", "tags", DT_STRING}
 };
 static const guint pref_n = G_N_ELEMENTS(_pref);
@@ -912,7 +915,7 @@ static void _apply_preferences(const char *pref, dt_lib_module_t *self)
     else if (g_str_has_prefix(metadata_name, "recursive"))
       dt_conf_set_bool("ui_last/import_recursive", (value[0] == '1')  ? TRUE : FALSE);
     else if (g_str_has_prefix(metadata_name, "rating"))
-      dt_conf_set_int("ui_last/import_initial_rating", value[0] & 7);
+      dt_conf_set_int("ui_last/import_initial_rating", value[0] & DT_VIEW_RATINGS_MASK);
     else if (g_str_has_prefix(metadata_name, "tags"))
     {
       // get all the tags back - ugly but allow to keep readable presets
