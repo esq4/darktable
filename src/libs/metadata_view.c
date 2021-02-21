@@ -332,6 +332,13 @@ static gint _lib_metadata_sort_order(gconstpointer a, gconstpointer b)
   return ma->order - mb->order;
 }
 
+static gint _lib_metadata_sort_index(gconstpointer a, gconstpointer b)
+{
+  dt_lib_metadata_info_t *ma = (dt_lib_metadata_info_t *)a;
+  dt_lib_metadata_info_t *mb = (dt_lib_metadata_info_t *)b;
+  return ma->index - mb->index;
+}
+
 #ifdef USE_LUA
 static int lua_update_metadata(lua_State*L);
 #endif
@@ -354,6 +361,12 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
                                   -1, &stmt, NULL);
       if(sqlite3_step(stmt) == SQLITE_ROW) mouse_over_id = sqlite3_column_int(stmt, 0);
       sqlite3_finalize(stmt);
+
+      // Still -1 => no selection in progress
+      if(mouse_over_id == -1)
+      {
+        goto fill_minuses;
+      }
     }
   }
 
@@ -899,6 +912,7 @@ static void _lib_metadata_refill_grid(dt_lib_module_t *self)
   for(GList *meta = d->metadata; meta; meta = g_list_next(meta))
   {
     dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
+    m->order = j;
     GtkWidget *w_name = gtk_grid_get_child_at(GTK_GRID(d->grid), 0, j);
     gtk_label_set_text(GTK_LABEL(w_name), _(m->name));
     gtk_widget_set_tooltip_text(w_name, _(m->name));
@@ -914,7 +928,7 @@ static void _lib_metadata_refill_grid(dt_lib_module_t *self)
     if(i == md_internal_filmroll)
     {
       // film roll jump to:
-      if(d->filmroll_event)
+      if(d->filmroll_event && GTK_IS_WIDGET(d->filmroll_event))
         g_signal_handlers_disconnect_by_func(d->filmroll_event, G_CALLBACK(_filmroll_clicked), NULL);
       g_signal_connect(G_OBJECT(w_value), "button-press-event", G_CALLBACK(_filmroll_clicked), NULL);
       d->filmroll_event = G_OBJECT(w_value);
@@ -1021,12 +1035,13 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
 
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
+                                       GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_ACCEPT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
   GtkWidget *w = gtk_scrolled_window_new(NULL, NULL);
-  gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(300));
+  gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(600));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
   gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(w), FALSE);
   gtk_box_pack_start(GTK_BOX(area), w, TRUE, TRUE, 0);
@@ -1035,10 +1050,10 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
                                            G_TYPE_INT, G_TYPE_STRING, G_TYPE_BOOLEAN);
   GtkTreeModel *model = GTK_TREE_MODEL(store);
 
+  GtkTreeIter iter;
   d->metadata = g_list_sort(d->metadata, _lib_metadata_sort_order);
   for(GList *meta = d->metadata; meta; meta= g_list_next(meta))
   {
-    GtkTreeIter iter;
     dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
     if(!_is_metadata_ui(m->index))
       continue;
@@ -1079,10 +1094,29 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 #endif
   gtk_widget_show_all(dialog);
 
-  int i = 0;
-  if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_YES)
+  int res = gtk_dialog_run(GTK_DIALOG(dialog));
+  while(res == GTK_RESPONSE_ACCEPT)
   {
-    GtkTreeIter iter;
+    gtk_tree_model_get_iter_first(model, &iter);
+    d->metadata = g_list_sort(d->metadata, _lib_metadata_sort_index);
+    for(GList *meta = d->metadata; meta; meta= g_list_next(meta))
+    {
+      dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
+      if(!_is_metadata_ui(m->index))
+        continue;
+      gtk_list_store_set(store, &iter,
+                         DT_METADATA_PREF_COL_INDEX, m->index,
+                         DT_METADATA_PREF_COL_NAME_L, _(m->name),
+                         DT_METADATA_PREF_COL_VISIBLE, TRUE,
+                         -1);
+      gtk_tree_model_iter_next(model, &iter);
+    }
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
+  }
+
+  int i = 0;
+  if(res == GTK_RESPONSE_YES)
+  {
     gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
     while(valid)
     {
@@ -1141,6 +1175,19 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   return 0;
 }
 
+static void _display_default(dt_lib_module_t *self)
+{
+  dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
+
+  for(GList *meta = d->metadata; meta; meta= g_list_next(meta))
+  {
+    dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
+    m->order = m->index;
+    m->visible = _is_metadata_ui(m->index);
+  }
+  _lib_metadata_refill_grid(self);
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui */
@@ -1160,15 +1207,17 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_no_show_all(d->grid, TRUE);
   _lib_metadata_setup_grid(self);
   char *pref = dt_conf_get_string("plugins/lighttable/metadata_view/visible");
-  if (strlen(pref))
-    _apply_preferences(pref, self);
-  else
-    gui_reset(self);
+  if(!strlen(pref))
+    _display_default(self);
+  _apply_preferences(pref, self);
   g_free(pref);
 
   /* lets signup for mouse over image change signals */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_mouse_over_image_callback), self);
+
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+                                  G_CALLBACK(_mouse_over_image_callback), self);
 
   /* lets signup for develop image changed signals */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
@@ -1247,9 +1296,16 @@ static int lua_update_metadata(lua_State*L)
   lua_pushnil(L);
   while(lua_next(L, 5) != 0)
   {
-    lua_pushvalue(L,-1);
-    luaA_push(L,dt_lua_image_t,&imgid);
-    lua_call(L,1,1);
+    if(imgid > 0)
+    {
+      lua_pushvalue(L,-1);
+      luaA_push(L,dt_lua_image_t,&imgid);
+      lua_call(L,1,1);
+    }
+    else
+    {
+      lua_pushstring(L, "-");
+    }
     lua_pushvalue(L,7);
     lua_pushvalue(L,9);
     lua_settable(L,6);
@@ -1327,6 +1383,81 @@ static int lua_register_info(lua_State *L)
   return 0;
 }
 
+static int lua_destroy_info(lua_State *L)
+{
+  dt_lib_module_t *self = lua_touserdata(L, lua_upvalueindex(1));
+  dt_lua_module_entry_push(L,"lib",self->plugin_name);
+  lua_getuservalue(L,-1);
+  const char* key = luaL_checkstring(L,1);
+  {
+    lua_getfield(L,-1,"callbacks");
+    lua_pushstring(L,key);
+    lua_pushnil(L);
+    lua_settable(L,4);
+    lua_pop(L,1);
+  }
+  {
+    lua_getfield(L,-1,"values");
+    lua_pushstring(L,key);
+    lua_pushnil(L);
+    lua_settable(L,4);
+    lua_pop(L,1);
+  }
+  lua_getfield(L,-1,"indexes");
+  lua_getfield(L,-1,key);
+  const int index = lua_tointeger(L,-1);
+  lua_pop(L,1);
+  {
+    lua_pushstring(L,key);
+    lua_pushnil(L);
+    lua_settable(L,4);
+  }
+  // decrement all indexes > index
+  lua_pushnil(L);
+  while(lua_next(L,-2) != 0) {
+    int i = lua_tointeger(L,-1);
+    if(i > index)
+    {
+      lua_pop(L,1);
+      lua_pushvalue(L,-1);
+      i--;
+      lua_pushinteger(L,i);
+      lua_settable(L,-4);
+    }
+    else lua_pop(L,1);
+  }
+
+  {
+    dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
+    // find metadata key in the list and remove it
+    GList *tbr = NULL;
+    for(GList *meta = d->metadata; meta; meta = g_list_next(meta))
+    {
+      dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)meta->data;
+      if(!g_strcmp0(key, m->name))
+      {
+        tbr = meta;
+      }
+      else if(m->index > index)
+      {
+        m->index--;
+      }
+    }
+    if(tbr)
+    {
+      dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)tbr->data;
+      d->metadata = g_list_remove_link(d->metadata, tbr);
+      g_free(m->value);
+      if(m->tooltip) g_free(m->tooltip);
+      g_free(m);
+      g_list_free(tbr);
+      gtk_grid_remove_row(GTK_GRID(d->grid), 0);
+      _lib_metadata_refill_grid(self);
+    }
+  }
+  return 0;
+}
+
 void init(struct dt_lib_module_t *self)
 {
   lua_State *L = darktable.lua_state.state;
@@ -1336,6 +1467,12 @@ void init(struct dt_lib_module_t *self)
   dt_lua_gtk_wrap(L);
   lua_pushcclosure(L, dt_lua_type_member_common, 1);
   dt_lua_type_register_const_type(L, my_type, "register_info");
+
+  lua_pushlightuserdata(L, self);
+  lua_pushcclosure(L, lua_destroy_info,1);
+  dt_lua_gtk_wrap(L);
+  lua_pushcclosure(L, dt_lua_type_member_common, 1);
+  dt_lua_type_register_const_type(L, my_type, "destroy_info");
 
   dt_lua_module_entry_push(L,"lib",self->plugin_name);
   lua_getuservalue(L,-1);

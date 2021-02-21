@@ -2510,6 +2510,17 @@ const wb_data wb_preset[] =
   { "Fujifilm", "X100F", WhiteFluorescent, 0,    { 1.9569536423841059, 1, 2.5596026490066226, 0 } },
   { "Fujifilm", "X100F", Incandescent, 0,        { 1.271523178807947, 1, 2.8311258278145695, 0 } },
   { "Fujifilm", "X100F", Underwater, 0,          { 1.9503311258278146, 1, 1.8543046357615893, 0 } },
+  
+  
+  /* Fujifilm X100V firmware 1.10 */
+  { "Fujifilm", "X100V", Daylight, 0,                 { 1.784768, 1, 1.768212, 0 } },
+  { "Fujifilm", "X100V", Cloudy, 0,                   { 1.94702, 1, 1.516556, 0 } },
+  { "Fujifilm", "X100V", DaylightFluorescent, 0,     { 2.327815, 1, 1.536424, 0 } },
+  { "Fujifilm", "X100V", DayWhiteFluorescent, 0,    { 1.980132, 1, 1.907285, 0 } },
+  { "Fujifilm", "X100V", WhiteFluorescent, 0,        { 1.887417, 1, 2.42053, 0 } },
+  { "Fujifilm", "X100V", Incandescent, 0,             { 1.192053, 1, 2.701987, 0 } },
+  { "Fujifilm", "X100V", Underwater, 0,               { 1.778146, 1, 1.751656, 0 } },
+
 
   { "Fujifilm", "X20", Daylight           , 0, { 1.688742, 1, 1.850993, 0 } },
   { "Fujifilm", "X20", Cloudy             , 0, { 1.827815, 1, 1.622517, 0 } },
@@ -2663,6 +2674,14 @@ const wb_data wb_preset[] =
   { "Fujifilm", "X-Pro2", DaylightFluorescent, 0, { 2.463576, 1, 1.602649, 0 } },
   { "Fujifilm", "X-Pro2", WhiteFluorescent   , 0, { 1.973510, 1, 2.513245, 0 } },
   { "Fujifilm", "X-Pro2", Underwater         , 0, { 1.943709, 1, 1.827815, 0 } },
+  
+  { "Fujifilm", "X-Pro3", Daylight           , 0, { 1.8675496688741722, 1, 1.8079470198675496, 0 } },
+  { "Fujifilm", "X-Pro3", Cloudy             , 0, { 2.013245033112583, 1, 1.5463576158940397, 0 } },
+  { "Fujifilm", "X-Pro3", Incandescent       , 0, { 1.2516556291390728, 1, 2.771523178807947, 0 } },
+  { "Fujifilm", "X-Pro3", DayWhiteFluorescent, 0, { 2.013245033112583, 1, 1.9701986754966887, 0 } },
+  { "Fujifilm", "X-Pro3", DaylightFluorescent, 0, { 2.3642384105960264, 1, 1.576158940397351, 0 } },
+  { "Fujifilm", "X-Pro3", WhiteFluorescent   , 0, { 1.9304635761589404, 1, 2.486754966887417, 0 } },
+  { "Fujifilm", "X-Pro3", Underwater         , 0, { 1.8675496688741722, 1, 1.8079470198675496, 0 } },
 
   { "Kodak", "DCS Pro 14N", Daylight, 0,	{ 1, 1.055126, 1.353602, 0 } },
   { "Kodak", "DCS Pro 14N", Tungsten, 0,	{ 1, 1.337688, 2.218852, 0 } },

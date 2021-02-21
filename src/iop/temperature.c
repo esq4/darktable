@@ -1148,7 +1148,7 @@ void color_temptint_sliders(struct dt_iop_module_t *self)
   }
 }
 
-static void display_wb_error(struct dt_iop_module_t *self)
+static void _display_wb_error(struct dt_iop_module_t *self)
 {
   // this module instance is doing chromatic adaptation
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
@@ -1178,7 +1178,7 @@ static void display_wb_error(struct dt_iop_module_t *self)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  display_wb_error(self);
+  _display_wb_error(self);
 }
 
 
@@ -1349,7 +1349,7 @@ void gui_update(struct dt_iop_module_t *self)
   color_rgb_sliders(self);
   color_finetuning_slider(self);
 
-  display_wb_error(self);
+  _display_wb_error(self);
 
   gtk_widget_queue_draw(self->widget);
 }
@@ -1476,9 +1476,8 @@ void reload_defaults(dt_iop_module_t *module)
   if(!module->dev || module->dev->image_storage.id == -1) return;
 
   const gboolean is_raw = dt_image_is_matrix_correction_supported(&module->dev->image_storage);
-  gchar *workflow = dt_conf_get_string("plugins/darkroom/chromatic-adaptation");
-  const gboolean is_modern = strcmp(workflow, "modern") == 0;
-  g_free(workflow);
+  const gboolean is_modern =
+    dt_conf_is_equal("plugins/darkroom/chromatic-adaptation", "modern");
 
   module->default_enabled = 0;
   module->hide_enable_button = 0;
@@ -1647,7 +1646,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
 
-  display_wb_error(self);
+  _display_wb_error(self);
 }
 
 static gboolean btn_toggled(GtkWidget *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
@@ -1947,7 +1946,7 @@ static void _preference_changed(gpointer instance, gpointer user_data)
 static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  display_wb_error(self);
+  _display_wb_error(self);
 }
 
 
@@ -1968,10 +1967,6 @@ void gui_init(struct dt_iop_module_t *self)
   g->button_bar_visible = dt_conf_get_bool("plugins/darkroom/temperature/button_bar");
 
   GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
-
-  self->warning_label = dt_ui_label_new("");
-  gtk_label_set_line_wrap(GTK_LABEL(self->warning_label), TRUE);
-  gtk_box_pack_start(GTK_BOX(box_enabled), self->warning_label, FALSE, FALSE, 4);
 
   g->mod_temp = NAN;
   for(int k = 0; k < 4; k++)
@@ -2009,6 +2004,8 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
   GtkWidget *header_evb = gtk_event_box_new();
   GtkWidget *destdisp = dt_ui_section_label_new(_("channel coefficients"));
+  context = gtk_widget_get_style_context(destdisp_head);
+  gtk_style_context_add_class(context, "section-expander");
   gtk_container_add(GTK_CONTAINER(header_evb), destdisp);
 
   g->coeffs_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_solid_arrow, CPF_STYLE_BOX | CPF_DIRECTION_LEFT, NULL);
@@ -2046,7 +2043,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->balance_label = dt_ui_section_label_new(_("white balance settings"));
   gtk_box_pack_start(box_enabled, g->balance_label, TRUE, TRUE, 0);
 
-  g->btn_asshot = dt_iop_togglebutton_new(self, N_("settings") "`" N_("as shot"), NULL,
+  g->btn_asshot = dt_iop_togglebutton_new(self, N_("settings"), N_("as shot"), NULL,
                                           G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                           dtgtk_cairo_paint_camera, NULL);
   gtk_widget_set_tooltip_text(g->btn_asshot, _("set white balance to as shot"));
@@ -2059,13 +2056,13 @@ void gui_init(struct dt_iop_module_t *self)
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker), dtgtk_cairo_paint_colorpicker, CPF_STYLE_FLAT, NULL);
   gtk_widget_set_tooltip_text(g->colorpicker, _("set white balance to detected from area"));
 
-  g->btn_user = dt_iop_togglebutton_new(self, N_("settings") "`" N_("user modified"), NULL,
+  g->btn_user = dt_iop_togglebutton_new(self, N_("settings"), N_("user modified"), NULL,
                                         G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                         dtgtk_cairo_paint_masks_drawn, NULL);
   gtk_widget_set_tooltip_text(g->btn_user, _("set white balance to user modified"));
 
 
-  g->btn_d65 = dt_iop_togglebutton_new(self, N_("settings") "`" N_("camera reference"), NULL,
+  g->btn_d65 = dt_iop_togglebutton_new(self, N_("settings"), N_("camera reference"), NULL,
                                        G_CALLBACK(btn_toggled), FALSE, 0, 0,
                                        dtgtk_cairo_paint_bulb, NULL);
   gtk_widget_set_tooltip_text(g->btn_d65, _("set white balance to camera reference point\nin most cases it should be D65"));
@@ -2139,7 +2136,7 @@ void gui_reset(struct dt_iop_module_t *self)
   color_finetuning_slider(self);
   color_rgb_sliders(self);
   color_temptint_sliders(self);
-  display_wb_error(self);
+  _display_wb_error(self);
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

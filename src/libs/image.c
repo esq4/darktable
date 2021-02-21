@@ -97,8 +97,9 @@ static void _group_helper_function(void)
     int id = sqlite3_column_int(stmt, 0);
     if(new_group_id == -1) new_group_id = id;
     dt_grouping_add_to_group(new_group_id, id);
-    imgs = g_list_append(imgs, GINT_TO_POINTER(id));
+    imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
   }
+  imgs = g_list_reverse(imgs); // list was built in reverse order, so un-reverse it
   sqlite3_finalize(stmt);
   if(darktable.gui->grouping)
     darktable.gui->expanded_group_id = new_group_id;
@@ -117,14 +118,21 @@ static void _ungroup_helper_function(void)
                               &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    int id = sqlite3_column_int(stmt, 0);
-    dt_grouping_remove_from_group(id);
-    imgs = g_list_append(imgs, GINT_TO_POINTER(id));
+    const int id = sqlite3_column_int(stmt, 0);
+    const int new_group_id = dt_grouping_remove_from_group(id);
+    if(new_group_id != -1)
+    {
+      // new_group_id == -1 if image to be ungrouped was a single image and no change to any group was made
+      imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
+    }
   }
   sqlite3_finalize(stmt);
-  darktable.gui->expanded_group_id = -1;
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
-  dt_control_queue_redraw_center();
+  if(imgs != NULL)
+  {
+    darktable.gui->expanded_group_id = -1;
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, g_list_reverse(imgs));
+    dt_control_queue_redraw_center();
+  }
 }
 
 static void button_clicked(GtkWidget *widget, gpointer user_data)
@@ -205,7 +213,6 @@ static void _update(dt_lib_module_t *self)
   gtk_widget_set_sensitive(GTK_WIDGET(d->uncache_button), act_on_cnt > 0);
 
   gtk_widget_set_sensitive(GTK_WIDGET(d->group_button), selected_cnt > 1);
-  gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), selected_cnt > 0);
 
   gtk_widget_set_sensitive(GTK_WIDGET(d->copy_metadata_button), act_on_cnt == 1);
   gtk_widget_set_sensitive(GTK_WIDGET(d->paste_metadata_button), can_paste);
@@ -214,11 +221,13 @@ static void _update(dt_lib_module_t *self)
   gtk_widget_set_sensitive(GTK_WIDGET(d->refresh_button), act_on_cnt > 0);
   if(act_on_cnt > 1)
   {
+    gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(d->set_monochrome_button), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(d->set_color_button), TRUE);
   }
   else if(act_on_cnt == 0)
   {
+    gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(d->set_monochrome_button), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(d->set_color_button), FALSE);
   }
@@ -229,14 +238,29 @@ static void _update(dt_lib_module_t *self)
     {
       dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
       const gboolean is_bw = (dt_image_monochrome_flags(img) != 0);
+      const int img_group_id = img->group_id;
       dt_image_cache_read_release(darktable.image_cache, img);
       gtk_widget_set_sensitive(GTK_WIDGET(d->set_monochrome_button), !is_bw);
       gtk_widget_set_sensitive(GTK_WIDGET(d->set_color_button), is_bw);
+      sqlite3_stmt *stmt;
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT COUNT(id) FROM main.images WHERE group_id = ?1 AND id != ?2", -1, &stmt, NULL);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img_group_id);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+      if(stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+      {
+        const int images_in_grp = sqlite3_column_int(stmt, 0);
+        gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), images_in_grp > 0);
+      }
+      else
+        gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), FALSE);
+      if(stmt) sqlite3_finalize(stmt);
     }
     else
     {
       gtk_widget_set_sensitive(GTK_WIDGET(d->set_monochrome_button), FALSE);
       gtk_widget_set_sensitive(GTK_WIDGET(d->set_color_button), FALSE);
+      gtk_widget_set_sensitive(GTK_WIDGET(d->ungroup_button), FALSE);
     }
   }
 }
@@ -324,6 +348,8 @@ static void _execute_metadata(dt_lib_module_t *self, const int action)
       else
         dt_image_get_location(imageid, geoloc);
       dt_image_set_locations(imgs, geoloc, TRUE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+                                    g_list_copy((GList *)imgs), 0);
       g_free(geoloc);
     }
     if(dttag_flag)

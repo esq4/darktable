@@ -273,7 +273,13 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
 // void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
 // float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out);
 
-/** process, all real work is done here. */
+/** process, all real work is done here.
+    NOTE: process() must never use the Gtk+ API. All GUI modifications must be
+          done in the Gtk+ thread. This is to be conducted in gui_update or
+          gui_changed. If process detect a state and something it to be change on the UI
+          a signal should be used (raise a signal here) and a corresponding callback
+          must be connected to this signal.
+*/
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -591,14 +597,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->extra, NULL, N_("extra"));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->extra), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->extra), "value-changed", G_CALLBACK(extra_callback), self);
-
-  // set up a box for the warnings from dt_iop_have_required_input_format and the like
-  GtkBox *box_enabled = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
-
-  self->warning_label = dt_ui_label_new("");
-  gtk_label_set_line_wrap(GTK_LABEL(self->warning_label), TRUE);
-  gtk_box_pack_start(GTK_BOX(box_enabled), self->warning_label, FALSE, FALSE, 4);
-  
 }
 
 void gui_cleanup(dt_iop_module_t *self)

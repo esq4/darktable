@@ -73,7 +73,7 @@ const char *dt_iop_order_string(const dt_iop_order_t order)
 //
 // in the new code only the iop-order as int is used to order the module on the GUI.
 
-// @@_NEW_MOUDLE: For new module it is required to insert the new module name in both lists below.
+// @@_NEW_MODULE: For new module it is required to insert the new module name in both lists below.
 
 const dt_iop_order_entry_t legacy_order[] = {
   { { 1.0f }, "rawprepare", 0},
@@ -135,6 +135,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {50.0f }, "levels", 0},
   { {50.2f }, "rgblevels", 0},
   { {50.5f }, "rgbcurve", 0},
+  { {50.7f }, "vibrancergb", 0},
   { {51.0f }, "relight", 0},
   { {52.0f }, "colorcorrection", 0},
   { {53.0f }, "sharpen", 0},
@@ -220,6 +221,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {41.5f }, "colorbalancergb", 0},    // scene-referred color manipulation
   { {42.0f }, "rgbcurve", 0},        // really versatile way to edit colour in scene-referred and display-referred workflow
   { {43.0f }, "rgblevels", 0},       // same
+  { {50.7f }, "vibrancergb", 0},     // same
   { {44.0f }, "basecurve", 0},       // conversion from scene-referred to display referred, reverse-engineered
                                   //    on camera JPEG default look
   { {45.0f }, "filmic", 0},          // same, but different (parametric) approach
@@ -315,9 +317,10 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
 
 dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
 {
-  char *workflow = dt_conf_get_string("plugins/darkroom/workflow");
-  dt_iop_order_t iop_order_version = strcmp(workflow, "display-referred") == 0 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
-  g_free(workflow);
+  const gboolean is_display_referred =
+    dt_conf_is_equal("plugins/darkroom/workflow", "display-referred");
+  dt_iop_order_t iop_order_version =
+    is_display_referred ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
 
   // check current iop order version
   sqlite3_stmt *stmt;
@@ -363,11 +366,11 @@ GList *dt_ioppr_get_iop_order_rules()
     memcpy(rule->op_prev, rule_entry[i].op_prev, sizeof(rule->op_prev));
     memcpy(rule->op_next, rule_entry[i].op_next, sizeof(rule->op_next));
 
-    rules = g_list_append(rules, rule);
+    rules = g_list_prepend(rules, rule);
     i++;
   }
 
-  return rules;
+  return g_list_reverse(rules);  // list was built in reverse order, so un-reverse it
 }
 
 GList *dt_ioppr_get_iop_order_link(GList *iop_order_list, const char *op_name, const int multi_priority)
@@ -576,12 +579,12 @@ GList *_table_to_list(const dt_iop_order_entry_t entries[])
     g_strlcpy(entry->operation, entries[k].operation, sizeof(entry->operation));
     entry->instance = 0;
     entry->o.iop_order_f = entries[k].o.iop_order_f;
-    iop_order_list = g_list_append(iop_order_list, entry);
+    iop_order_list = g_list_prepend(iop_order_list, entry);
 
     k++;
   }
 
-  return iop_order_list;
+  return g_list_reverse(iop_order_list);  // list was built in reverse order, so un-reverse it
 }
 
 GList *dt_ioppr_get_iop_order_list_version(dt_iop_order_t version)
@@ -657,12 +660,13 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
         }
         else
         {
-          // @@_NEW_MOUDLE: For new module it is required to insert the new module name in the iop-order list here.
+          // @@_NEW_MODULE: For new module it is required to insert the new module name in the iop-order list here.
           //                The insertion can be done depending on the current iop-order list kind.
           _insert_before(iop_order_list, "nlmeans", "negadoctor");
           _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
           _insert_before(iop_order_list, "negadoctor", "censorize");
           _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
+          _insert_before(iop_order_list, "rgbcurve", "vibrancergb");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)
@@ -813,13 +817,13 @@ GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list)
     if(_count_entries_operation(iop_order_list, entry->operation) > 1)
     {
       dt_iop_order_entry_t *copy = (dt_iop_order_entry_t *)_dup_iop_order_entry((void *)entry, NULL);
-      mi = g_list_append(mi, copy);
+      mi = g_list_prepend(mi, copy);
     }
 
     l = g_list_next(l);
   }
 
-  return mi;
+  return g_list_reverse(mi);  // list was built in reverse order, so un-reverse it
 }
 
 GList *dt_ioppr_merge_module_multi_instance_iop_order_list(GList *iop_order_list,
@@ -1121,10 +1125,11 @@ void dt_ioppr_update_for_style_items(dt_develop_t *dev, GList *st_items, gboolea
     n->instance = si->multi_priority;
     g_strlcpy(n->name, si->multi_name, sizeof(n->name));
     n->o.iop_order = 0;
-    e_list = g_list_append(e_list, n);
+    e_list = g_list_prepend(e_list, n);
 
     si_list = g_list_next(si_list);
   }
+  e_list = g_list_reverse(e_list);  // list was built in reverse order, so un-reverse it
 
   dt_ioppr_update_for_entries(dev, e_list, append);
 
@@ -1162,10 +1167,11 @@ void dt_ioppr_update_for_modules(dt_develop_t *dev, GList *modules, gboolean app
     n->instance = mod->multi_priority;
     g_strlcpy(n->name, mod->multi_name, sizeof(n->name));
     n->o.iop_order = 0;
-    e_list = g_list_append(e_list, n);
+    e_list = g_list_prepend(e_list, n);
 
     m_list = g_list_next(m_list);
   }
+  e_list = g_list_reverse(e_list);  // list was built in reverse order, so un-reverse it
 
   dt_ioppr_update_for_entries(dev, e_list, append);
 
@@ -1681,12 +1687,12 @@ static GList *_get_fence_modules_list(GList *iop_list)
 
     if(mod->flags() & IOP_FLAGS_FENCE)
     {
-      fences = g_list_append(fences, mod);
+      fences = g_list_prepend(fences, mod);
     }
 
     modules = g_list_next(modules);
   }
-  return fences;
+  return g_list_reverse(fences);  // list was built in reverse order, so un-reverse it
 }
 
 static void _ioppr_check_rules(GList *iop_list, const int imgid, const char *msg)
@@ -1973,6 +1979,8 @@ int dt_ioppr_check_iop_order(dt_develop_t *dev, const int imgid, const char *msg
 
 void *dt_ioppr_serialize_iop_order_list(GList *iop_order_list, size_t *size)
 {
+  g_return_val_if_fail(iop_order_list != NULL, NULL);
+  g_return_val_if_fail(size != NULL, NULL);
   // compute size of all modules
   *size = 0;
 
@@ -1983,6 +1991,9 @@ void *dt_ioppr_serialize_iop_order_list(GList *iop_order_list, size_t *size)
     *size += strlen(entry->operation) + sizeof(int32_t) * 2;
     l = g_list_next(l);
   }
+
+  if(*size == 0)
+    return NULL;
 
   // allocate the parameter buffer
   char *params = (char *)malloc(*size);
@@ -2089,10 +2100,11 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
 
     // append to the list
 
-    iop_order_list = g_list_append(iop_order_list, entry);
+    iop_order_list = g_list_prepend(iop_order_list, entry);
 
     l = g_list_next(l);
   }
+  iop_order_list = g_list_reverse(iop_order_list);  // list was built in reverse order, so un-reverse it
 
   g_list_free(list);
 
@@ -2136,10 +2148,11 @@ GList *dt_ioppr_deserialize_iop_order_list(const char *buf, size_t size)
     if(entry->instance < 0 || entry->instance > 1000) { free(entry); goto error; }
 
     // append to the list
-    iop_order_list = g_list_append(iop_order_list, entry);
+    iop_order_list = g_list_prepend(iop_order_list, entry);
 
     size -= (2 * sizeof(int32_t) + len);
   }
+  iop_order_list = g_list_reverse(iop_order_list);  // list was built in reverse order, so un-reverse it
 
   _ioppr_reset_iop_order(iop_order_list);
 

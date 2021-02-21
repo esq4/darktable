@@ -540,7 +540,7 @@
     <shortdescription>maximum fps of live view update in tethering view</shortdescription>
     <longdescription>going too fast will result in too many redraws without a real benefit</longdescription>
   </dtconfig>
-  <dtconfig prefs="lighttable" section="general">
+  <dtconfig dialog="collect">
     <name>plugins/collect/filmroll_sort</name>
     <type>
       <enum>
@@ -556,8 +556,8 @@
     <name>plugins/collect/descending</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>sort collection recent to older</shortdescription>
-    <longdescription>changes the default collections-list order for folders, times and dates to run from recent to older</longdescription>
+    <shortdescription>sort collection descending</shortdescription>
+    <longdescription>sort the following collections in descending order: 'film roll' by folder, 'folder', 'times' (e.g. 'date taken')</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_mean</name>
@@ -652,58 +652,65 @@
   </dtconfig>
   <dtconfig>
     <name>ui_last/expander_import</name>
-    <type>int</type>
-    <default>2</default>
+    <type>bool</type>
+    <default>false</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
-  <dtconfig dialog="import">
+  <dtconfig ui="yes">
     <name>ui_last/import_ignore_jpegs</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>ignore JPEG images when importing film rolls</shortdescription>
+    <shortdescription>ignore JPEG images</shortdescription>
     <longdescription>when having raw+JPEG images together in one directory it makes no sense to import both. with this flag one can ignore all JPEGs found.</longdescription>
   </dtconfig>
-  <dtconfig dialog="import">
+  <dtconfig ui="yes">
     <name>ui_last/import_apply_metadata</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>apply metadata on import</shortdescription>
+    <shortdescription>apply metadata</shortdescription>
     <longdescription>apply some metadata to all newly imported images.</longdescription>
   </dtconfig>
-  <dtconfig dialog="import">
+  <dtconfig ui="yes">
     <name>ui_last/import_recursive</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>recursive directory traversal when importing filmrolls</shortdescription>
-    <longdescription/>
+    <shortdescription>recursive directory</shortdescription>
+    <longdescription>recursive directory traversal when importing filmrolls</longdescription>
   </dtconfig>
-  <dtconfig>
+  <dtconfig ui="yes">
     <name>ui_last/import_last_creator</name>
     <type>string</type>
     <default/>
     <shortdescription>creator to be applied when importing</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig>
+  <dtconfig ui="yes">
     <name>ui_last/import_last_publisher</name>
     <type>string</type>
     <default/>
     <shortdescription>publisher to be applied when importing</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig>
+  <dtconfig ui="yes">
     <name>ui_last/import_last_rights</name>
     <type>string</type>
     <default/>
     <shortdescription>rights to be applied when importing</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig>
+  <dtconfig ui="yes">
     <name>ui_last/import_last_tags</name>
     <type>string</type>
     <default/>
     <shortdescription>comma separated tags to be applied when importing</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>ui_last/import_last_tags_imported</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>import tags from xmp</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -713,19 +720,19 @@
     <shortdescription>last opened directory.</shortdescription>
     <longdescription/>
   </dtconfig>
-  <dtconfig dialog="import">
+  <dtconfig ui="yes">
     <name>ui_last/import_initial_rating</name>
     <type min="0" max="5">int</type>
     <default>1</default>
-    <shortdescription>initial import rating</shortdescription>
+    <shortdescription>initial rating</shortdescription>
     <longdescription>initial star rating for all images when importing a filmroll</longdescription>
   </dtconfig>
-  <dtconfig dialog="import">
+  <dtconfig ui="yes">
     <name>ui_last/ignore_exif_rating</name>
     <type>bool</type>
     <default>false</default>
     <shortdescription>ignore exif rating</shortdescription>
-    <longdescription>ignore exif rating. if not set and exif rating is found, it overrides 'initial import rating'</longdescription>
+    <longdescription>ignore exif rating. if not set and exif rating is found, it overrides 'initial rating'</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/capture/mode</name>
@@ -1445,7 +1452,14 @@
     <name>plugins/darkroom/tagging/visible</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription/>
+    <shortdescription>show the tagging module in the darkroom view (as well as in lighttable)</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/export/visible</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>show the export module in the darkroom view (as well as in lighttable)</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig prefs="security">
@@ -1567,12 +1581,53 @@
     <shortdescription>ask before deleting a preset</shortdescription>
     <longdescription>will ask for confirmation before deleting or overwritting a preset</longdescription>
   </dtconfig>
-  <dtconfig>
+  <dtconfig ui="yes">
     <name>plugins/map/show_map_osd</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription/>
-    <longdescription/>
+    <shortdescription>show OSD</shortdescription>
+    <longdescription>toggle the visibility of the map overlays</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/map/filter_images_drawn</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>filtered images</shortdescription>
+    <longdescription>when set limit the images drawn to the current filmstrip</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/map/max_images_drawn</name>
+    <type min="10" max="100000">int</type>
+    <default>100</default>
+    <shortdescription>max images</shortdescription>
+    <longdescription>the maximum number of image thumbnails drawn on the map</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/map/epsilon_factor</name>
+    <type min="10" max="100">int</type>
+    <default>25</default>
+    <shortdescription>group size factor</shortdescription>
+    <longdescription>increase or decrease the spatial size of images groups on the map. can influence the calculation time</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/map/min_images_per_group</name>
+    <type min="1" max="10">int</type>
+    <default>1</default>
+    <shortdescription>min images per group</shortdescription>
+    <longdescription>the minimum number of images to set up an images group. can influence the calculation time.</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/map/images_thumbnail</name>
+    <type>
+      <enum>
+        <option>thumbnail</option>
+        <option>count</option>
+        <option>none</option>
+      </enum>
+    </type>
+    <default>thumbnail</default>
+    <shortdescription>thumbnail display</shortdescription>
+    <longdescription>three options are available: images thumbnails, only the count of images of the group or nothing</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/map/show_outline</name>
@@ -1589,32 +1644,11 @@
     <longdescription/>
   </dtconfig>
   <dtconfig prefs="otherviews" section="geoloc">
-    <name>plugins/map/max_images_drawn</name>
-    <type>int</type>
-    <default>100</default>
-    <shortdescription>maximum number of images drawn on map</shortdescription>
-    <longdescription>the maximum number of geotagged images drawn on the map. increasing this number can slow drawing of the map down.</longdescription>
-  </dtconfig>
-  <dtconfig prefs="otherviews" section="geoloc">
     <name>plugins/lighttable/metadata_view/pretty_location</name>
     <type>bool</type>
     <default>true</default>
     <shortdescription>pretty print the image location</shortdescription>
     <longdescription>show a more readable representation of the location in the image information module</longdescription>
-  </dtconfig>
-  <dtconfig prefs="otherviews">
-    <name>plugins/map/epsilon_factor</name>
-    <type min="10" max="100">int</type>
-    <default>25</default>
-    <shortdescription>modify the spatial size of an images group on the map</shortdescription>
-    <longdescription>increase or decrease the spatial size of images groups on the map. can influence the calculation time</longdescription>
-  </dtconfig>
-  <dtconfig prefs="otherviews">
-    <name>plugins/map/min_images_per_group</name>
-    <type min="1" max="10">int</type>
-    <default>1</default>
-    <shortdescription>minimum number of images to set up an images group</shortdescription>
-    <longdescription>the minimum number of images to set up an images group. can influence the calculation time.</longdescription>
   </dtconfig>
   <dtconfig prefs="lighttable" section="general">
     <name>lighttable/ui/single_module</name>
@@ -2036,16 +2070,29 @@
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/format/jpeg/quality</name>
-    <type>int</type>
+    <type min="5" max="100">int</type>
+    <default>95</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/j2k/quality</name>
+    <type min="5" max="100">int</type>
     <default>95</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/format/tiff/bpp</name>
-    <type>int</type>
+    <type>
+      <enum>
+        <option>8</option>
+        <option>16</option>
+        <option>32</option>
+      </enum>
+    </type>
     <default>8</default>
-    <shortdescription/>
+    <shortdescription>TIFF bit depth (bpp)</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
@@ -2057,23 +2104,103 @@
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/format/tiff/compresslevel</name>
-    <type>int</type>
+    <type min="0" max="9">int</type>
     <default>6</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/format/png/bpp</name>
-    <type>int</type>
+    <type>
+      <enum>
+        <option>8</option>
+        <option>16</option>
+      </enum>
+    </type>
     <default>8</default>
-    <shortdescription/>
+    <shortdescription>PNG bit depth (bpp)</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/imageio/format/png/compression</name>
-    <type>int</type>
+    <type min="0" max="9">int</type>
     <default>5</default>
     <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/webp/comp_type</name>
+    <type min="0" max="1">int</type>
+    <default>0</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/webp/quality</name>
+    <type min="5" max="100">int</type>
+    <default>95</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/webp/hint</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/avif/bpp</name>
+    <type>
+      <enum>
+        <option>8</option>
+        <option>10</option>
+        <option>12</option>
+      </enum>
+    </type>
+    <default>8</default>
+    <shortdescription>AVIF bit depth (bpp)</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/avif/color_mode</name>
+    <type min="0">int</type>
+    <default>0</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/avif/tiling</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>AVIF Tiling</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/avif/compression_type</name>
+    <type min="0">int</type>
+    <default>0</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/avif/quality</name>
+    <type min="5" max="100">int</type>
+    <default>92</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/xcf/bpp</name>
+    <type>
+      <enum>
+        <option>8</option>
+        <option>16</option>
+        <option>32</option>
+      </enum>
+    </type>
+    <default>32</default>
+    <shortdescription>XCF bit depth (bpp)</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig prefs="misc" section="other">
@@ -2428,9 +2555,9 @@
   </dtconfig>
   <dtconfig>
     <name>metadata/resolution</name>
-    <type>int</type>
+    <type min="72" max="9600">int</type>
     <default>300</default>
-    <shortdescription/>
+    <shortdescription>DPI value for exported files</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig prefs="storage" section="xmp">
@@ -2561,6 +2688,20 @@
     <default>true</default>
     <shortdescription>show the name of the module of each basic widget</shortdescription>
     <longdescription>show the name of the module of each basic widget</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/lighttable/geotagging/heighttracklist</name>
+    <type>int</type>
+    <default>50</default>
+    <shortdescription>height of the track list</shortdescription>
+    <longdescription>maximum height the track list will grow to before scrolling</longdescription>
+  </dtconfig>
+  <dtconfig ui="yes">
+    <name>plugins/lighttable/geotagging/tz</name>
+    <type>string</type>
+    <default>UTC</default>
+    <shortdescription>camera time zone</shortdescription>
+    <longdescription>most cameras don't store the time zone in EXIF. give the correct time zone so the GPX data can be correctly matched</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/map/geotagging_search_url</name>

@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2014-2020 darktable developers.
+    Copyright (C) 2014-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "common/interpolation.h"
 #include "common/opencl.h"
 #include "common/math.h"
+#include "common/collection.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/imageop.h"
@@ -2365,17 +2366,18 @@ static void draw_paths(struct dt_iop_module_t *module, cairo_t *cr, const float 
   {
     if(gtk_toggle_button_get_active(g->btn_point_tool)
         && (dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_POINT_TOOL))
-      layers = g_list_append(layers, GINT_TO_POINTER(layer));
+      layers = g_list_prepend(layers, GINT_TO_POINTER(layer));
     if(gtk_toggle_button_get_active(g->btn_line_tool)
         && (dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_LINE_TOOL))
-      layers = g_list_append(layers, GINT_TO_POINTER(layer));
+      layers = g_list_prepend(layers, GINT_TO_POINTER(layer));
     if(gtk_toggle_button_get_active(g->btn_curve_tool)
         && (dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_CURVE_TOOL))
-      layers = g_list_append(layers, GINT_TO_POINTER(layer));
+      layers = g_list_prepend(layers, GINT_TO_POINTER(layer));
     if(gtk_toggle_button_get_active(g->btn_node_tool)
         && (dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_NODE_TOOL))
-      layers = g_list_append(layers, GINT_TO_POINTER(layer));
+      layers = g_list_prepend(layers, GINT_TO_POINTER(layer));
   }
+  layers = g_list_reverse(layers); // list was built in reverse order, so un-reverse it
 
   _draw_paths(module, cr, scale, params, layers);
 
@@ -2392,8 +2394,9 @@ static dt_liquify_hit_t _hit_test_paths(struct dt_iop_module_t *module,
   for(dt_liquify_layer_enum_t layer = 0; layer < DT_LIQUIFY_LAYER_LAST; ++layer)
   {
     if(dt_liquify_layers[layer].flags & DT_LIQUIFY_LAYER_FLAG_HIT_TEST)
-      layers = g_list_append(layers, GINT_TO_POINTER(layer));
+      layers = g_list_prepend(layers, GINT_TO_POINTER(layer));
   }
+  layers = g_list_reverse(layers); // list was built in reverse order, so un-reverse it
 
   hit = _hit_paths(module, params, layers, &pt);
   g_list_free(layers);
@@ -2768,7 +2771,7 @@ void gui_focus(struct dt_iop_module_t *module, gboolean in)
 {
   if(!in)
   {
-    dt_control_hinter_message(darktable.control, "");
+    dt_collection_hint_message(darktable.collection);
     btn_make_radio_callback(NULL, NULL, module);
   }
 }
@@ -2870,7 +2873,15 @@ int mouse_moved(struct dt_iop_module_t *module,
       start_drag(g, g->last_hit.layer, g->last_hit.elem);
       // nothing more to do, we will refresh on the next call anyway
       // this makes the initial move of a node a bit more fluid.
+      handled = TRUE;
       goto done;
+    }
+
+    if(g->last_hit.elem)
+    {
+      // an item is selected, so this mouvement is handled and must
+      // not trigger any panning.
+      handled = TRUE;
     }
   }
   else // we are dragging
@@ -3542,15 +3553,15 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
 
     if(btn == g->btn_point_tool)
       dt_control_hinter_message
-        (darktable.control, _("click and drag to add point\nscroll to change size\n"
+        (darktable.control, _("click and drag to add point\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_line_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add line\nscroll to change size\n"
+        (darktable.control, _("click to add line\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_curve_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add curve\nscroll to change size\n"
+        (darktable.control, _("click to add curve\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_node_tool)
       dt_control_hinter_message(darktable.control, _("click to edit nodes"));
@@ -3561,6 +3572,8 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
     {
       _start_new_shape(module);
     }
+
+    if(btn) dt_iop_request_focus(module);
   }
   else
   {
@@ -3568,7 +3581,6 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
   }
 
   sync_pipe(module, FALSE);
-  dt_iop_request_focus(module);
 
   return TRUE;
 }
@@ -3610,19 +3622,19 @@ void gui_init(dt_iop_module_t *self)
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
-  g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("edit, add and delete nodes"), NULL,
+  g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                        _liquify_cairo_paint_node_tool, hbox));
 
-  g->btn_curve_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("draw curves"), N_("draw multiple curves"),
+  g->btn_curve_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw curves"), N_("draw multiple curves"),
                                         G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                         _liquify_cairo_paint_curve_tool, hbox));
 
-  g->btn_line_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("draw lines"), N_("draw multiple lines"),
+  g->btn_line_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw lines"), N_("draw multiple lines"),
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                        _liquify_cairo_paint_line_tool, hbox));
 
-  g->btn_point_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("draw points"), N_("draw multiple points"),
+  g->btn_point_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, N_("shapes"), N_("draw points"), N_("draw multiple points"),
                                          G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
                                          _liquify_cairo_paint_point_tool, hbox));
 

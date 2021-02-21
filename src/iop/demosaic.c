@@ -30,6 +30,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "common/colorspaces_inline_conversions.h"
 #include "develop/tiling.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
@@ -42,14 +43,12 @@
 #include <string.h>
 #include <time.h>
 
-#define DEMOSAIC_TIMING 0 // Bitmask to help demosaicer debugging/tuning
-                          // 01 --> print more precise timing info
-                          // 02 --> demosaicers in development don't fallback to ppg
 #include "rcd_demosaic.c"
 
-DT_MODULE_INTROSPECTION(3, dt_iop_demosaic_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_demosaic_params_t)
 
 #define DEMOSAIC_XTRANS 1024 // masks for non-Bayer demosaic ops
+#define DEMOSAIC_DUAL 2048   // masks for dual demosaicing methods
 #define REDUCESIZE 64
 
 typedef enum dt_iop_demosaic_method_t
@@ -61,14 +60,16 @@ typedef enum dt_iop_demosaic_method_t
   DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME = 3, // $DESCRIPTION: "passthrough (monochrome) (experimental)"
   DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR = 4, // $DESCRIPTION: "photosite color (debug)"
   DT_IOP_DEMOSAIC_RCD = 5,   // $DESCRIPTION: "RCD"
+  DT_IOP_DEMOSAIC_RCD_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_RCD, // $DESCRIPTION: "RCD + VNG4"
+  DT_IOP_DEMOSAIC_AMAZE_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_AMAZE, // $DESCRIPTION: "AMaZE + VNG4"
   // methods for x-trans images
   DT_IOP_DEMOSAIC_VNG = DEMOSAIC_XTRANS | 0,           // $DESCRIPTION: "VNG"
   DT_IOP_DEMOSAIC_MARKESTEIJN = DEMOSAIC_XTRANS | 1,   // $DESCRIPTION: "Markesteijn 1-pass"
   DT_IOP_DEMOSAIC_MARKESTEIJN_3 = DEMOSAIC_XTRANS | 2, // $DESCRIPTION: "Markesteijn 3-pass (slow)"
   DT_IOP_DEMOSAIC_PASSTHR_MONOX = DEMOSAIC_XTRANS | 3, // $DESCRIPTION: "passthrough (monochrome) (experimental)"
   DT_IOP_DEMOSAIC_FDC = DEMOSAIC_XTRANS | 4,           // $DESCRIPTION: "frequency domain chroma (slow)"
-  DT_IOP_DEMOSAIC_PASSTHR_COLORX = DEMOSAIC_XTRANS | 5 // $DESCRIPTION: "photosite color (debug)"
-
+  DT_IOP_DEMOSAIC_PASSTHR_COLORX = DEMOSAIC_XTRANS | 5, // $DESCRIPTION: "photosite color (debug)"
+  DT_IOP_DEMOSAIC_MARKEST3_VNG = DEMOSAIC_DUAL | DT_IOP_DEMOSAIC_MARKESTEIJN_3 // $DESCRIPTION: "Markesteijn 3-pass + VNG"
 } dt_iop_demosaic_method_t;
 
 typedef enum dt_iop_demosaic_greeneq_t
@@ -89,13 +90,24 @@ typedef enum dt_iop_demosaic_qual_flags_t
   DEMOSAIC_MEDIUM_QUAL             = 1 << 3
 } dt_iop_demosaic_qual_flags_t;
 
+typedef enum dt_iop_demosaic_smooth_t
+{
+  DEMOSAIC_SMOOTH_OFF = 0, // $DESCRIPTION: "disabled"
+  DEMOSAIC_SMOOTH_1 = 1,   // $DESCRIPTION: "once"
+  DEMOSAIC_SMOOTH_2 = 2,   // $DESCRIPTION: "twice"
+  DEMOSAIC_SMOOTH_3 = 3,   // $DESCRIPTION: "three times"
+  DEMOSAIC_SMOOTH_4 = 4,   // $DESCRIPTION: "four times"
+  DEMOSAIC_SMOOTH_5 = 5,   // $DESCRIPTION: "five times"
+} dt_iop_demosaic_smooth_t;
+
 typedef struct dt_iop_demosaic_params_t
 {
   dt_iop_demosaic_greeneq_t green_eq; // $DEFAULT: DT_IOP_GREEN_EQ_NO $DESCRIPTION: "match greens"
   float median_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "edge threshold"
-  uint32_t color_smoothing; // $DEFAULT: 0 $DESCRIPTION: "color smoothing"
+  dt_iop_demosaic_smooth_t color_smoothing; // $DEFAULT: DEMOSAIC_SMOOTH_OFF $DESCRIPTION: "color smoothing"
   dt_iop_demosaic_method_t demosaicing_method; // $DEFAULT: DT_IOP_DEMOSAIC_PPG $DESCRIPTION: "demosaicing method"
   uint32_t yet_unused_data_specific_to_demosaicing_method;
+  float dual_thrs; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "switch dual threshold"
 } dt_iop_demosaic_params_t;
 
 typedef struct dt_iop_demosaic_gui_data_t
@@ -105,6 +117,9 @@ typedef struct dt_iop_demosaic_gui_data_t
   GtkWidget *color_smoothing;
   GtkWidget *demosaic_method_bayer;
   GtkWidget *demosaic_method_xtrans;
+  GtkWidget *dual_thrs;
+  GtkWidget *dual_mask;
+  gint show_mask;
 } dt_iop_demosaic_gui_data_t;
 
 typedef struct dt_iop_demosaic_global_data_t
@@ -156,6 +171,7 @@ typedef struct dt_iop_demosaic_data_t
   uint32_t yet_unused_data_specific_to_demosaicing_method;
   float median_thrs;
   double CAM_to_RGB[3][4];
+  float dual_thrs;
 } dt_iop_demosaic_data_t;
 
 // Implemented on amaze_demosaic_RT.cc
@@ -200,6 +216,25 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
                   void *new_params, const int new_version)
 {
+  typedef struct dt_iop_demosaic_params_t dt_iop_demosaic_params_v4_t;
+  typedef struct dt_iop_demosaic_params_v3_t
+  {
+    dt_iop_demosaic_greeneq_t green_eq;
+    float median_thrs;
+    uint32_t color_smoothing;
+    dt_iop_demosaic_method_t demosaicing_method;
+    uint32_t yet_unused_data_specific_to_demosaicing_method;
+  } dt_iop_demosaic_params_v3_t;
+
+  if(old_version == 3 && new_version == 4)
+  {
+    dt_iop_demosaic_params_v3_t *o = (dt_iop_demosaic_params_v3_t *)old_params;
+    dt_iop_demosaic_params_v4_t *n = (dt_iop_demosaic_params_v4_t *)new_params;
+    memcpy(n, o, sizeof *o);
+    n->dual_thrs = 0.15f;
+    return 0;
+  }
+
   if(old_version == 2 && new_version == 3)
   {
     dt_iop_demosaic_params_t *o = (dt_iop_demosaic_params_t *)old_params;
@@ -250,6 +285,12 @@ static const char* method2string(dt_iop_demosaic_method_t method)
     case DT_IOP_DEMOSAIC_RCD:
       string = "RCD";
       break;
+    case DT_IOP_DEMOSAIC_RCD_VNG:
+      string = "RCD + VNG4";
+      break;
+    case DT_IOP_DEMOSAIC_AMAZE_VNG:
+      string = "AMaZE + VNG4";
+      break;
     case DT_IOP_DEMOSAIC_VNG:
       string = "VNG (xtrans)";
       break;
@@ -258,6 +299,9 @@ static const char* method2string(dt_iop_demosaic_method_t method)
       break;
     case DT_IOP_DEMOSAIC_MARKESTEIJN_3:
       string = "Markesteijn-3 (xtrans)";
+      break;
+    case DT_IOP_DEMOSAIC_MARKEST3_VNG:
+      string = "Markesteijn 3-pass + VNG";
       break;
     case DT_IOP_DEMOSAIC_FDC:
       string = "Frequency Domain Chroma (xtrans)";
@@ -435,7 +479,8 @@ static void green_equilibration_lavg(float *out, const float *const in, const in
 
       // prevent divide by zero and ...
       // guard against m1/m2 becoming too large (due to m2 being too small) which results in hot pixels
-      if(m2 > 0.0f && m1 / m2 < maximum * 2.0f)
+      // also m1 must be checked to be positive
+      if((m2 > 0.0f) && (m1 > 0.0f) && (m1 / m2 < maximum * 2.0f))
       {
         const float c1 = (fabsf(o1_1 - o1_2) + fabsf(o1_1 - o1_3) + fabsf(o1_1 - o1_4) + fabsf(o1_2 - o1_3)
                           + fabsf(o1_3 - o1_4) + fabsf(o1_2 - o1_4)) / 6.0f;
@@ -543,8 +588,8 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
   const int ndir = 4 << (passes > 1);
 
   const size_t buffer_size = (size_t)TS * TS * (ndir * 4 + 3) * sizeof(float);
-  //TODO: should this use dt_alloc_align_float or _perthread_float?
-  char *const all_buffers = (char *)dt_alloc_align(64, dt_get_num_threads() * buffer_size);
+  size_t padded_buffer_size;
+  char *const all_buffers = (char *)dt_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
   if(!all_buffers)
   {
     printf("[demosaic] not able to allocate Markesteijn buffers\n");
@@ -556,7 +601,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
     for(int col = 0; col < 3; col++)
       for(int ng = 0, d = 0; d < 10; d += 2)
       {
-        int g = FCxtrans(row, col, NULL, xtrans) == 1;
+        const int g = FCxtrans(row, col, NULL, xtrans) == 1;
         if(FCxtrans(row + orth[d], col + orth[d + 2], NULL, xtrans) == 1)
           ng = 0;
         else
@@ -571,8 +616,8 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         if(ng == g + 1)
           for(int c = 0; c < 8; c++)
           {
-            int v = orth[d] * patt[g][c * 2] + orth[d + 1] * patt[g][c * 2 + 1];
-            int h = orth[d + 2] * patt[g][c * 2] + orth[d + 3] * patt[g][c * 2 + 1];
+            const int v = orth[d] * patt[g][c * 2] + orth[d + 1] * patt[g][c * 2 + 1];
+            const int h = orth[d + 2] * patt[g][c * 2] + orth[d + 3] * patt[g][c * 2 + 1];
             // offset within TSxTS buffer
             allhex[row][col][c ^ (g * 2 & d)] = h + v * TS;
           }
@@ -582,7 +627,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
   const int pad_tile = (passes == 1) ? 12 : 17;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(all_buffers, buffer_size, dir, height, in, ndir, pad_tile, passes, roi_in, width, xtrans) \
+  dt_omp_firstprivate(all_buffers, padded_buffer_size, dir, height, in, ndir, pad_tile, passes, roi_in, width, xtrans) \
   shared(sgrow, sgcol, allhex, out) \
   schedule(static)
 #endif
@@ -590,7 +635,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
   // prior as interpolation needs a substantial border
   for(int top = -pad_tile; top < height - pad_tile; top += TS - (pad_tile*2))
   {
-    char *const buffer = all_buffers + dt_get_thread_num() * buffer_size;
+    char *const buffer = dt_get_perthread(all_buffers, padded_buffer_size);
     // rgb points to ndir TSxTS tiles of 3 channels (R, G, and B)
     float(*rgb)[TS][TS][3] = (float(*)[TS][TS][3])buffer;
     // yuv points to 3 channel (Y, u, and v) TSxTS tiles
@@ -631,6 +676,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
             // mirror a border pixel if beyond image edge
             const int c = FCxtrans(row, col, roi_in, xtrans);
             for(int cc = 0; cc < 3; cc++)
+            {
               if(cc != c)
                 pix[cc] = 0.0f;
               else
@@ -658,6 +704,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
                   pix[c] = sum / count;
                 }
               }
+            }
           }
         }
 
@@ -731,7 +778,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         for(int col = left + pad_g_interp; col < mcol - pad_g_interp; col++)
         {
           float color[8];
-          int f = FCxtrans(row, col, roi_in, xtrans);
+          const int f = FCxtrans(row, col, roi_in, xtrans);
           if(f == 1) continue;
           float (*const pix)[3] = &rgb[0][row - top][col - left];
           const short *const hex = hexmap(row,col,allhex);
@@ -766,13 +813,14 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
           for(int row = top + pad_g_recalc; row < mrow - pad_g_recalc; row++)
             for(int col = left + pad_g_recalc; col < mcol - pad_g_recalc; col++)
             {
-              int f = FCxtrans(row, col, roi_in, xtrans);
+              const int f = FCxtrans(row, col, roi_in, xtrans);
               if(f == 1) continue;
               const short *const hex = hexmap(row,col,allhex);
               for(int d = 3; d < 6; d++)
               {
                 float(*rfx)[3] = &rgb[(d - 2) ^ !((row - sgrow) % 3)][row - top][col - left];
-                float val = rfx[-2 * hex[d]][1] + 2 * rfx[hex[d]][1] - rfx[-2 * hex[d]][f]
+                const float val = rfx[-2 * hex[d]][1]
+                            + 2 * rfx[hex[d]][1] - rfx[-2 * hex[d]][f]
                             - 2 * rfx[hex[d]][f] + 3 * rfx[0][f];
                 rfx[0][1] = CLAMPS(val / 3.0f, gmin[row - top][col - left], gmax[row - top][col - left]);
               }
@@ -807,7 +855,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
                 // derivative which will be divided by two later to be
                 // rate of luminance change for red/blue between known
                 // red/blue neighbors and the current unknown pixel
-                float g = 2 * rfx[0][1] - rfx[i << c][1] - rfx[-(i << c)][1];
+                const float g = 2 * rfx[0][1] - rfx[i << c][1] - rfx[-(i << c)][1];
                 // color is halved before being stored in rgb, hence
                 // this becomes green rate of change plus the average
                 // of the near red or blue pixels on current axis
@@ -836,14 +884,14 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         for(int row = top + pad_rb_br; row < mrow - pad_rb_br; row++)
           for(int col = left + pad_rb_br; col < mcol - pad_rb_br; col++)
           {
-            int f = 2 - FCxtrans(row, col, roi_in, xtrans);
+            const int f = 2 - FCxtrans(row, col, roi_in, xtrans);
             if(f == 1) continue;
             float(*rfx)[3] = &rgb[0][row - top][col - left];
-            int c = (row - sgrow) % 3 ? TS : 1;
-            int h = 3 * (c ^ TS ^ 1);
+            const int c = (row - sgrow) % 3 ? TS : 1;
+            const int h = 3 * (c ^ TS ^ 1);
             for(int d = 0; d < 4; d++, rfx += TS * TS)
             {
-              int i = d > 1 || ((d ^ c) & 1) ||
+              const int i = d > 1 || ((d ^ c) & 1) ||
                 ((fabsf(rfx[0][1]-rfx[c][1]) + fabsf(rfx[0][1]-rfx[-c][1])) <
                  2.f*(fabsf(rfx[0][1]-rfx[h][1]) + fabsf(rfx[0][1]-rfx[-h][1]))) ? c:h;
               rfx[0][f] = (rfx[i][f] + rfx[-i][f] + 2.f * rfx[0][1] - rfx[i][1] - rfx[-i][1]) / 2.f;
@@ -853,6 +901,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         /* Fill in red and blue for 2x2 blocks of green:                */
         const int pad_g22 = (passes == 1) ? 8 : 4;
         for(int row = top + pad_g22; row < mrow - pad_g22; row++)
+        {
           if((row - sgrow) % 3)
             for(int col = left + pad_g22; col < mcol - pad_g22; col++)
               if((col - sgcol) % 3)
@@ -862,17 +911,18 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
                 for(int d = 0; d < ndir; d += 2, rfx += TS * TS)
                   if(hex[d] + hex[d + 1])
                   {
-                    float g = 3.f * rfx[0][1] - 2.f * rfx[hex[d]][1] - rfx[hex[d + 1]][1];
+                    const float g = 3.f * rfx[0][1] - 2.f * rfx[hex[d]][1] - rfx[hex[d + 1]][1];
                     for(int c = 0; c < 4; c += 2)
                       rfx[0][c] = (g + 2.f * rfx[hex[d]][c] + rfx[hex[d + 1]][c]) / 3.f;
                   }
                   else
                   {
-                    float g = 2.f * rfx[0][1] - rfx[hex[d]][1] - rfx[hex[d + 1]][1];
+                    const float g = 2.f * rfx[0][1] - rfx[hex[d]][1] - rfx[hex[d + 1]][1];
                     for(int c = 0; c < 4; c += 2)
                       rfx[0][c] = (g + rfx[hex[d]][c] + rfx[hex[d + 1]][c]) / 2.f;
                   }
               }
+        }
       } // end of multipass loop
 
       // jump back to the first set of rgb buffers (this is a nop
@@ -896,12 +946,12 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         for(int row = pad_yuv; row < mrow - pad_yuv; row++)
           for(int col = pad_yuv; col < mcol - pad_yuv; col++)
           {
-            float *rx = rgb[d][row][col];
+            const float *rx = rgb[d][row][col];
             // use ITU-R BT.2020 YPbPr, which is great, but could use
             // a better/simpler choice? note that imageop.h provides
             // dt_iop_RGB_to_YCbCr which uses Rec. 601 conversion,
             // which appears less good with specular highlights
-            float y = 0.2627f * rx[0] + 0.6780f * rx[1] + 0.0593f * rx[2];
+            const float y = 0.2627f * rx[0] + 0.6780f * rx[1] + 0.0593f * rx[2];
             yuv[0][row][col] = y;
             yuv[1][row][col] = (rx[2] - y) * 0.56433f;
             yuv[2][row][col] = (rx[0] - y) * 0.67815f;
@@ -916,7 +966,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         for(int row = pad_drv; row < mrow - pad_drv; row++)
           for(int col = pad_drv; col < mcol - pad_drv; col++)
           {
-            float(*yfx)[TS][TS] = (float(*)[TS][TS]) & yuv[0][row][col];
+            const float(*yfx)[TS][TS] = (float(*)[TS][TS]) & yuv[0][row][col];
             drv[d][row][col] = SQR(2 * yfx[0][0][0] - yfx[0][0][f] - yfx[0][0][-f])
                                + SQR(2 * yfx[1][0][0] - yfx[1][0][f] - yfx[1][0][-f])
                                + SQR(2 * yfx[2][0][0] - yfx[2][0][f] - yfx[2][0][-f]);
@@ -935,7 +985,8 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
           tr *= 8;
           for(int d = 0; d < ndir; d++)
             for(int v = -1; v <= 1; v++)
-              for(int h = -1; h <= 1; h++) homo[d][row][col] += ((drv[d][row + v][col + h] <= tr) ? 1 : 0);
+              for(int h = -1; h <= 1; h++)
+                homo[d][row][col] += ((drv[d][row + v][col + h] <= tr) ? 1 : 0);
         }
 
       /* Build 5x5 sum of homogeneity maps for each pixel & direction */
@@ -970,20 +1021,23 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
           }
           maxval -= maxval >> 3;
           for(int d = 0; d < ndir - 4; d++)
+          {
             if(hm[d] < hm[d + 4])
               hm[d] = 0;
             else if(hm[d] > hm[d + 4])
               hm[d + 4] = 0;
+          }
           float avg[4] = { 0.0f };
           for(int d = 0; d < ndir; d++)
+          {
             if(hm[d] >= maxval)
             {
               for(int c = 0; c < 3; c++) avg[c] += rgb[d][row][col][c];
               avg[3]++;
             }
+          }
           for(int c = 0; c < 3; c++)
-            out[4 * (width * (row + top) + col + left) + c] =
-              avg[c]/avg[3];
+            out[4 * (width * (row + top) + col + left) + c] = avg[c]/avg[3];
         }
     }
   }
@@ -1540,7 +1594,8 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
               1.221201e-03f - 5.982162e-19f * _Complex_I } } };
 
   const size_t buffer_size = (size_t)TS * TS * (ndir * 4 + 7) * sizeof(float);
-  char *const all_buffers = (char *)dt_alloc_align(64, dt_get_num_threads() * buffer_size);
+  size_t padded_buffer_size;
+  char *const all_buffers = (char *)dt_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
   if(!all_buffers)
   {
     fprintf(stderr, "[demosaic] not able to allocate FDC base buffers\n");
@@ -1610,14 +1665,14 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
 #ifdef _OPENMP
 #pragma omp parallel for default(none)                                                                            \
     dt_omp_firstprivate(ndir, all_buffers, dir, directionality, harr, height, in, Minv, modarr, roi_in, width,    \
-                        xtrans, pad_tile, buffer_size)                                                            \
+                        xtrans, pad_tile, padded_buffer_size)                                                     \
         shared(sgrow, sgcol, allhex, out, rowoffset, coloffset, hybrid_fdc) schedule(static)
 #endif
   // step through TSxTS cells of image, each tile overlapping the
   // prior as interpolation needs a substantial border
   for(int top = -pad_tile; top < height - pad_tile; top += TS - (pad_tile * 2))
   {
-    char *const buffer = all_buffers + dt_get_thread_num() * buffer_size;
+    char *const buffer = dt_get_perthread(all_buffers, padded_buffer_size);
     // rgb points to ndir TSxTS tiles of 3 channels (R, G, and B)
     float(*rgb)[TS][TS][3] = (float(*)[TS][TS][3])buffer;
     // yuv points to 3 channel (Y, u, and v) TSxTS tiles
@@ -2038,23 +2093,28 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
           }
           maxval -= maxval >> 3;
           for(int d = 0; d < ndir - 4; d++)
+          {
             if(hm[d] < hm[d + 4])
               hm[d] = 0;
             else if(hm[d] > hm[d + 4])
               hm[d + 4] = 0;
+          }
+
           float avg[4] = { 0.f };
           for(int d = 0; d < ndir; d++)
+          {
             if(hm[d] >= maxval)
             {
               for(int c = 0; c < 3; c++) avg[c] += rgb[d][row][col][c];
               avg[3]++;
             }
+          }
           float rgbpix[3];
           for(int c = 0; c < 3; c++) rgbpix[c] = avg[c] / avg[3];
           // preserve all components of Markesteijn for this pixel
-          float y = 0.2627f * rgbpix[0] + 0.6780f * rgbpix[1] + 0.0593f * rgbpix[2];
-          float um = (rgbpix[2] - y) * 0.56433f;
-          float vm = (rgbpix[0] - y) * 0.67815f;
+          const float y = 0.2627f * rgbpix[0] + 0.6780f * rgbpix[1] + 0.0593f * rgbpix[2];
+          const float um = (rgbpix[2] - y) * 0.56433f;
+          const float vm = (rgbpix[0] - y) * 0.67815f;
           float uvf[2];
           // macros for fast meadian filtering
 #define PIX_SWAP(a, b)                                                                                            \
@@ -2176,7 +2236,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
       for(int y = -1; y <= 1; y++)
         for(int x = -1; x <= 1; x++)
         {
-          int weight = 1 << ((y == 0) + (x == 0));
+          const int weight = 1 << ((y == 0) + (x == 0));
           const int color = fcol(row + y + roi_in->y, col + x + roi_in->x, filters, xtrans);
           if(color == f) continue;
           *ip++ = (roi_in->width * y + x);
@@ -2296,13 +2356,13 @@ static void vng_interpolate(float *out, const float *const in,
       const signed char *cp = terms;
       for(int t = 0; t < 64; t++)
       {
-        int y1 = *cp++, x1 = *cp++;
-        int y2 = *cp++, x2 = *cp++;
-        int weight = *cp++;
-        int grads = *cp++;
-        int color = fcol(row + y1, col + x1, filters4, xtrans);
+        const int y1 = *cp++, x1 = *cp++;
+        const int y2 = *cp++, x2 = *cp++;
+        const int weight = *cp++;
+        const int grads = *cp++;
+        const int color = fcol(row + y1, col + x1, filters4, xtrans);
         if(fcol(row + y2, col + x2, filters4, xtrans) != color) continue;
-        int diag
+        const int diag
             = (fcol(row, col + 1, filters4, xtrans) == color && fcol(row + 1, col, filters4, xtrans) == color)
                   ? 2
                   : 1;
@@ -2318,9 +2378,9 @@ static void vng_interpolate(float *out, const float *const in,
       cp = chood;
       for(int g = 0; g < 8; g++)
       {
-        int y = *cp++, x = *cp++;
+        const int y = *cp++, x = *cp++;
         *ip++ = (y * width + x) * 4;
-        int color = fcol(row, col, filters4, xtrans);
+        const int color = fcol(row, col, filters4, xtrans);
         if(fcol(row + y, col + x, filters4, xtrans) != color
            && fcol(row + y * 2, col + x * 2, filters4, xtrans) == color)
           *ip++ = (y * width + x) * 8 + color;
@@ -2365,9 +2425,9 @@ static void vng_interpolate(float *out, const float *const in,
         memcpy(brow[2][col], pix, sizeof(*out) * 4);
         continue;
       }
-      float thold = gmin + (gmax * 0.5f);
+      const float thold = gmin + (gmax * 0.5f);
       float sum[4] = { 0.0f };
-      int color = fcol(row + roi_in->y, col + roi_in->x, filters4, xtrans);
+      const int color = fcol(row + roi_in->y, col + roi_in->x, filters4, xtrans);
       int num = 0;
       for(g = 0; g < 8; g++, ip += 2) /* Average the neighbors */
       {
@@ -2517,14 +2577,14 @@ static void demosaic_ppg(float *const out, const float *const in, const dt_iop_r
         for(int x = i - 1; x != i + 2; x++)
         {
           const int yy = y + roi_out->y, xx = x + roi_out->x;
-          if(yy >= 0 && xx >= 0 && yy < roi_in->height && xx < roi_in->width)
+          if((yy >= 0) && (xx >= 0) && (yy < roi_in->height) && (xx < roi_in->width))
           {
-            int f = FC(y, x, filters);
+            const int f = FC(y, x, filters);
             sum[f] += in[(size_t)yy * roi_in->width + xx];
             sum[f + 4]++;
           }
         }
-      int f = FC(j, i, filters);
+      const int f = FC(j, i, filters);
       for(int c = 0; c < 3; c++)
       {
         if(c != f && sum[c + 4] > 0.0f)
@@ -2860,6 +2920,8 @@ static int demosaic_qual_flags(const dt_dev_pixelpipe_iop_t *const piece,
   return flags;
 }
 
+#include "dual_demosaic.c"
+
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -2871,7 +2933,14 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_roi_t roo = *roi_out;
   roo.x = roo.y = 0;
   // roi_out->scale = global scale: (iscale == 1.0, always when demosaic is on)
-
+  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF)) && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
+  const gboolean run_fast = (piece->pipe->type & DT_DEV_PIXELPIPE_FAST) == DT_DEV_PIXELPIPE_FAST;
+  gboolean showmask = FALSE;
+  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
+  {
+    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+    showmask = (g->show_mask);
+  }
   const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->pipe->dsc.xtrans;
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
@@ -2881,9 +2950,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if((qual_flags & DEMOSAIC_MEDIUM_QUAL)
   // only overwrite setting if quality << requested and in dr mode and not a special method
   && (demosaicing_method != DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
-  && (demosaicing_method != DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
-  && !(DEMOSAIC_TIMING & 2))
+  && (demosaicing_method != DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR))
     demosaicing_method = (piece->pipe->dsc.filters != 9u) ? DT_IOP_DEMOSAIC_PPG : DT_IOP_DEMOSAIC_MARKESTEIJN;
+
 
   const float *const pixels = (float *)i;
 
@@ -2902,8 +2971,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       roo.scale = 1.0f;
       tmp = (float *)dt_alloc_align_float((size_t)4 * roo.width * roo.height);
     }
-
-    if((darktable.unmuted & DT_DEBUG_PERF) || (DEMOSAIC_TIMING & 1)) dt_get_times(&start_time);
+    if(info) dt_get_times(&start_time);
 
     if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
     {
@@ -2915,7 +2983,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
     else if(piece->pipe->dsc.filters == 9u)
     {
-      if(demosaicing_method == DT_IOP_DEMOSAIC_FDC && (qual_flags & DEMOSAIC_XTRANS_FULL))
+      if(demosaicing_method == DT_IOP_DEMOSAIC_MARKEST3_VNG)
+        xtrans_markesteijn_interpolate(tmp, pixels, &roo, &roi, xtrans, 3);
+      else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC && (qual_flags & DEMOSAIC_XTRANS_FULL))
         xtrans_fdc_interpolate(self, tmp, pixels, &roo, &roi, xtrans);
       else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN && (qual_flags & DEMOSAIC_XTRANS_FULL))
         xtrans_markesteijn_interpolate(tmp, pixels, &roo, &roi, xtrans,
@@ -2961,11 +3031,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
           dt_colorspaces_cygm_to_rgb(piece->pipe->dsc.processed_maximum, 1, data->CAM_to_RGB);
         }
       }
-      else if(demosaicing_method == DT_IOP_DEMOSAIC_RCD)
+      else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
       {
         rcd_demosaic(piece, tmp, pixels, &roo, &roi, piece->pipe->dsc.filters);
       }
-      else if(demosaicing_method != DT_IOP_DEMOSAIC_AMAZE)
+      else if((demosaicing_method & ~DEMOSAIC_DUAL) != DT_IOP_DEMOSAIC_AMAZE)
         demosaic_ppg(tmp, in, &roo, &roi, piece->pipe->dsc.filters,
                      data->median_thrs); // wanted ppg or zoomed out a lot and quality is limited to 1
       else
@@ -2974,14 +3044,19 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) dt_free_align(in);
     }
 
-    if((darktable.unmuted & DT_DEBUG_PERF) || (DEMOSAIC_TIMING & 1))
+    if(info)
     {
       const float mpixels = (roo.width * roo.height) / 1.0e6;
       dt_get_times(&end_time);
       const float tclock = end_time.clock - start_time.clock;
       const float uclock = end_time.user - start_time.user;
-      fprintf(stderr," CPU    `%s' did %.1fmpix, %.4f secs (%.4f CPU), %.2f pix/us\n",
-        method2string(demosaicing_method), mpixels, tclock, uclock, mpixels / tclock);
+      fprintf(stderr," [demosaic] process CPU `%s' did %.2fmpix, %.4f secs (%.4f CPU), %.2f pix/us\n",
+        method2string(demosaicing_method & ~DEMOSAIC_DUAL), mpixels, tclock, uclock, mpixels / tclock);
+    }
+
+    if((demosaicing_method & DEMOSAIC_DUAL) && !run_fast)
+    {
+      dual_demosaic(piece, tmp, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, showmask, data->dual_thrs);
     }
 
     if(scaled)
@@ -3567,7 +3642,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
         for(int y = -1; y <= 1; y++)
           for(int x = -1; x <= 1; x++)
           {
-            int weight = 1 << ((y == 0) + (x == 0));
+            const int weight = 1 << ((y == 0) + (x == 0));
             const int color = fcol(row + y + roi_in->y, col + x + roi_in->x, filters4, xtrans);
             if(color == f) continue;
             *ip++ = (y << 16) | (x & 0xffffu);
@@ -3619,13 +3694,13 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
         const signed char *cp = terms;
         for(int t = 0; t < 64; t++)
         {
-          int y1 = *cp++, x1 = *cp++;
-          int y2 = *cp++, x2 = *cp++;
-          int weight = *cp++;
-          int grads = *cp++;
-          int color = fcol(row + y1, col + x1, filters4, xtrans);
+          const int y1 = *cp++, x1 = *cp++;
+          const int y2 = *cp++, x2 = *cp++;
+          const int weight = *cp++;
+          const int grads = *cp++;
+          const int color = fcol(row + y1, col + x1, filters4, xtrans);
           if(fcol(row + y2, col + x2, filters4, xtrans) != color) continue;
-          int diag
+          const int diag
               = (fcol(row, col + 1, filters4, xtrans) == color && fcol(row + 1, col, filters4, xtrans) == color)
                     ? 2
                     : 1;
@@ -3641,9 +3716,9 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
         cp = chood;
         for(int g = 0; g < 8; g++)
         {
-          int y = *cp++, x = *cp++;
+          const int y = *cp++, x = *cp++;
           *ip++ = (y << 16) | (x & 0xffffu);
-          int color = fcol(row, col, filters4, xtrans);
+          const int color = fcol(row, col, filters4, xtrans);
           if(fcol(row + y, col + x, filters4, xtrans) != color
              && fcol(row + y * 2, col + x * 2, filters4, xtrans) == color)
           {
@@ -3864,7 +3939,6 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     }
   }
 
-
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   dev_aux = NULL;
 
@@ -3978,7 +4052,7 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
       for(int col = 0; col < 3; col++)
         for(int ng = 0, d = 0; d < 10; d += 2)
         {
-          int g = FCxtrans(row, col, NULL, xtrans) == 1;
+          const int g = FCxtrans(row, col, NULL, xtrans) == 1;
           if(FCxtrans(row + orth[d] + 6, col + orth[d + 2] + 6, NULL, xtrans) == 1)
             ng = 0;
           else
@@ -3993,8 +4067,8 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
           if(ng == g + 1)
             for(int c = 0; c < 8; c++)
             {
-              int v = orth[d] * patt[g][c * 2] + orth[d + 1] * patt[g][c * 2 + 1];
-              int h = orth[d + 2] * patt[g][c * 2] + orth[d + 3] * patt[g][c * 2 + 1];
+              const int v = orth[d] * patt[g][c * 2] + orth[d + 1] * patt[g][c * 2 + 1];
+              const int h = orth[d + 2] * patt[g][c * 2] + orth[d + 3] * patt[g][c * 2 + 1];
 
               allhex[row][col][c ^ (g * 2 & d)][0] = h;
               allhex[row][col][c ^ (g * 2 & d)][1] = v;
@@ -4691,7 +4765,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   const float smooth = data->color_smoothing ? ioratio : 0.0f;
   const float greeneq
       = ((piece->pipe->dsc.filters != 9u) && (data->green_eq != DT_IOP_GREEN_EQ_NO)) ? 0.25f : 0.0f;
-  const dt_iop_demosaic_method_t demosaicing_method = data->demosaicing_method;
+  const dt_iop_demosaic_method_t demosaicing_method = data->demosaicing_method & ~DEMOSAIC_DUAL;
 
   const int qual_flags = demosaic_qual_flags(piece, &self->dev->image_storage, roi_out);
   const int full_scale_demosaicing = qual_flags & DEMOSAIC_FULL_SCALE;
@@ -4751,7 +4825,13 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   }
   else if(demosaicing_method == DT_IOP_DEMOSAIC_RCD)
   {
-    tiling->factor = 1.0f + ioratio + smooth;
+    tiling->factor = 1.0f + ioratio;
+    if(full_scale_demosaicing && unscaled)
+      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
+    else if(full_scale_demosaicing)
+      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
+    else
+      tiling->factor += smooth;                        // + smooth
     tiling->maxbuf = 1.0f;
     tiling->overhead = sizeof(float) * RCD_TILESIZE * RCD_TILESIZE * 8 * MAX(1, darktable.num_openmp_threads);
     tiling->xalign = 2;
@@ -4775,6 +4855,14 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
     tiling->xalign = 6; // covering Bayer pattern for VNG4 as well as xtrans for VNG
     tiling->yalign = 6; // covering Bayer pattern for VNG4 as well as xtrans for VNG
     tiling->overlap = 6;
+  }
+  if(data->demosaicing_method & DEMOSAIC_DUAL)
+  {
+    // make sure VNG4 is also possible
+    tiling->factor += 1.0f;
+    tiling->xalign = MAX(6, tiling->xalign);
+    tiling->yalign = MAX(6, tiling->yalign);
+    tiling->overlap = MAX(6, tiling->overlap);
   }
   return;
 }
@@ -4883,32 +4971,29 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   d->green_eq = p->green_eq;
   d->color_smoothing = p->color_smoothing;
   d->median_thrs = p->median_thrs;
-
+  d->dual_thrs = p->dual_thrs;
   d->demosaicing_method = p->demosaicing_method;
 
-  if(p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME
-     || p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX)
+  const gboolean passing = ((p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
+                            (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
+                            (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX) ||
+                            (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_COLORX));
+
+  if(!(p->demosaicing_method == DT_IOP_DEMOSAIC_PPG))
+    d->median_thrs = 0.0f;
+  if(passing)
   {
+    d->green_eq = DT_IOP_GREEN_EQ_NO;
+    d->color_smoothing = 0;
+  }
+
+  if(p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME ||
+     p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX)
     d->demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
-    d->green_eq = DT_IOP_GREEN_EQ_NO;
-    d->color_smoothing = 0;
-    d->median_thrs = 0.0f;
-  }
 
-  if(p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR
-     || p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_COLORX)
-  {
+  if(p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR ||
+     p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_COLORX)
     d->demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR;
-    d->green_eq = DT_IOP_GREEN_EQ_NO;
-    d->color_smoothing = 0;
-    d->median_thrs = 0.0f;
-  }
-
-  if((d->demosaicing_method == DT_IOP_DEMOSAIC_AMAZE) ||
-     (d->demosaicing_method == DT_IOP_DEMOSAIC_RCD))
-  {
-    d->median_thrs = 0.0f;
-  }
 
   // OpenCL only supported by some of the demosaicing methods
   switch(d->demosaicing_method)
@@ -4929,6 +5014,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
       piece->process_cl_ready = 0;
       break;
     case DT_IOP_DEMOSAIC_RCD:
+      piece->process_cl_ready = 0;
+      break;
+    case DT_IOP_DEMOSAIC_RCD_VNG:
+      piece->process_cl_ready = 0;
+      break;
+    case DT_IOP_DEMOSAIC_AMAZE_VNG:
+      piece->process_cl_ready = 0;
+      break;
+    case DT_IOP_DEMOSAIC_MARKEST3_VNG:
       piece->process_cl_ready = 0;
       break;
     case DT_IOP_DEMOSAIC_VNG:
@@ -4983,6 +5077,7 @@ void gui_update(struct dt_iop_module_t *self)
 
   const gboolean bayer = (self->dev->image_storage.buf_dsc.filters != 9u);
   const gboolean isppg = (p->demosaicing_method == DT_IOP_DEMOSAIC_PPG);
+  const gboolean isdual = (p->demosaicing_method & DEMOSAIC_DUAL);
   const gboolean passing = ((p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
                             (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
                             (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX) ||
@@ -4998,6 +5093,18 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_widget_set_visible(g->median_thrs, bayer && isppg);
   gtk_widget_set_visible(g->greeneq, !passing);
   gtk_widget_set_visible(g->color_smoothing, !passing);
+  gtk_widget_set_visible(g->dual_mask, isdual);
+  gtk_widget_set_visible(g->dual_thrs, isdual);
+  dt_bauhaus_slider_set(g->median_thrs, p->median_thrs);
+  dt_bauhaus_combobox_set(g->color_smoothing, p->color_smoothing);
+  dt_bauhaus_combobox_set(g->greeneq, p->green_eq);
+  dt_bauhaus_slider_set(g->dual_thrs, p->dual_thrs);
+
+  g->show_mask = FALSE;
+  dt_bauhaus_widget_set_quad_active(g->dual_mask, g->show_mask);
+  dt_bauhaus_widget_set_quad_toggle(g->dual_mask, g->show_mask);
+
+  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, self->dev->image_storage.id, 'w');
   int changed = img->flags & DT_IMAGE_MONOCHROME_BAYER;
@@ -5012,12 +5119,6 @@ void gui_update(struct dt_iop_module_t *self)
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
   if(changed)
     dt_imageio_update_monochrome_workflow_tag(self->dev->image_storage.id, mask_bw);
-
-  dt_bauhaus_slider_set(g->median_thrs, p->median_thrs);
-  dt_bauhaus_combobox_set(g->color_smoothing, p->color_smoothing);
-  dt_bauhaus_combobox_set(g->greeneq, p->green_eq);
-
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 void reload_defaults(dt_iop_module_t *module)
@@ -5043,6 +5144,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   const gboolean bayer = (self->dev->image_storage.buf_dsc.filters != 9u);
   const gboolean isppg = (p->demosaicing_method == DT_IOP_DEMOSAIC_PPG);
+  const gboolean isdual = (p->demosaicing_method & DEMOSAIC_DUAL);
   const gboolean passing = ((p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
                             (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
                             (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX) ||
@@ -5058,6 +5160,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_visible(g->median_thrs, bayer && isppg);
   gtk_widget_set_visible(g->greeneq, !passing);
   gtk_widget_set_visible(g->color_smoothing, !passing);
+  gtk_widget_set_visible(g->dual_mask, isdual);
+  gtk_widget_set_visible(g->dual_thrs, isdual);
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, self->dev->image_storage.id, 'w');
   int changed = img->flags & DT_IMAGE_MONOCHROME_BAYER;
@@ -5073,18 +5177,31 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     dt_imageio_update_monochrome_workflow_tag(self->dev->image_storage.id, mask_bw);
 }
 
+static void show_mask_callback(GtkWidget *slider, gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  if(darktable.gui->reset) return;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  g->show_mask = !(g->show_mask);
+  dt_bauhaus_widget_set_quad_active(g->dual_mask, g->show_mask);
+  dt_bauhaus_widget_set_quad_toggle(g->dual_mask, g->show_mask);
+  dt_dev_reprocess_center(self->dev);
+}
+
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_demosaic_gui_data_t *g = IOP_GUI_ALLOC(demosaic);
+  g->show_mask = FALSE;
 
   GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
   g->demosaic_method_bayer = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
-  for(int i=0;i<6;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 6);
+  for(int i=0;i<7;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 8);
   gtk_widget_set_tooltip_text(g->demosaic_method_bayer, _("demosaicing raw data method"));
 
   g->demosaic_method_xtrans = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
-  for(int i=0;i<6;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_xtrans, 0);
+  for(int i=0;i<8;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_xtrans, 0);
   gtk_widget_set_tooltip_text(g->demosaic_method_xtrans, _("demosaicing raw data method"));
 
   g->median_thrs = dt_bauhaus_slider_from_params(self, "median_thrs");
@@ -5092,14 +5209,19 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->median_thrs, 3);
   gtk_widget_set_tooltip_text(g->median_thrs, _("threshold for edge-aware median.\nset to 0.0 to switch off.\n"
                                                 "set to 1.0 to ignore edges."));
+  g->dual_thrs = dt_bauhaus_slider_from_params(self, "dual_thrs");
+  dt_bauhaus_slider_set_step(g->dual_thrs, 0.01);
+  dt_bauhaus_slider_set_digits(g->dual_thrs, 2);
+  gtk_widget_set_tooltip_text(g->dual_thrs, _("contrast threshold for dual demosaic.\nset to 0.0 for high frequency content.\n"
+                                                "set to 1.0 for flat content."));
+  g->dual_mask = dt_bauhaus_combobox_new(self);
+  dt_bauhaus_widget_set_label(g->dual_mask, NULL, N_("display blending mask"));
+  dt_bauhaus_widget_set_quad_paint(g->dual_mask, dtgtk_cairo_paint_showmask, CPF_STYLE_FLAT | CPF_DO_NOT_USE_BORDER, NULL);
+  dt_bauhaus_widget_set_quad_toggle(g->dual_mask, TRUE);
+  g_signal_connect(G_OBJECT(g->dual_mask), "quad-pressed", G_CALLBACK(show_mask_callback), self);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->dual_mask, FALSE, FALSE, 0);
 
   g->color_smoothing = dt_bauhaus_combobox_from_params(self, "color_smoothing");
-  dt_bauhaus_combobox_add(g->color_smoothing, _("off"));
-  dt_bauhaus_combobox_add(g->color_smoothing, _("one time"));
-  dt_bauhaus_combobox_add(g->color_smoothing, _("two times"));
-  dt_bauhaus_combobox_add(g->color_smoothing, _("three times"));
-  dt_bauhaus_combobox_add(g->color_smoothing, _("four times"));
-  dt_bauhaus_combobox_add(g->color_smoothing, _("five times"));
   gtk_widget_set_tooltip_text(g->color_smoothing, _("how many color smoothing median steps after demosaicing"));
 
   g->greeneq = dt_bauhaus_combobox_from_params(self, "green_eq");
@@ -5114,7 +5236,6 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
   gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
 }
-#undef DEMOSAIC_TIMING
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

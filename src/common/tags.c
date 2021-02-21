@@ -575,7 +575,7 @@ gboolean dt_tag_detach(const guint tagid, const gint imgid, const gboolean undo_
   if(imgid == -1)
     imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
   else
-    imgs = g_list_append(imgs, GINT_TO_POINTER(imgid));
+    imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
   if(group_on) dt_grouping_add_grouped_images(&imgs);
 
   const gboolean res = dt_tag_detach_images(tagid, imgs, undo_on);
@@ -618,13 +618,10 @@ static void dt_set_darktable_tags()
   }
 }
 
-uint32_t dt_tag_get_attached(const gint imgid, GList **result, const gboolean ignore_dt_tags)
+static char *_images_to_act_on_string(const gint imgid, uint32_t *nb)
 {
-  sqlite3_stmt *stmt;
-  dt_set_darktable_tags();
-  char *images = NULL;
   uint32_t nb_selected = 0;
-  uint32_t count = 0;
+  char *images = NULL;
   if(imgid > 0)
   {
     images = dt_util_dstrcat(images, "%d",imgid);
@@ -641,6 +638,18 @@ uint32_t dt_tag_get_attached(const gint imgid, GList **result, const gboolean ig
     }
     if(images) images[strlen(images) - 1] = '\0';
   }
+  if(nb)
+    *nb = nb_selected;
+  return images;
+}
+
+uint32_t dt_tag_get_attached(const gint imgid, GList **result, const gboolean ignore_dt_tags)
+{
+  sqlite3_stmt *stmt;
+  dt_set_darktable_tags();
+  uint32_t nb_selected = 0;
+  char *images = _images_to_act_on_string(imgid, &nb_selected);
+  uint32_t count = 0;
   if(images)
   {
     char *query = NULL;
@@ -843,7 +852,7 @@ GList *dt_tag_get_hierarchical(gint imgid)
 static GList *_tag_get_tags(const gint imgid, const dt_tag_type_t type)
 {
   GList *tags = NULL;
-  if(imgid < 0) return tags;
+  char *images = _images_to_act_on_string(imgid, NULL);
 
   sqlite3_stmt *stmt;
   dt_set_darktable_tags();
@@ -851,10 +860,10 @@ static GList *_tag_get_tags(const gint imgid, const dt_tag_type_t type)
   snprintf(query, sizeof(query), "SELECT DISTINCT T.id"
                                  "  FROM main.tagged_images AS I"
                                  "  JOIN data.tags T on T.id = I.tagid"
-                                 "  WHERE I.imgid = %d %s",
-           imgid, type == DT_TAG_TYPE_ALL ? "" :
-                  type == DT_TAG_TYPE_DT ? "AND T.id IN memory.darktable_tags" :
-                                           "AND NOT T.id IN memory.darktable_tags");
+                                 "  WHERE I.imgid IN (%s) %s",
+           images, type == DT_TAG_TYPE_ALL ? "" :
+                   type == DT_TAG_TYPE_DT ? "AND T.id IN memory.darktable_tags" :
+                                            "AND NOT T.id IN memory.darktable_tags");
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -863,7 +872,7 @@ static GList *_tag_get_tags(const gint imgid, const dt_tag_type_t type)
   }
 
   sqlite3_finalize(stmt);
-
+  g_free(images);
   return tags;
 }
 
@@ -975,14 +984,14 @@ GList *dt_tag_get_hierarchical_export(gint imgid, int32_t flags)
     dt_tag_t *t = (dt_tag_t *)taglist->data;
     if (export_private_tags || !(t->flags & DT_TF_PRIVATE))
     {
-      tags = g_list_append(tags, t->tag);
+      tags = g_list_prepend(tags, t->tag);
     }
     taglist = g_list_next(taglist);
   }
 
   dt_tag_free_result(&taglist);
 
-  return tags;
+  return g_list_reverse(tags);  // list was built in reverse order, so un-reverse it
 }
 
 gboolean dt_is_tag_attached(const guint tagid, const gint imgid)
@@ -1015,11 +1024,11 @@ GList *dt_tag_get_images(const gint tagid)
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     int id = sqlite3_column_int(stmt, 0);
-    result = g_list_append(result, GINT_TO_POINTER(id));
+    result = g_list_prepend(result, GINT_TO_POINTER(id));
   }
   sqlite3_finalize(stmt);
 
-  return result;
+  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
 GList *dt_tag_get_images_from_list(const GList *img, const gint tagid)
@@ -1048,14 +1057,14 @@ GList *dt_tag_get_images_from_list(const GList *img, const gint tagid)
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
       int id = sqlite3_column_int(stmt, 0);
-      result = g_list_append(result, GINT_TO_POINTER(id));
+      result = g_list_prepend(result, GINT_TO_POINTER(id));
     }
 
     sqlite3_finalize(stmt);
     g_free(query);
     g_free(images);
   }
-  return result;
+  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
 uint32_t dt_tag_get_suggestions(GList **result)
@@ -1695,7 +1704,7 @@ char *dt_tag_get_subtags(const gint imgid, const char *category, const int level
   return tags;
 }
 
-const gboolean dt_tag_get_tag_order_by_id(const uint32_t tagid, uint32_t *sort,
+gboolean dt_tag_get_tag_order_by_id(const uint32_t tagid, uint32_t *sort,
                                           gboolean *descending)
 {
   gboolean res = FALSE;
@@ -1721,15 +1730,20 @@ const gboolean dt_tag_get_tag_order_by_id(const uint32_t tagid, uint32_t *sort,
   return res;
 }
 
-const uint32_t dt_tag_get_tag_id_by_name(const char * const name)
+uint32_t dt_tag_get_tag_id_by_name(const char * const name)
 {
+  if(!name) return 0;
   uint32_t tagid = 0;
-  if(!name) return tagid;
+  const gboolean is_insensitive =
+    dt_conf_is_equal("plugins/lighttable/tagging/case_sensitivity", "insensitive");
+  const char *query = is_insensitive
+                      ? "SELECT T.id, T.flags FROM data.tags AS T "
+                        "WHERE T.name LIKE ?1"
+                      : "SELECT T.id, T.flags FROM data.tags AS T "
+                        "WHERE T.name = ?1";
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-          "SELECT T.id, T.flags FROM data.tags AS T "
-          "WHERE T.name = ?1",
-          -1, &stmt, NULL);
+                              query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {

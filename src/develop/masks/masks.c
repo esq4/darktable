@@ -45,7 +45,7 @@ dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form)
 
   // then duplicate the GList *points
 
-  new_form->points = NULL;
+  GList* newpoints = NULL;
 
   if (form->points)
   {
@@ -71,11 +71,12 @@ dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form)
       {
         void *item = malloc(size_item);
         memcpy(item, pt->data, size_item);
-        new_form->points = g_list_append(new_form->points, item);
+        newpoints = g_list_prepend(newpoints, item);
         pt = g_list_next(pt);
       }
     }
   }
+  new_form->points = g_list_reverse(newpoints);  // list was built in reverse order, so un-reverse it
 
   return new_form;
 }
@@ -410,13 +411,14 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *gui)
 
 void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index)
 {
-  if(g_list_length(gui->points) == index)
+  const int npoints = g_list_length(gui->points);
+  if(npoints == index)
   {
     dt_masks_form_gui_points_t *gpt2
         = (dt_masks_form_gui_points_t *)calloc(1, sizeof(dt_masks_form_gui_points_t));
     gui->points = g_list_append(gui->points, gpt2);
   }
-  else if(g_list_length(gui->points) < index)
+  else if(npoints < index)
     return;
 
   dt_masks_gui_form_remove(form, gui, index);
@@ -530,6 +532,11 @@ static dt_masks_form_t *_group_create(dt_iop_module_t *module, dt_masks_type_t t
   return grp;
 }
 
+static dt_masks_form_t *_group_from_module(dt_iop_module_t *module)
+{
+  return dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+}
+
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module, dt_masks_form_t *form,
                                      dt_masks_form_gui_t *gui)
 {
@@ -592,8 +599,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
   if(module)
   {
     // is there already a masks group for this module ?
-    int grpid = module->blend_params->mask_id;
-    dt_masks_form_t *grp = dt_masks_get_from_id(dev, grpid);
+    dt_masks_form_t *grp = _group_from_module(module);
     if(!grp)
     {
       // we create a new group
@@ -605,9 +611,9 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     // we add the form in this group
     dt_masks_point_group_t *grpt = malloc(sizeof(dt_masks_point_group_t));
     grpt->formid = form->formid;
-    grpt->parentid = grpid;
+    grpt->parentid = grp->formid;
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
-    if(g_list_length(grp->points) > 0) grpt->state |= DT_MASKS_STATE_UNION;
+    if(grp->points) grpt->state |= DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
     // we save the group
@@ -1979,7 +1985,7 @@ void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t
     dt_masks_group_ungroup(grp, form);
   }
 
-  if (bd) bd->masks_shown = value;
+  if(bd) bd->masks_shown = value;
 
   dt_masks_change_form_gui(grp);
   darktable.develop->form_gui->edit_mode = value;
@@ -1988,8 +1994,9 @@ void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t
   else
     dt_dev_masks_selection_change(darktable.develop, 0, FALSE);
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
-                               value == DT_MASKS_EDIT_OFF ? FALSE : TRUE);
+  if(bd->masks_support)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
+                                 value == DT_MASKS_EDIT_OFF ? FALSE : TRUE);
 
   dt_control_queue_redraw_center();
 }
@@ -2045,7 +2052,7 @@ void dt_masks_iop_edit_toggle_callback(GtkToggleButton *togglebutton, dt_iop_mod
 static void _menu_no_masks(struct dt_iop_module_t *module)
 {
   // we drop all the forms in the iop
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  dt_masks_form_t *grp = _group_from_module(module);
   if(grp) dt_masks_form_remove(module, NULL, grp);
   module->blend_params->mask_id = 0;
 
@@ -2119,11 +2126,6 @@ static void _menu_add_brush(struct dt_iop_module_t *module)
   dt_control_queue_redraw_center();
 }
 
-static dt_masks_form_t *dt_masks_group_from_module(dt_iop_module_t *module)
-{
-  return dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
-}
-
 static void _menu_add_exist(dt_iop_module_t *module, int formid)
 {
   if(!module) return;
@@ -2131,7 +2133,7 @@ static void _menu_add_exist(dt_iop_module_t *module, int formid)
   if(!form) return;
 
   // is there already a masks group for this module ?
-  dt_masks_form_t *grp = dt_masks_group_from_module(module);
+  dt_masks_form_t *grp = _group_from_module(module);
   if(!grp)
   {
     grp = _group_create(module, DT_MASKS_GROUP);
@@ -2147,7 +2149,7 @@ static void _menu_add_exist(dt_iop_module_t *module, int formid)
 
 void dt_masks_group_update_name(dt_iop_module_t *module)
 {
-  dt_masks_form_t *grp = dt_masks_group_from_module(module);
+  dt_masks_form_t *grp = _group_from_module(module);
   if (!grp)
     return;
 
@@ -2166,7 +2168,7 @@ void dt_masks_iop_use_same_as(dt_iop_module_t *module, dt_iop_module_t *src)
   if(!src_grp || src_grp->type != DT_MASKS_GROUP) return;
 
   // is there already a masks group for this module ?
-  dt_masks_form_t *grp = dt_masks_group_from_module(module);
+  dt_masks_form_t *grp = _group_from_module(module);
   if(!grp)
   {
     grp = _group_create(module, DT_MASKS_GROUP);
@@ -2232,7 +2234,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, struct dt_iop_module_t **m)
 
     // we search were this form is used in the current module
     int used = 0;
-    dt_masks_form_t *grp = dt_masks_group_from_module(module);
+    dt_masks_form_t *grp = _group_from_module(module);
     if(grp && (grp->type & DT_MASKS_GROUP))
     {
       GList *pts = g_list_first(grp->points);
@@ -2268,10 +2270,10 @@ void dt_masks_iop_combo_populate(GtkWidget *w, struct dt_iop_module_t **m)
   int pos2 = 1;
   while(modules)
   {
-    dt_iop_module_t *m = (dt_iop_module_t *)modules->data;
-    if((m != module) && (m->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(m->flags() & IOP_FLAGS_NO_MASKS))
+    dt_iop_module_t *other_mod = (dt_iop_module_t *)modules->data;
+    if((other_mod != module) && (other_mod->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(other_mod->flags() & IOP_FLAGS_NO_MASKS))
     {
-      dt_masks_form_t *grp = dt_masks_group_from_module(m);
+      dt_masks_form_t *grp = _group_from_module(other_mod);
       if(grp)
       {
         if(nb == 0)
@@ -2279,7 +2281,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, struct dt_iop_module_t **m)
           dt_bauhaus_combobox_add_aligned(combo, _("use same shapes as"), DT_BAUHAUS_COMBOBOX_ALIGN_LEFT);
           cids[pos++] = 0; // nothing to do
         }
-        gchar *module_label = dt_history_item_get_name(m);
+        gchar *module_label = dt_history_item_get_name(other_mod);
         dt_bauhaus_combobox_add(combo, module_label);
         g_free(module_label);
         cids[pos++] = -1 * pos2;
@@ -2402,7 +2404,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
       dt_masks_iop_update(module);
       dt_masks_update_image(darktable.develop);
     }
-    if(ok && g_list_length(grp->points) == 0) dt_masks_form_remove(module, NULL, grp);
+    if(ok && grp->points == NULL) dt_masks_form_remove(module, NULL, grp);
     return;
   }
 
@@ -2437,7 +2439,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
       }
       else
       {
-        dt_masks_form_t *iopgrp = dt_masks_group_from_module(m);
+        dt_masks_form_t *iopgrp = _group_from_module(m);
         if(iopgrp && (iopgrp->type & DT_MASKS_GROUP))
         {
           int ok = 0;
@@ -2460,7 +2462,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
             form_removed = 1;
             dt_masks_iop_update(m);
             dt_masks_update_image(darktable.develop);
-            if(g_list_length(iopgrp->points) == 0) dt_masks_form_remove(m, NULL, iopgrp);
+            if(iopgrp->points == NULL) dt_masks_form_remove(m, NULL, iopgrp);
           }
         }
       }
@@ -2582,7 +2584,7 @@ dt_masks_point_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_f
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
-    if(g_list_length(grp->points) > 0) grpt->state |= DT_MASKS_STATE_UNION;
+    if(grp->points) grpt->state |= DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
     return grpt;

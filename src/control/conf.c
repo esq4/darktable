@@ -24,7 +24,6 @@
 #include "common/darktable.h"
 #include "common/file_location.h"
 #include "control/conf.h"
-#include "conf_gen.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -47,6 +46,8 @@ static void _free_confgen_value(void *value)
   g_free(s->min);
   g_free(s->max);
   g_free(s->enum_values);
+  g_free(s->shortdesc);
+  g_free(s->longdesc);
   g_free(s);
 }
 
@@ -298,6 +299,12 @@ gchar *dt_conf_get_string(const char *name)
   return g_strdup(str);
 }
 
+gboolean dt_conf_is_equal(const char *name, const char *value)
+{
+  const char *str = dt_conf_get_var(name);
+  return g_strcmp0(str, value) == 0;
+}
+
 static char *_sanitize_confgen(const char *name, const char *value)
 {
   const dt_confgen_value_t *item = g_hash_table_lookup(darktable.conf->x_confgen, name);
@@ -370,8 +377,6 @@ static char *_sanitize_confgen(const char *name, const char *value)
 void dt_conf_init(dt_conf_t *cf, const char *filename, GSList *override_entries)
 {
   cf->x_confgen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, _free_confgen_value);
-
-  dt_confgen_init();
 
   cf->table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   cf->override_entries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);

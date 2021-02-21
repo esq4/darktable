@@ -622,7 +622,10 @@ static void _collection_update_aspect_ratio(const dt_collection_t *collection)
     sqlite3_stmt *stmt = NULL;
 
     query = dt_util_dstrcat
-      (query, "SELECT id FROM main.images WHERE %s AND (aspect_ratio=0.0 OR aspect_ratio IS NULL)", where_ext);
+      (query,
+       "SELECT id"
+       " FROM main.images"
+       " WHERE %s AND (aspect_ratio=0.0 OR aspect_ratio IS NULL)", where_ext);
 
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
 
@@ -673,7 +676,7 @@ const char *dt_collection_name(dt_collection_properties_t prop)
   switch(prop)
   {
     case DT_COLLECTION_PROP_FILMROLL:         return _("film roll");
-    case DT_COLLECTION_PROP_FOLDERS:          return _("folders");
+    case DT_COLLECTION_PROP_FOLDERS:          return _("folder");
     case DT_COLLECTION_PROP_CAMERA:           return _("camera");
     case DT_COLLECTION_PROP_TAG:              return _("tag");
     case DT_COLLECTION_PROP_DAY:              return _("date taken");
@@ -1077,14 +1080,14 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit, gboolean 
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
       const int imgid = sqlite3_column_int(stmt, 0);
-      list = g_list_append(list, GINT_TO_POINTER(imgid));
+      list = g_list_prepend(list, GINT_TO_POINTER(imgid));
     }
 
     sqlite3_finalize(stmt);
     g_free(q);
   }
 
-  return list;
+  return g_list_reverse(list);  // list built in reverse order, so un-reverse it
 }
 
 GList *dt_collection_get_all(const dt_collection_t *collection, int limit)
@@ -1463,11 +1466,31 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       break;
 
     case DT_COLLECTION_PROP_FOLDERS: // folders
-      query = dt_util_dstrcat(
-          query, "(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s' OR folder LIKE '%s"
-                 G_DIR_SEPARATOR_S "%%'))",
-          escaped_text, escaped_text);
-      break;
+    {
+      if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '*'))
+      {
+        escaped_text[escaped_length-1] = '\0';
+        query = dt_util_dstrcat(
+            query, "(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s' OR folder LIKE '%s"
+                  G_DIR_SEPARATOR_S "%%'))",
+            escaped_text, escaped_text);
+      }
+      else if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '%'))
+      {
+        escaped_text[escaped_length-2] = '\0';
+        query = dt_util_dstrcat(
+            query, "(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s"
+                  G_DIR_SEPARATOR_S "%%'))",
+            escaped_text);
+      }
+      else
+      {
+        query = dt_util_dstrcat(
+            query, "(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s'))",
+            escaped_text);
+      }
+    }
+    break;
 
     case DT_COLLECTION_PROP_COLORLABEL: // colorlabel
     {
@@ -1590,14 +1613,16 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
 
     case DT_COLLECTION_PROP_TAG: // tag
     {
-      char *sensitive = dt_conf_get_string("plugins/lighttable/tagging/case_sensitivity");
+      const gboolean is_insensitive =
+        dt_conf_is_equal("plugins/lighttable/tagging/case_sensitivity", "insensitive");
+
       if(!strcmp(escaped_text, _("not tagged")))
       {
         query = g_strdup_printf("(id NOT IN (SELECT DISTINCT imgid FROM main.tagged_images AS a "
                                        "JOIN data.tags AS b ON a.tagid = b.id "
                                        "AND SUBSTR(name, 1, 10) <> 'darktable|'))");
       }
-      else if(!strcmp(sensitive, _("insensitive")))
+      else if(is_insensitive)
       {
         if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '*'))
         {
@@ -1647,7 +1672,6 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
                                   escaped_text);
         }
       }
-      g_free(sensitive);
     }
     break;
 
@@ -1978,11 +2002,12 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
   int next = -1;
   if(!collection->clone)
   {
-    if(g_list_length(list) > 0)
+    if(list)
     {
       // for changing offsets, thumbtable needs to know the first untouched imageid after the list
       // we do this here
-      const int id0 = GPOINTER_TO_INT(g_list_nth_data(list, 0));
+
+      // 1. create a string with all the imgids of the list to be used inside IN sql query
       gchar *txt = NULL;
       GList *l = g_list_first(list);
       int i = 0;
@@ -1996,15 +2021,18 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
         l = g_list_next(l);
         i++;
       }
+      // 2. search the first imgid not in the list but AFTER the list (or in a gap inside the list)
+      // we need to be carefull that some images in the list may not be present on screen (collapsed groups)
       gchar *query = dt_util_dstrcat(NULL,
                                      "SELECT imgid"
                                      " FROM memory.collected_images"
                                      " WHERE imgid NOT IN (%s)"
                                      "  AND rowid > (SELECT rowid"
                                      "              FROM memory.collected_images"
-                                     "              WHERE imgid=%d)"
+                                     "              WHERE imgid IN (%s)"
+                                     "              ORDER BY rowid LIMIT 1)"
                                      " ORDER BY rowid LIMIT 1",
-                                     txt, id0);
+                                     txt, txt);
       sqlite3_stmt *stmt2;
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt2, NULL);
       if(sqlite3_step(stmt2) == SQLITE_ROW)
@@ -2013,7 +2041,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
       }
       sqlite3_finalize(stmt2);
       g_free(query);
-      // if next is still unvalid, let's try to find the first untouched image before the list
+      // 3. if next is still unvalid, let's try to find the first untouched image BEFORE the list
       if(next < 0)
       {
         query = dt_util_dstrcat(NULL,
@@ -2022,9 +2050,10 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
                                 " WHERE imgid NOT IN (%s)"
                                 "   AND rowid < (SELECT rowid"
                                 "                FROM memory.collected_images"
-                                "                WHERE imgid=%d)"
+                                "                WHERE imgid IN (%s)"
+                                "                ORDER BY rowid LIMIT 1)"
                                 " ORDER BY rowid DESC LIMIT 1",
-                                txt, id0);
+                                txt, txt);
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt2, NULL);
         if(sqlite3_step(stmt2) == SQLITE_ROW)
         {
@@ -2137,6 +2166,7 @@ void dt_collection_hint_message(const dt_collection_t *collection)
 
   int c = dt_collection_get_count_no_group(collection);
   int cs = dt_collection_get_selected_count(collection);
+  g_list_free(selected_imgids);
 
   if(cs == 1)
   {

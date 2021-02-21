@@ -586,7 +586,7 @@ static void _raise_signal_tag_changed(dt_lib_module_t *self)
 }
 
 // find a tag on the tree
-static gboolean _find_tag_iter_tagid(GtkTreeModel *model, GtkTreeIter *iter, gint tagid)
+static gboolean _find_tag_iter_tagid(GtkTreeModel *model, GtkTreeIter *iter, const gint tagid)
 {
   gint tag;
   do
@@ -608,7 +608,7 @@ static gboolean _find_tag_iter_tagid(GtkTreeModel *model, GtkTreeIter *iter, gin
 }
 
 // calculate the indeterminated state (1) where needed on the tree
-static void _calculate_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean root)
+static void _calculate_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, const gboolean root)
 {
   GtkTreeIter child, parent = *iter;
   do
@@ -625,7 +625,7 @@ static void _calculate_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, gbool
 }
 
 // reset the indeterminated selection (1) on the tree
-static void _reset_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean root)
+static void _reset_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, const gboolean root)
 {
   GtkTreeIter child, parent = *iter;
   do
@@ -645,7 +645,7 @@ static void _reset_sel_on_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean 
 }
 
 // reset all selection (1 & 2) on the tree
-static void _reset_sel_on_path_full(GtkTreeModel *model, GtkTreeIter *iter, gboolean root)
+static void _reset_sel_on_path_full(GtkTreeModel *model, GtkTreeIter *iter, const gboolean root)
 {
   GtkTreeIter child, parent = *iter;
   do
@@ -948,6 +948,8 @@ void *get_params(dt_lib_module_t *self, int *size)
       params = dt_util_dstrcat(params, "%d,", ((dt_tag_t *)taglist->data)->id);
     }
     dt_tag_free_result(&tags);
+    if(params == NULL)
+      return NULL;
     *size = strlen(params);
     params[*size-1]='\0';
   }
@@ -965,26 +967,41 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
     gchar **tokens = g_strsplit(buf, ",", 0);
     if(tokens)
     {
+      GList *tags = NULL;
       gchar **entry = tokens;
-      gboolean some_attached = FALSE;
       while(*entry)
       {
-        guint tagid = strtoul(*entry, NULL, 0);
-        // attach tag on images to act on
-        const gboolean attached = dt_tag_attach(tagid, -1, TRUE, TRUE);
-        if(attached) some_attached = TRUE;
-
-        _update_attached_count(tagid, d->dictionary_view, d->tree_flag);
-
+        const guint tagid = strtoul(*entry, NULL, 0);
+        tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
         entry++;
       }
       g_strfreev(tokens);
-      if(some_attached)
+      GList *tags_r = dt_tag_get_tags(-1, TRUE);
+      const GList *imgs = dt_view_get_images_to_act_on(TRUE, FALSE);
+      dt_tag_set_tags(tags, imgs, TRUE, TRUE, TRUE);
+      gboolean change = FALSE;
+      for(GList *tag = tags; tag; tag = g_list_next(tag))
+      {
+        _update_attached_count(GPOINTER_TO_INT(tag->data), d->dictionary_view, d->tree_flag);
+        change = TRUE;
+      }
+      for(GList *tag = tags_r; tag; tag = g_list_next(tag))
+      {
+        if(!g_list_find(tags, tag->data))
+        {
+          _update_attached_count(GPOINTER_TO_INT(tag->data), d->dictionary_view, d->tree_flag);
+          change = TRUE;
+        }
+      }
+
+      if(change)
       {
         _init_treeview(self, 0);
         _raise_signal_tag_changed(self);
         dt_image_synch_xmp(-1);
       }
+      g_list_free(tags);
+      g_list_free(tags_r);
     }
   }
   return 0;
@@ -1379,9 +1396,10 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, tagid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    tagged_images = g_list_append(tagged_images, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+    tagged_images = g_list_prepend(tagged_images, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
   }
   sqlite3_finalize(stmt);
+  tagged_images = g_list_reverse(tagged_images); // list was built in reverse order, so unreverse it
 
   dt_tag_remove(tagid, TRUE);
   dt_control_log(_("tag %s removed"), tagname);
@@ -2942,7 +2960,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(hbox, w, TRUE, TRUE, 0);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
   g_signal_connect(G_OBJECT(w), "changed", G_CALLBACK(_tag_name_changed), (gpointer)self);
-  g_signal_connect(G_OBJECT(w), "key-press-event", G_CALLBACK(_key_pressed), (gpointer)self);
   d->entry = GTK_ENTRY(w);
   dt_gui_key_accel_block_on_focus_connect(GTK_WIDGET(d->entry));
 
@@ -3069,6 +3086,9 @@ void gui_init(dt_lib_module_t *self)
     d->completion = completion;
   }
   else d->completion = NULL;
+
+  // completion works better if this happens after completion connection
+  g_signal_connect(G_OBJECT(d->entry), "key-press-event", G_CALLBACK(_key_pressed), (gpointer)self);
 
   /* connect to mouse over id */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,

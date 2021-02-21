@@ -252,28 +252,28 @@ static void _brush_catmull_to_bezier(float x1, float y1, float x2, float y2, flo
 /** initialise all control points to eventually match a catmull-rom like spline */
 static void _brush_init_ctrl_points(dt_masks_form_t *form)
 {
-  // if we have less that 2 points, what to do ??
-  if(g_list_length(form->points) < 2) return;
+  // if we have less than 2 points, what to do ??
+  const guint nb = g_list_length(form->points);
+  if(nb < 2) return;
 
   // we need extra points to deal with curve ends
   dt_masks_point_brush_t start_point[2], end_point[2];
 
-  const guint nb = g_list_length(form->points);
-  for(int k = 0; k < nb; k++)
+  for (GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
   {
-    dt_masks_point_brush_t *point3 = (dt_masks_point_brush_t *)g_list_nth_data(form->points, k);
-    // if the point as not be set manually, we redfine it
+    dt_masks_point_brush_t *point3 = (dt_masks_point_brush_t *)form_points->data;
+    // if the point has not been set manually, we redefine it
     if(point3->state & DT_MASKS_POINT_STATE_NORMAL)
     {
       // we want to get point-2, point-1, point+1, point+2
-      dt_masks_point_brush_t *point1
-          = k - 2 >= 0 ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, k - 2) : NULL;
-      dt_masks_point_brush_t *point2
-          = k - 1 >= 0 ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, k - 1) : NULL;
-      dt_masks_point_brush_t *point4
-          = k + 1 < nb ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, k + 1) : NULL;
-      dt_masks_point_brush_t *point5
-          = k + 2 < nb ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, k + 2) : NULL;
+      GList *const prev = g_list_previous(form_points);             // point-1
+      GList *const prevprev = prev ? g_list_previous(prev) : NULL;  // point-2
+      GList *const next = g_list_next(form_points);                 // point+1
+      GList *const nextnext = next ? g_list_next(next) : NULL;      // point+2
+      dt_masks_point_brush_t *point1 = prevprev ? prevprev->data : NULL;
+      dt_masks_point_brush_t *point2 = prev ? prev->data : NULL;
+      dt_masks_point_brush_t *point4 = next ? next->data : NULL;
+      dt_masks_point_brush_t *point5 = nextnext ? nextnext->data : NULL;
 
       // deal with end points: make both extending points mirror their neighborhood
       if(point1 == NULL && point2 == NULL)
@@ -542,9 +542,11 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
                                     float **border, int *border_count, float **payload, int *payload_count,
                                     int source)
 {
-  double start2 = dt_get_wtime();
+  double start2 = 0.0;
+  if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  float wd = pipe->iwidth, ht = pipe->iheight;
+  const float wd = pipe->iwidth;
+  const float ht = pipe->iheight;
 
   *points = NULL;
   *points_count = 0;
@@ -582,18 +584,16 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
   // we store all points
   float dx = 0.0f, dy = 0.0f;
 
-  const guint nb = g_list_length(form->points);
-
-  if(source && nb > 0)
+  if(source && form->points)
   {
-    dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)g_list_nth_data(form->points, 0);
+    dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)form->points->data;
     dx = (pt->corner[0] - form->source[0]) * wd;
     dy = (pt->corner[1] - form->source[1]) * ht;
   }
 
-  for(int k = 0; k < nb; k++)
+  for(GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
   {
-    dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)g_list_nth_data(form->points, k);
+    dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)form_points->data;
     dt_masks_dynbuf_add(dpoints, pt->ctrl1[0] * wd - dx);
     dt_masks_dynbuf_add(dpoints, pt->ctrl1[1] * ht - dy);
     dt_masks_dynbuf_add(dpoints, pt->corner[0] * wd - dx);
@@ -601,6 +601,8 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
     dt_masks_dynbuf_add(dpoints, pt->ctrl2[0] * wd - dx);
     dt_masks_dynbuf_add(dpoints, pt->ctrl2[1] * ht - dy);
   }
+
+  const guint nb = g_list_length(form->points);
 
   // for the border, we store value too
   if(dborder)
@@ -634,9 +636,11 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
   int start_stamp = 0;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
+  {
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points init took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
-  start2 = dt_get_wtime();
+    start2 = dt_get_wtime();
+  }
 
   // we render all segments first upwards, then downwards
   for(int n = 0; n < 2 * nb; n++)
@@ -836,9 +840,11 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
   // *payload_count : -1);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
+  {
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points point recurs %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
-  start2 = dt_get_wtime();
+    start2 = dt_get_wtime();
+  }
 
   // and we transform them with all distorted modules
   if(dt_dev_distort_transform_plus(dev, pipe, iop_order, transf_direction, *points, *points_count))
@@ -848,7 +854,6 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, co
       if(darktable.unmuted & DT_DEBUG_PERF)
         dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points transform took %0.04f sec\n", form->name,
                  dt_get_wtime() - start2);
-//       start2 = dt_get_wtime();
       return 1;
     }
   }
@@ -978,19 +983,14 @@ static int dt_brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, 
    frills */
 static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *form, int segment)
 {
-  const guint nb = g_list_length(form->points);
-  const int pos0 = segment;
-  const int pos1 = segment + 1;
-  const int pos2 = segment + 2;
-  const int pos3 = segment + 3;
-
-  dt_masks_point_brush_t *point0 = (dt_masks_point_brush_t *)g_list_nth_data(form->points, pos0);
-  dt_masks_point_brush_t *point1 = pos1 < nb ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, pos1)
-                                             : point0;
-  dt_masks_point_brush_t *point2 = pos2 < nb ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, pos2)
-                                             : point1;
-  dt_masks_point_brush_t *point3 = pos3 < nb ? (dt_masks_point_brush_t *)g_list_nth_data(form->points, pos3)
-                                             : point2;
+  GList *pt = g_list_nth(form->points, segment);
+  dt_masks_point_brush_t *point0 = (dt_masks_point_brush_t *)pt->data;
+  if(pt) pt = g_list_next(pt);
+  dt_masks_point_brush_t *point1 = pt ? (dt_masks_point_brush_t *)pt->data : point0;
+  if(pt) pt = g_list_next(pt);
+  dt_masks_point_brush_t *point2 = pt ? (dt_masks_point_brush_t *)pt->data : point1;
+  if(pt) pt = g_list_next(pt);
+  dt_masks_point_brush_t *point3 = pt ? (dt_masks_point_brush_t *)pt->data : point2;
 
   float tmin = 0;
   float dmin = FLT_MAX;
@@ -1021,9 +1021,8 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   {
     if((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
     {
+      const float amount = up ? 0.97f : 1.03f;
       float masks_hardness;
-      float amount = 1.03f;
-      if(up) amount = 0.97f;
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
@@ -1046,9 +1045,8 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
     }
     else if(state == 0)
     {
+      const float amount = up ? 0.97f : 1.03f;
       float masks_border;
-      float amount = 1.03f;
-      if(up) amount = 0.97f;
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
@@ -1088,21 +1086,19 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
     }
     else
     {
-      const guint nb = g_list_length(form->points);
       // resize don't care where the mouse is inside a shape
       if((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
       {
-        float amount = 1.03f;
-        if(up) amount = 0.97f;
+        const float amount = up ? 0.97f : 1.03f;
         // do not exceed upper limit of 1.0 and lower limit of 0.004
-        for(int k = 0; k < nb; k++)
+        for(GList *l = form->points; l; l = g_list_next(l))
         {
-          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, k);
+          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
           if(amount > 1.0f && (point->border[0] > 1.0f || point->border[1] > 1.0f)) return 1;
         }
-        for(int k = 0; k < nb; k++)
+        for(GList *l = form->points; l; l = g_list_next(l))
         {
-          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, k);
+          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
           point->border[0] *= amount;
           point->border[1] *= amount;
         }
@@ -1123,11 +1119,10 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
       }
       else
       {
-        float amount = 1.03f;
-        if(up) amount = 0.97f;
-        for(int k = 0; k < nb; k++)
+        const float amount = up ? 0.97f : 1.03f;
+        for(GList *l = form->points; l; l = g_list_next(l))
         {
-          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, k);
+          dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
           const float masks_hardness = point->hardness;
           point->hardness = MAX(HARDNESS_MIN, MIN(masks_hardness * amount, HARDNESS_MAX));
           dt_toast_log(_("hardness: %3.2f%%"), masks_hardness*100.0f);
@@ -1581,16 +1576,13 @@ static int dt_brush_events_button_released(struct dt_iop_module_t *module, float
 
       float factor = 0.01f;
       char *smoothing = dt_conf_get_string("brush_smoothing");
-      if(smoothing)
-      {
-        if(!strcmp(smoothing, "low"))
-          factor = 0.0025f;
-        else if(!strcmp(smoothing, "medium"))
-          factor = 0.01f;
-        else if(!strcmp(smoothing, "high"))
-          factor = 0.04f;
-        g_free(smoothing);
-      }
+      if(!strcmp(smoothing, "low"))
+        factor = 0.0025f;
+      else if(!strcmp(smoothing, "medium"))
+        factor = 0.01f;
+      else if(!strcmp(smoothing, "high"))
+        factor = 0.04f;
+      g_free(smoothing);
 
       // accuracy level for node elimination, dependent on brush size
       const float epsilon2 = factor * MAX(BORDER_MIN, masks_border) * MAX(BORDER_MIN, masks_border);
@@ -1861,7 +1853,8 @@ static int dt_brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
   const int closeup = dt_control_get_dev_closeup();
   const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
-  const float as = 0.005f / zoom_scale * darktable.develop->preview_pipe->backbuf_width;
+  const float as = DT_PIXEL_APPLY_DPI(5) / zoom_scale;
+
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
@@ -2525,7 +2518,7 @@ static int dt_brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
   float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f;
   xmin = ymin = FLT_MAX;
   xmax = ymax = FLT_MIN;
-  guint nb_corner = g_list_length(form->points);
+  const guint nb_corner = g_list_length(form->points);
   for(int i = nb_corner * 3; i < border_count; i++)
   {
     // we look at the borders
@@ -2575,7 +2568,7 @@ static int dt_brush_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f;
   xmin = ymin = FLT_MAX;
   xmax = ymax = FLT_MIN;
-  guint nb_corner = g_list_length(form->points);
+  const guint nb_corner = g_list_length(form->points);
   for(int i = nb_corner * 3; i < border_count; i++)
   {
     // we look at the borders
@@ -2639,8 +2632,9 @@ static int dt_brush_get_mask(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
   if(!module) return 0;
-  double start = dt_get_wtime();
-  double start2;
+  double start = 0.0;
+  double start2 = 0.0;
+  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
 
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
@@ -2655,14 +2649,16 @@ static int dt_brush_get_mask(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
+  {
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush points took %0.04f sec\n", form->name, dt_get_wtime() - start);
-  start = start2 = dt_get_wtime();
+    start = start2 = dt_get_wtime();
+  }
 
   // now we want to find the area, so we search min/max points
   float xmin, xmax, ymin, ymax;
   xmin = ymin = FLT_MAX;
   xmax = ymax = FLT_MIN;
-  guint nb_corner = g_list_length(form->points);
+  const guint nb_corner = g_list_length(form->points);
   for(int i = nb_corner * 3; i < border_count; i++)
   {
     // we look at the borders
@@ -2692,7 +2688,6 @@ static int dt_brush_get_mask(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_fill min max took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
-//   start2 = dt_get_wtime();
 
   // we allocate the buffer
   const size_t bufsize = (size_t)(*width) * (*height);
@@ -2777,8 +2772,9 @@ static int dt_brush_get_mask_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t
                                  dt_masks_form_t *form, const dt_iop_roi_t *roi, float *buffer)
 {
   if(!module) return 0;
-  double start = dt_get_wtime();
-  double start2;
+  double start = 0.0;
+  double start2 = 0.0;
+  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
 
   const int px = roi->x;
   const int py = roi->y;
@@ -2801,8 +2797,10 @@ static int dt_brush_get_mask_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
+  {
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush points took %0.04f sec\n", form->name, dt_get_wtime() - start);
-  start = start2 = dt_get_wtime();
+    start = start2 = dt_get_wtime();
+  }
 
   // empty the output buffer
   dt_iop_image_fill(buffer, 0.0f, width, height, 1);
@@ -2855,7 +2853,6 @@ static int dt_brush_get_mask_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_fill min max took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
-//   start2 = dt_get_wtime();
 
   // check if the path completely lies outside of roi -> we're done/mask remains empty
   if(xmax < 0 || ymax < 0 || xmin >= width || ymin >= height)

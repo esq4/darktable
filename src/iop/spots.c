@@ -333,7 +333,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   dt_develop_blend_params_t *bp = self->blend_params;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
   //only toggle shape show button if shapes exist
-  if(grp && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0)
+  if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                  (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
@@ -539,7 +539,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
 
       if(d->clone_algo[pos] == 1 && (form->type & DT_MASKS_CIRCLE))
       {
-        dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)g_list_nth_data(form->points, 0);
+        dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)form->points->data;
 
         float points[4];
         masks_point_denormalize(piece, roi_in, circle->center, 1, points);
@@ -705,7 +705,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       dt_develop_blend_params_t *bp = self->blend_params;
       dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
       //only toggle shape show button if shapes exist
-      if(grp && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0)
+      if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
       {
         if(bd->masks_shown == DT_MASKS_EDIT_OFF) dt_masks_set_edit_mode(self, DT_MASKS_EDIT_FULL);
 
@@ -774,7 +774,7 @@ void gui_update(dt_iop_module_t *self)
   if(darktable.develop->history_updating) bd->masks_shown = DT_MASKS_EDIT_OFF;
 
   //only toggle shape show button if shapes exist
-  if(grp && (grp->type & DT_MASKS_GROUP) && g_list_length(grp->points) > 0)
+  if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                  (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
@@ -798,21 +798,21 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(hbox, _("click on a shape and drag on canvas.\nuse the mouse wheel "
                                       "to adjust size.\nright click to remove a shape."));
 
-  g->bt_edit_masks = dt_iop_togglebutton_new(self, N_("show and edit shapes"), NULL,
+  g->bt_edit_masks = dt_iop_togglebutton_new(self, NULL, N_("show and edit shapes"), NULL,
                                              G_CALLBACK(_edit_masks), TRUE, 0, 0,
                                              dtgtk_cairo_paint_masks_eye, hbox);
 
-  g->bt_path = dt_iop_togglebutton_new(self, N_("add path"), N_("add multiple paths"),
+  g->bt_path = dt_iop_togglebutton_new(self, N_("shapes"), N_("add path"), N_("add multiple paths"),
                                        G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
                                        dtgtk_cairo_paint_masks_path, hbox);
 
-  g->bt_ellipse = dt_iop_togglebutton_new(self, N_("add ellipse"), N_("add multiple ellipses"),
-                                       G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
-                                       dtgtk_cairo_paint_masks_ellipse, hbox);
+  g->bt_ellipse = dt_iop_togglebutton_new(self, N_("shapes"), N_("add ellipse"), N_("add multiple ellipses"),
+                                          G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
+                                          dtgtk_cairo_paint_masks_ellipse, hbox);
 
-  g->bt_circle = dt_iop_togglebutton_new(self, N_("add circle"), N_("add multiple circles"),
-                                       G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
-                                       dtgtk_cairo_paint_masks_circle, hbox);
+  g->bt_circle = dt_iop_togglebutton_new(self, N_("shapes"), N_("add circle"), N_("add multiple circles"),
+                                         G_CALLBACK(_add_shape_callback), TRUE, 0, 0,
+                                         dtgtk_cairo_paint_masks_circle, hbox);
 
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(g->label), FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);

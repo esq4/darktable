@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2018-2020 darktable developers.
+    Copyright (C) 2018-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -85,6 +85,7 @@
 #include "common/interpolation.h"
 #include "common/luminance_mask.h"
 #include "common/opencl.h"
+#include "common/collection.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/blend.h"
@@ -1644,7 +1645,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft(g->exposure_boost, p->exposure_boost);
 
   show_guiding_controls(self);
-  gui_cache_init(self);
+  invalidate_luminance_cache(self);
 
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->show_luminance_mask), g->mask_display);
 }
@@ -2365,7 +2366,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     g->mask_display = FALSE;
     dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->show_luminance_mask), FALSE);
     dt_dev_reprocess_center(self->dev);
-    dt_control_hinter_message(darktable.control, "");
+    dt_collection_hint_message(darktable.collection);
   }
   else
   {
@@ -3116,17 +3117,15 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_step(g->speculars, .05);
   dt_bauhaus_slider_set_format(g->speculars, _("%+.2f EV"));
 
-  ++darktable.bauhaus->skip_accel;
-  dt_bauhaus_widget_set_label(g->noise, NULL, N_("-8 EV"));
-  dt_bauhaus_widget_set_label(g->ultra_deep_blacks, NULL, N_("-7 EV"));
-  dt_bauhaus_widget_set_label(g->deep_blacks, NULL, N_("-6 EV"));
-  dt_bauhaus_widget_set_label(g->blacks, NULL, N_("-5 EV"));
-  dt_bauhaus_widget_set_label(g->shadows, NULL, N_("-4 EV"));
-  dt_bauhaus_widget_set_label(g->midtones, NULL, N_("-3 EV"));
-  dt_bauhaus_widget_set_label(g->highlights, NULL, N_("-2 EV"));
-  dt_bauhaus_widget_set_label(g->whites, NULL, N_("-1 EV"));
-  dt_bauhaus_widget_set_label(g->speculars, NULL, N_("+0 EV"));
-  --darktable.bauhaus->skip_accel;
+  dt_bauhaus_widget_set_label(g->noise, N_("simple"), N_("-8 EV"));
+  dt_bauhaus_widget_set_label(g->ultra_deep_blacks, N_("simple"), N_("-7 EV"));
+  dt_bauhaus_widget_set_label(g->deep_blacks, N_("simple"), N_("-6 EV"));
+  dt_bauhaus_widget_set_label(g->blacks, N_("simple"), N_("-5 EV"));
+  dt_bauhaus_widget_set_label(g->shadows, N_("simple"), N_("-4 EV"));
+  dt_bauhaus_widget_set_label(g->midtones, N_("simple"), N_("-3 EV"));
+  dt_bauhaus_widget_set_label(g->highlights, N_("simple"), N_("-2 EV"));
+  dt_bauhaus_widget_set_label(g->whites, N_("simple"), N_("-1 EV"));
+  dt_bauhaus_widget_set_label(g->speculars, N_("simple"), N_("+0 EV"));
 
   // Advanced view
 
@@ -3134,7 +3133,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK
+  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK
                                                  | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                                  | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK
                                                  | darktable.gui->scroll_mask);
@@ -3278,6 +3277,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_started_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_preview_pipe_finished_callback), self);
 
+  if(g->thumb_preview_buf) dt_free_align(g->thumb_preview_buf);
+  if(g->full_preview_buf) dt_free_align(g->full_preview_buf);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);

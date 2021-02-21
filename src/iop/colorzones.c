@@ -2387,7 +2387,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(c->colorpicker_set_values), "toggled", G_CALLBACK(_color_picker_callback), self);
 
   // the nice graph
-  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
+  c->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(9.0 / 16.0));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(c->area), TRUE, TRUE, 0);
 
   GtkWidget *dabox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -2430,7 +2430,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(c->strength, "%.01f%%");
   gtk_widget_set_tooltip_text(c->strength, _("make effect stronger or weaker"));
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
                                                  | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                                  | GDK_LEAVE_NOTIFY_MASK | GDK_SCROLL_MASK
                                                  | darktable.gui->scroll_mask);

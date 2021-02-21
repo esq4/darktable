@@ -70,7 +70,9 @@ typedef enum dt_lighttable_layout_t
   DT_LIGHTTABLE_LAYOUT_ZOOMABLE = 0,
   DT_LIGHTTABLE_LAYOUT_FILEMANAGER = 1,
   DT_LIGHTTABLE_LAYOUT_CULLING = 2,
-  DT_LIGHTTABLE_LAYOUT_LAST = 3
+  DT_LIGHTTABLE_LAYOUT_CULLING_DYNAMIC = 3,
+  DT_LIGHTTABLE_LAYOUT_PREVIEW = 4,
+  DT_LIGHTTABLE_LAYOUT_LAST = 5
 } dt_lighttable_layout_t;
 
 typedef enum dt_darkroom_layout_t
@@ -80,13 +82,6 @@ typedef enum dt_darkroom_layout_t
   DT_DARKROOM_LAYOUT_COLOR_ASSESMENT = 1,
   DT_DARKROOM_LAYOUT_LAST = 3
 } dt_darkroom_layout_t;
-
-// flags for culling zoom mode
-typedef enum dt_lighttable_culling_zoom_mode_t
-{
-  DT_LIGHTTABLE_ZOOM_FIXED = 0,
-  DT_LIGHTTABLE_ZOOM_DYNAMIC = 1
-} dt_lighttable_culling_zoom_mode_t;
 
 // mouse actions struct
 typedef enum dt_mouse_action_type_t
@@ -333,8 +328,8 @@ typedef struct dt_view_manager_t
       void (*culling_init_mode)(struct dt_view_t *view);
       void (*culling_preview_refresh)(struct dt_view_t *view);
       void (*culling_preview_reload_overlays)(struct dt_view_t *view);
-      dt_lighttable_culling_zoom_mode_t (*get_zoom_mode)(struct dt_lib_module_t *module);
       gboolean (*get_preview_state)(struct dt_view_t *view);
+      void (*set_preview_state)(struct dt_view_t *view, gboolean state, gboolean focus);
       void (*change_offset)(struct dt_view_t *view, gboolean reset, gint imgid);
     } lighttable;
 
@@ -361,7 +356,7 @@ typedef struct dt_view_manager_t
       struct dt_view_t *view;
       void (*center_on_location)(const dt_view_t *view, gdouble lon, gdouble lat, double zoom);
       void (*center_on_bbox)(const dt_view_t *view, gdouble lon1, gdouble lat1, gdouble lon2, gdouble lat2);
-      void (*show_osd)(const dt_view_t *view, gboolean enabled);
+      void (*show_osd)(const dt_view_t *view);
       void (*set_map_source)(const dt_view_t *view, OsmGpsMapSource_t map_source);
       GObject *(*add_marker)(const dt_view_t *view, dt_geo_map_display_t type, GList *points);
       gboolean (*remove_marker)(const dt_view_t *view, dt_geo_map_display_t type, GObject *marker);
@@ -454,12 +449,12 @@ dt_lighttable_layout_t dt_view_lighttable_get_layout(dt_view_manager_t *vm);
 dt_darkroom_layout_t dt_view_darkroom_get_layout(dt_view_manager_t *vm);
 /** get the lighttable full preview state */
 gboolean dt_view_lighttable_preview_state(dt_view_manager_t *vm);
+/** set the lighttable full preview state */
+void dt_view_lighttable_set_preview_state(dt_view_manager_t *vm, gboolean state, gboolean focus);
 /** sets the lighttable image in row zoom */
 void dt_view_lighttable_set_zoom(dt_view_manager_t *vm, gint zoom);
 /** gets the lighttable image in row zoom */
 gint dt_view_lighttable_get_zoom(dt_view_manager_t *vm);
-/** gets the culling zoom mode */
-dt_lighttable_culling_zoom_mode_t dt_view_lighttable_get_culling_zoom_mode(dt_view_manager_t *vm);
 /** reinit culling for new mode */
 void dt_view_lighttable_culling_init_mode(dt_view_manager_t *vm);
 /** force refresh of culling and/or preview */
@@ -484,7 +479,7 @@ void dt_view_audio_stop(dt_view_manager_t *vm);
 #ifdef HAVE_MAP
 void dt_view_map_center_on_location(const dt_view_manager_t *vm, gdouble lon, gdouble lat, gdouble zoom);
 void dt_view_map_center_on_bbox(const dt_view_manager_t *vm, gdouble lon1, gdouble lat1, gdouble lon2, gdouble lat2);
-void dt_view_map_show_osd(const dt_view_manager_t *vm, gboolean enabled);
+void dt_view_map_show_osd(const dt_view_manager_t *vm);
 void dt_view_map_set_map_source(const dt_view_manager_t *vm, OsmGpsMapSource_t map_source);
 GObject *dt_view_map_add_marker(const dt_view_manager_t *vm, dt_geo_map_display_t type, GList *points);
 gboolean dt_view_map_remove_marker(const dt_view_manager_t *vm, dt_geo_map_display_t type, GObject *marker);

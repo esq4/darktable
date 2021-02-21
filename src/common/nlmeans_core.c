@@ -157,6 +157,21 @@ static inline float pixel_difference(const float* const pix1, const float* pix2,
   return sum[0] + sum[1] + sum[2];
 }
 
+// optimized: pixel_difference(pix1, pix2, norm) - pixel_difference(pix3, pix4, norm)
+static inline float diff_of_pixels_diff(const float* const pix1, const float* pix2,
+                                        const float* const pix3, const float* pix4,
+                                        const float norm[4])
+{
+  float DT_ALIGNED_PIXEL sum[4] = { 0.f, 0.f, 0.f, 0.f };
+  for_each_channel(i, aligned(sum:16))
+  {
+    const float diff1 = pix1[i] - pix2[i];
+    const float diff2 = pix3[i] - pix4[i];
+    sum[i] = (diff1 * diff1 - diff2 * diff2) * norm[i];
+  }
+  return sum[0] + sum[1] + sum[2];
+}
+
 #if defined(__SSE2__)
 // compute the channel-normed squared difference between two pixels; don't do horizontal sum until later
 static inline __m128 channel_difference_sse2(const float* const pix1, const float* pix2, const float norm[4])
@@ -370,6 +385,7 @@ static int compute_slice_width(const int width)
   return sl_width;
 }
 
+__DT_CLONE_TARGETS__
 void nlmeans_denoise(const float *const inbuf, float *const outbuf,
                      const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                      const dt_nlmeans_param_t *const params)
@@ -396,15 +412,14 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 #else
   const size_t scratch_size = SLICE_WIDTH + 2*radius + 1 + 48; // getting false sharing without the +48....
 #endif /* CACHE_PIXDIFFS */
-  const size_t padded_scratch_size = 16*((scratch_size+15)/16); // round up to a full cache line
-  const size_t numthreads = dt_get_num_threads() ;
-  float *scratch_buf = dt_alloc_align_float(numthreads * padded_scratch_size);
+  size_t padded_scratch_size;
+  float *const restrict scratch_buf = dt_alloc_perthread_float(scratch_size, &padded_scratch_size);
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) num_threads(darktable.num_openmp_threads) \
-      dt_omp_firstprivate(patches, num_patches, scratch_buf, chk_height, chk_width, radius) \
-      dt_omp_sharedconst(params, padded_scratch_size, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
+      dt_omp_firstprivate(patches, num_patches, scratch_buf, padded_scratch_size, chk_height, chk_width, radius) \
+      dt_omp_sharedconst(params, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
       schedule(static) \
       collapse(2)
 #endif
@@ -414,8 +429,8 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
     {
       // locate our scratch space within the big buffer allocated above
       // we'll offset by chunk_left so that we don't have to subtract on every access
-      size_t tnum = dt_get_thread_num();
-      float *const col_sums = scratch_buf + tnum * padded_scratch_size + (radius+1) - chunk_left;
+      float *const restrict tmpbuf = dt_get_perthread(scratch_buf, padded_scratch_size);
+      float *const col_sums =  tmpbuf + (radius+1) - chunk_left;
       // determine which horizontal slice of the image to process
       const int chunk_bot = MIN(chunk_top + chk_height, roi_out->height);
       // determine which vertical slice of the image to process
@@ -529,8 +544,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 #else
               const float *const top_px = top_row + 4*col;
               const float *const bot_px = bot_row + 4*col;
-              const float diff = (pixel_difference(bot_px,bot_px+offset,params->norm)
-                                  - pixel_difference(top_px,top_px+offset,params->norm));
+              const float diff = diff_of_pixels_diff(bot_px,bot_px+offset,top_px,top_px+offset,params->norm);
               _mm_prefetch(bot_px+stride, _MM_HINT_T0);
               col_sums[col] += diff;
 #endif /* CACHE_PIXDIFFS */
@@ -622,15 +636,14 @@ void nlmeans_denoise_sse2(const float *const inbuf, float *const outbuf,
 #else
   const size_t scratch_size = SLICE_WIDTH + 2*radius + 1 + 48; // getting false sharing without the +48....
 #endif /* CACHE_PIXDIFFS_SSE */
-  const size_t padded_scratch_size = 16*((scratch_size+15)/16); // round up to a full cache line
-  const size_t numthreads = dt_get_num_threads() ;
-  float *scratch_buf = dt_alloc_align_float((size_t)numthreads * padded_scratch_size);
+  size_t padded_scratch_size;
+  float *const restrict scratch_buf = dt_alloc_perthread_float(scratch_size, &padded_scratch_size);
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);
 #ifdef _OPENMP
 #pragma omp parallel for default(none) num_threads(darktable.num_openmp_threads) \
-      dt_omp_firstprivate(patches, num_patches, scratch_buf, chk_height, chk_width, radius) \
-      dt_omp_sharedconst(params, padded_scratch_size, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
+      dt_omp_firstprivate(patches, num_patches, scratch_buf, padded_scratch_size, chk_height, chk_width, radius) \
+      dt_omp_sharedconst(params, roi_out, outbuf, inbuf, stride, center_norm, skip_blend, weight, invert) \
       schedule(static) \
       collapse(2)
 #endif
@@ -640,8 +653,8 @@ void nlmeans_denoise_sse2(const float *const inbuf, float *const outbuf,
     {
       // locate our scratch space within the big buffer allocated above
       // we'll offset by chunk_left so that we don't have to subtract on every access
-      size_t tnum = dt_get_thread_num();
-      float *const col_sums = scratch_buf + tnum * padded_scratch_size + (radius+1) - chunk_left;
+      float *const restrict tmpbuf = dt_get_perthread(scratch_buf, padded_scratch_size);
+      float *const col_sums =  tmpbuf + (radius+1) - chunk_left;
       // determine which horizontal slice of the image to process
       const int chunk_bot = MIN(chunk_top + chk_height, roi_out->height);
       // determine which vertical slice of the image to process

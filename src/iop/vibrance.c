@@ -57,6 +57,10 @@ typedef struct dt_iop_vibrance_global_data_t
   int kernel_vibrance;
 } dt_iop_vibrance_global_data_t;
 
+const char *deprecated_msg()
+{
+  return _("this module is deprecated. please use the vibrance rgb module instead.");
+}
 
 const char *name()
 {
@@ -70,7 +74,8 @@ const char *aliases()
 
 int flags()
 {
-  return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
+  return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING
+    | IOP_FLAGS_DEPRECATED;
 }
 
 int default_group()

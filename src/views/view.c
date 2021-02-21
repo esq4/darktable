@@ -103,6 +103,8 @@ void dt_view_manager_gui_init(dt_view_manager_t *vm)
 void dt_view_manager_cleanup(dt_view_manager_t *vm)
 {
   for(GList *iter = vm->views; iter; iter = g_list_next(iter)) dt_view_unload_module((dt_view_t *)iter->data);
+  g_list_free_full(vm->views, free);
+  vm->views = NULL;
 }
 
 const dt_view_t *dt_view_manager_get_current_view(dt_view_manager_t *vm)
@@ -842,6 +844,8 @@ const GList *dt_view_get_images_to_act_on(const gboolean only_visible, const gbo
     {
       // collumn 3
       _images_to_act_on_insert_in_list(&l, mouseover, only_visible);
+      // be absolutely sure we have the id in the list (in darkroom, the active image can be out of collection)
+      if(!only_visible) _images_to_act_on_insert_in_list(&l, mouseover, TRUE);
     }
   }
   else
@@ -855,6 +859,8 @@ const GList *dt_view_get_images_to_act_on(const gboolean only_visible, const gbo
       {
         const int id = GPOINTER_TO_INT(ll->data);
         _images_to_act_on_insert_in_list(&l, id, only_visible);
+        // be absolutely sure we have the id in the list (in darkroom, the active image can be out of collection)
+        if(!only_visible) _images_to_act_on_insert_in_list(&l, id, TRUE);
         ll = g_slist_next(ll);
       }
     }
@@ -1280,14 +1286,6 @@ gint dt_view_lighttable_get_zoom(dt_view_manager_t *vm)
     return 10;
 }
 
-dt_lighttable_culling_zoom_mode_t dt_view_lighttable_get_culling_zoom_mode(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module)
-    return vm->proxy.lighttable.get_zoom_mode(vm->proxy.lighttable.module);
-  else
-    return DT_LIGHTTABLE_ZOOM_FIXED;
-}
-
 void dt_view_lighttable_culling_init_mode(dt_view_manager_t *vm)
 {
   if(vm->proxy.lighttable.module) vm->proxy.lighttable.culling_init_mode(vm->proxy.lighttable.view);
@@ -1317,6 +1315,11 @@ gboolean dt_view_lighttable_preview_state(dt_view_manager_t *vm)
     return vm->proxy.lighttable.get_preview_state(vm->proxy.lighttable.view);
   else
     return FALSE;
+}
+
+void dt_view_lighttable_set_preview_state(dt_view_manager_t *vm, gboolean state, gboolean focus)
+{
+  if(vm->proxy.lighttable.module) vm->proxy.lighttable.set_preview_state(vm->proxy.lighttable.view, state, focus);
 }
 
 void dt_view_lighttable_change_offset(dt_view_manager_t *vm, gboolean reset, gint imgid)
@@ -1359,9 +1362,9 @@ void dt_view_map_center_on_bbox(const dt_view_manager_t *vm, gdouble lon1, gdoub
   if(vm->proxy.map.view) vm->proxy.map.center_on_bbox(vm->proxy.map.view, lon1, lat1, lon2, lat2);
 }
 
-void dt_view_map_show_osd(const dt_view_manager_t *vm, gboolean enabled)
+void dt_view_map_show_osd(const dt_view_manager_t *vm)
 {
-  if(vm->proxy.map.view) vm->proxy.map.show_osd(vm->proxy.map.view, enabled);
+  if(vm->proxy.map.view) vm->proxy.map.show_osd(vm->proxy.map.view);
 }
 
 void dt_view_map_set_map_source(const dt_view_manager_t *vm, OsmGpsMapSource_t map_source)

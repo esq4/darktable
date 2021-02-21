@@ -158,9 +158,10 @@ static void _dt_style_cleanup_multi_instance(int id)
 
     d->rowid = sqlite3_column_int(stmt, 0);
     d->mi = last_mi;
-    list = g_list_append(list, d);
+    list = g_list_prepend(list, d);
   }
   sqlite3_finalize(stmt);
+  list = g_list_reverse(list);   // list was built in reverse order, so un-reverse it
 
   /* 2. now update all multi_instance values previously recorded */
 
@@ -316,7 +317,7 @@ static void  _dt_style_update_iop_order(const gchar *name, const int id, const i
   // if we update or if the style does not contains an order then the
   // copy must be done using the imgid iop-order.
 
-  if(update_iop_order || g_list_length(iop_list) == 0)
+  if(update_iop_order || iop_list == NULL)
     iop_list = dt_ioppr_get_iop_order_list(imgid, FALSE);
 
   gchar *iop_list_txt = dt_ioppr_serialize_text_iop_order_list(iop_list);
@@ -602,7 +603,7 @@ void dt_styles_apply_to_list(const char *name, const GList *list, gboolean dupli
      do that only in the darkroom as there is nothing to be saved
      when in the lighttable (and it would write over current history stack) */
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
+  if(cv->view(cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
 
   const int mode = dt_conf_get_int("plugins/lighttable/style/applymode");
 
@@ -904,9 +905,10 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       memcpy(style_item->blendop_params, (void *)sqlite3_column_blob(stmt, 5), style_item->blendop_params_size);
       style_item->iop_order = 0;
 
-      si_list = g_list_append(si_list, style_item);
+      si_list = g_list_prepend(si_list, style_item);
     }
     sqlite3_finalize(stmt);
+    si_list = g_list_reverse(si_list);  // list was built in reverse order, so un-reverse it
 
     dt_ioppr_update_for_style_items(dev_dest, si_list, FALSE);
 
@@ -1132,11 +1134,11 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int imgid)
       item->operation = g_strdup((char *)sqlite3_column_text(stmt, 3));
       item->multi_name = g_strdup((char *)sqlite3_column_text(stmt, 7));
       item->iop_order = sqlite3_column_double(stmt, 8);
-      result = g_list_append(result, item);
+      result = g_list_prepend(result, item);
     }
     sqlite3_finalize(stmt);
   }
-  return result;
+  return g_list_reverse(result);   // list was built in reverse order, so un-reverse it
 }
 
 char *dt_styles_get_item_list_as_string(const char *name)
@@ -1148,8 +1150,9 @@ char *dt_styles_get_item_list_as_string(const char *name)
   do
   {
     dt_style_item_t *item = (dt_style_item_t *)items->data;
-    names = g_list_append(names, g_strdup(item->name));
+    names = g_list_prepend(names, g_strdup(item->name));
   } while((items = g_list_next(items)));
+  names = g_list_reverse(names);  // list was built in reverse order, so un-reverse it
 
   char *result = dt_util_glist_to_str("\n", names);
   g_list_free_full(names, g_free);
@@ -1175,10 +1178,10 @@ GList *dt_styles_get_list(const char *filter)
     dt_style_t *s = g_malloc(sizeof(dt_style_t));
     s->name = g_strdup(name);
     s->description = g_strdup(description);
-    result = g_list_append(result, s);
+    result = g_list_prepend(result, s);
   }
   sqlite3_finalize(stmt);
-  return result;
+  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
 static char *dt_style_encode(sqlite3_stmt *stmt, int row)

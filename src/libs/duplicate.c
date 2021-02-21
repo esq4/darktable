@@ -139,7 +139,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
   // and we remove the image
   dt_control_delete_image(imgid);
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD,
-                             g_list_append(NULL, GINT_TO_POINTER(imgid)));
+                             g_list_prepend(NULL, GINT_TO_POINTER(imgid)));
 }
 
 static void _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventButton *event, dt_lib_module_t *self)
@@ -423,8 +423,8 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     GtkStyleContext *context = gtk_widget_get_style_context(hb);
     gtk_style_context_add_class(context, "dt_overlays_always");
 
-    dt_thumbnail_t *thumb
-        = dt_thumbnail_new(100, 100, imgid, -1, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL, FALSE, TRUE);
+    dt_thumbnail_t *thumb = dt_thumbnail_new(100, 100, IMG_TO_FIT, imgid, -1, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL,
+                                             DT_THUMBNAIL_CONTAINER_LIGHTTABLE, TRUE);
     thumb->sel_mode = DT_THUMBNAIL_SEL_MODE_DISABLED;
     thumb->disable_mouseover = TRUE;
     thumb->disable_actions = TRUE;

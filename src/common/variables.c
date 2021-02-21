@@ -167,10 +167,6 @@ static inline gboolean has_prefix(char **str, const char *prefix)
 
 static char *get_base_value(dt_variables_params_t *params, char **variable)
 {
-#define R(c) ((guint)(c.red * 255))
-#define G(c) ((guint)(c.green * 255))
-#define B(c) ((guint)(c.blue * 255))
-
   char *result = NULL;
   gboolean escape = TRUE;
 
@@ -232,7 +228,7 @@ static char *get_base_value(dt_variables_params_t *params, char **variable)
     if(dt_conf_get_bool("plugins/lighttable/metadata_view/pretty_location")
        && g_strcmp0(params->jobcode, "infos") == 0)
     {
-      result = dt_util_latitude_str(params->data->longitude);
+      result = dt_util_longitude_str(params->data->longitude);
     }
     else
     {
@@ -383,91 +379,25 @@ static char *get_base_value(dt_variables_params_t *params, char **variable)
         break;
     }
   }
-  else if(has_prefix(variable, "LABELS_ICONS") && g_strcmp0(params->jobcode, "infos") == 0)
+  else if((has_prefix(variable, "LABELS_ICONS") ||
+           has_prefix(variable, "LABELS_COLORICONS"))
+          && g_strcmp0(params->jobcode, "infos") == 0)
   {
     escape = FALSE;
     GList *res = dt_metadata_get(params->imgid, "Xmp.darktable.colorlabels", NULL);
     res = g_list_first(res);
     if(res != NULL)
     {
+      gboolean color_dot = has_prefix(variable, "LABELS_COLORICONS");
+      const char *colored_dots[] = { "🔴", "🟡", "🟢", "🔵", "🟣" };
       do
       {
-        const char *lb = (char *)(dt_colorlabels_to_string(GPOINTER_TO_INT(res->data)));
-        if(g_strcmp0(lb, "red") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_RED];
-          result = dt_util_dstrcat(result,
-                                   "<span foreground=\"#%02x%02x%02x\">⬤ </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "yellow") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_YELLOW];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">⬤ </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "green") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_GREEN];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">⬤ </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "blue") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_BLUE];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">⬤ </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "purple") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_PURPLE];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">⬤ </span>",
-                                   R(c), G(c), B(c));
-        }
-      } while((res = g_list_next(res)) != NULL);
-    }
-    g_list_free(res);
-  }
-  else if(has_prefix(variable, "LABELS_COLORICONS") && g_strcmp0(params->jobcode, "infos") == 0)
-  {
-    escape = FALSE;
-    GList *res = dt_metadata_get(params->imgid, "Xmp.darktable.colorlabels", NULL);
-    res = g_list_first(res);
-    if(res != NULL)
-    {
-      do
-      {
-        const char *lb = (char *)(dt_colorlabels_to_string(GPOINTER_TO_INT(res->data)));
-        if(g_strcmp0(lb, "red") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_RED];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02x\">🔴 </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "yellow") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_YELLOW];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">🟡 </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "green") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_GREEN];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">🟢 </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "blue") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_BLUE];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">🔵 </span>",
-                                   R(c), G(c), B(c));
-        }
-        else if(g_strcmp0(lb, "purple") == 0)
-        {
-          const GdkRGBA c = darktable.bauhaus->colorlabels[DT_COLORLABELS_PURPLE];
-          result = dt_util_dstrcat(result, "<span foreground=\"#%02x%02x%02X\">🟣 </span>",
-                                   R(c), G(c), B(c));
-        }
+        const char *dot = color_dot ? colored_dots[GPOINTER_TO_INT(res->data)] : "⬤";
+        const GdkRGBA c = darktable.bauhaus->colorlabels[GPOINTER_TO_INT(res->data)];
+        result = dt_util_dstrcat(result,
+                                 "<span foreground='#%02x%02x%02x'>%s </span>",
+                                 (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255),
+                                 dot);
       } while((res = g_list_next(res)) != NULL);
     }
     g_list_free(res);
@@ -483,8 +413,9 @@ static char *get_base_value(dt_variables_params_t *params, char **variable)
       GList *labels = NULL;
       do
       {
-        labels = g_list_append(labels, (char *)(_(dt_colorlabels_to_string(GPOINTER_TO_INT(res->data)))));
+        labels = g_list_prepend(labels, (char *)(_(dt_colorlabels_to_string(GPOINTER_TO_INT(res->data)))));
       } while((res = g_list_next(res)) != NULL);
+      labels = g_list_reverse(labels);  // list was built in reverse order, so un-reverse it
       result = dt_util_glist_to_str(",", labels);
       g_list_free(labels);
     }
@@ -615,11 +546,6 @@ static char *get_base_value(dt_variables_params_t *params, char **variable)
     return e_res;
   }
   return result;
-
-#undef R
-#undef G
-#undef B
-
 }
 
 // bash style variable manipulation. all patterns are just simple string comparisons!

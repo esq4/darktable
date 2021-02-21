@@ -232,10 +232,10 @@ GList* _get_selected_style_names(GList* selected_styles, GtkTreeModel *model)
     gtk_tree_model_get_iter(model, &iter, (GtkTreePath *)style->data);
     gtk_tree_model_get_value(model, &iter, DT_STYLES_COL_FULLNAME, &value);
     if(G_VALUE_HOLDS_STRING(&value))
-      style_names = g_list_append(style_names, g_strdup(g_value_get_string(&value)));
+      style_names = g_list_prepend(style_names, g_strdup(g_value_get_string(&value)));
     g_value_unset(&value);
   }
-  return style_names;
+  return g_list_reverse(style_names); // list was built in reverse order, so un-reverse it
 }
 
 static void apply_clicked(GtkWidget *w, gpointer user_data)
@@ -386,7 +386,12 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(filechooser);
 #endif
-  gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), g_get_home_dir());
+  gchar *import_path = dt_conf_get_string("ui_last/export_path");
+  if(import_path != NULL)
+  {
+    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), import_path);
+    g_free(import_path);
+  }
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), FALSE);
 
   if(gtk_dialog_run(GTK_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
@@ -503,6 +508,9 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
       }
       dt_control_log(_("style %s was successfully exported"), (char*)style->data);
     }
+    gchar *folder = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(filechooser));
+    dt_conf_set_string("ui_last/export_path", folder);
+    g_free(folder);
     g_free(filedir);
   }
   gtk_widget_destroy(filechooser);
@@ -518,9 +526,14 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(filechooser);
 #endif
+  gchar *import_path = dt_conf_get_string("ui_last/import_path");
+  if(import_path != NULL)
+  {
+    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), import_path);
+    g_free(import_path);
+  }
 
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), TRUE);
-  gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), g_get_home_dir());
 
   GtkFileFilter *filter;
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
@@ -543,6 +556,9 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
 
     dt_lib_styles_t *d = (dt_lib_styles_t *)user_data;
     _gui_styles_update_view(d);
+    gchar *folder = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(filechooser));
+    dt_conf_set_string("ui_last/import_path", folder);
+    g_free(folder);
   }
   gtk_widget_destroy(filechooser);
 }
