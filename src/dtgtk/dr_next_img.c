@@ -153,11 +153,10 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
     dt_iop_module_t *module = (dt_iop_module_t *)(g_list_nth_data(dev->iop, i));
 
     // the base module is the one with the lowest multi_priority
-    const guint clen = g_list_length(dev->iop);
     int base_multi_priority = 0;
-    for(int k = 0; k < clen; k++)
+    for(const GList *l = dev->iop; l; l = g_list_next(l))
     {
-      dt_iop_module_t *mod = (dt_iop_module_t *)(g_list_nth_data(dev->iop, k));
+      dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
       if(strcmp(module->op, mod->op) == 0) base_multi_priority = MIN(base_multi_priority, mod->multi_priority);
     }
 
@@ -244,9 +243,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
   dt_dev_masks_list_change(dev);
 
-  /* last set the group to update visibility of iop modules for new pipe */
-  dt_dev_modulegroups_set(dev, dt_conf_get_int("plugins/darkroom/groups"));
-
   /* cleanup histograms */
   g_list_foreach(dev->iop, (GFunc)dt_iop_cleanup_histogram, (gpointer)NULL);
 
@@ -301,4 +297,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
   //connect iop accelerators
   dt_iop_connect_accels_all();
+
+  /* last set the group to update visibility of iop modules for new pipe */
+  dt_dev_modulegroups_set(dev, dt_conf_get_int("plugins/darkroom/groups"));
 }
