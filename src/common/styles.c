@@ -98,7 +98,7 @@ void dt_style_item_free(gpointer data)
 static gboolean _apply_style_shortcut_callback(GtkAccelGroup *accel_group, GObject *acceleratable,
                                                guint keyval, GdkModifierType modifier, gpointer data)
 {
-  const GList *imgs = dt_view_get_images_to_act_on(TRUE, TRUE);
+  const GList *imgs = dt_view_get_images_to_act_on(TRUE, TRUE, FALSE);
   dt_styles_apply_to_list(data, imgs, FALSE);
   return TRUE;
 }
@@ -656,20 +656,17 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
 
-  const guint styles_cnt = g_list_length(styles);
-  const guint images_cnt = g_list_length((GList *)list);
-
-  if(!styles_cnt && !images_cnt)
+  if(!styles && !list)
   {
     dt_control_log(_("no images nor styles selected!"));
     return;
   }
-  else if(!styles_cnt)
+  else if(!styles)
   {
     dt_control_log(_("no styles selected!"));
     return;
   }
-  else if(!images_cnt)
+  else if(!list)
   {
     dt_control_log(_("no image selected!"));
     return;
@@ -679,25 +676,22 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
 
   /* for each selected image apply style */
   dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  GList *l = g_list_first((GList *)list);
-  while(l)
+  for(GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
   {
     const int imgid = GPOINTER_TO_INT(l->data);
-    GList *style = NULL;
-
     if(mode == DT_STYLE_HISTORY_OVERWRITE)
       dt_history_delete_on_image_ext(imgid, FALSE);
 
-    for (style = styles; style != NULL; style = style->next)
+    for (GList *style = styles; style != NULL; style = style->next)
     {
       dt_styles_apply_to_image((char*)style->data, duplicate, imgid);
     }
-    l = g_list_next(l);
   }
   dt_undo_end_group(darktable.undo);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
+  const guint styles_cnt = g_list_length(styles);
   dt_control_log(ngettext("style successfully applied!", "styles successfully applied!", styles_cnt));
 }
 
@@ -858,7 +852,7 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       GList *mi = dt_ioppr_extract_multi_instances_list(img_iop_order_list);
       // if some where found merge them with the style list
       if(mi) iop_list = dt_ioppr_merge_multi_instance_iop_order_list(iop_list, mi);
-      // finaly we have the final list for the image
+      // finally we have the final list for the image
       dt_ioppr_write_iop_order_list(iop_list, newimgid);
       g_list_free_full(iop_list, g_free);
       g_list_free_full(img_iop_order_list, g_free);
@@ -1508,6 +1502,7 @@ void dt_styles_import_from_file(const char *style_path)
   else
   {
     // Failed to open file, clean up.
+    dt_control_log(_("could not read file `%s'"), style_path);
     g_markup_parse_context_free(parser);
     dt_styles_style_data_free(style, TRUE);
     return;

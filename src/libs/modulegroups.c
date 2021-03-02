@@ -51,7 +51,7 @@ DT_MODULE(1)
   "|exposure/exposure|temperature/temperature|temperature/tint|colorbalance/contrast|colorbalance/output "        \
   "saturation|clipping/angle|denoiseprofile|lens|bilat|"
 
-// if a preset cannot be loaded or the current preset deleted, this is the fallabck preset
+// if a preset cannot be loaded or the current preset deleted, this is the fallback preset
 
 #define PADDING 2
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
@@ -1266,7 +1266,7 @@ static gchar *_preset_retrieve_old_layout(const char *list, const char *list_fav
     // group name and icon
     if(i == 0)
     {
-      // we don't have to care about "modern" worflow for temperature as it's more recent than this layout
+      // we don't have to care about "modern" workflow for temperature as it's more recent than this layout
       ret = dt_util_dstrcat(ret, "ꬹ1|||%s",
                             "exposure/exposure|temperature/temperature|temperature/tint|colorbalance/contrast"
                             "|colorbalance/output saturation|clipping/angle|denoiseprofile|lens|bilat");
@@ -1872,7 +1872,7 @@ void init_presets(dt_lib_module_t *self)
 
   dt_lib_presets_add(_(FALLBACK_PRESET_NAME), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
 
-  // search only (only active modules visibles)
+  // search only (only active modules visible)
   SNQA();
   dt_lib_presets_add(_("search only"), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
 
@@ -2251,18 +2251,18 @@ static void _manage_editor_module_update_list(dt_lib_module_t *self, dt_lib_modu
 
 static void _manage_editor_group_update_arrows(GtkWidget *box)
 {
-  // we go throw all group collumns
+  // we go throw all group columns
   GList *lw = gtk_container_get_children(GTK_CONTAINER(box));
   int pos = 0;
   const int max = g_list_length(lw) - 1;
   while(lw)
   {
     GtkWidget *w = (GtkWidget *)lw->data;
-    GtkWidget *hb = (GtkWidget *)g_list_nth_data(gtk_container_get_children(GTK_CONTAINER(w)), 0);
+    GtkWidget *hb = (GtkWidget *)gtk_container_get_children(GTK_CONTAINER(w))->data;
     if(hb)
     {
       GList *lw2 = gtk_container_get_children(GTK_CONTAINER(hb));
-      if(g_list_length(lw2) > 2)
+      if(!g_list_shorter_than(lw2, 3)) //do we have at least three?
       {
         GtkWidget *left = (GtkWidget *)lw2->data;
         GtkWidget *right = (GtkWidget *)g_list_nth_data(lw2, 2);
@@ -2605,7 +2605,7 @@ static void _manage_basics_add_popup(GtkWidget *widget, GCallback callback, dt_l
         }
       }
 
-      // let's go throught all widgets from this module
+      // let's go through all widgets from this module
       GList *la = g_list_last(darktable.control->accelerator_list);
       while(la)
       {
@@ -3129,7 +3129,7 @@ static GtkWidget *_manage_editor_group_init_basics_box(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(vb2), hb2, FALSE, TRUE, 0);
 
-  // choosen widgets
+  // chosen widgets
   GtkWidget *vb3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   d->edit_basics_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -3223,7 +3223,7 @@ static GtkWidget *_manage_editor_group_init_modules_box(dt_lib_module_t *self, d
 
   gtk_box_pack_start(GTK_BOX(vb2), hb2, FALSE, TRUE, 0);
 
-  // choosen modules
+  // chosen modules
   GtkWidget *vb3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   gr->iop_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -3550,7 +3550,7 @@ static void _manage_preset_delete(GtkWidget *widget, GdkEventButton *event, dt_l
     // otherwise we load the first preset
     if(!sel_ok)
     {
-      GtkWidget *ww = (GtkWidget *)g_list_nth_data(gtk_container_get_children(GTK_CONTAINER(d->presets_list)), 0);
+      GtkWidget *ww = (GtkWidget *)gtk_container_get_children(GTK_CONTAINER(d->presets_list))->data;
       if(ww)
       {
         const char *firstn = (char *)g_object_get_data(G_OBJECT(ww), "preset_name");
@@ -3749,7 +3749,7 @@ static void _manage_show_window(dt_lib_module_t *self)
   // or the first one if no selection found
   if(!sel_ok)
   {
-    GtkWidget *w = (GtkWidget *)g_list_nth_data(gtk_container_get_children(GTK_CONTAINER(d->presets_list)), 0);
+    GtkWidget *w = (GtkWidget *)gtk_container_get_children(GTK_CONTAINER(d->presets_list))->data;
     if(w)
     {
       const char *firstn = (char *)g_object_get_data(G_OBJECT(w), "preset_name");

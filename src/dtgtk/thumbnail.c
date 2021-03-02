@@ -1008,8 +1008,7 @@ static void _dt_active_images_callback(gpointer instance, gpointer user_data)
   if(!thumb) return;
 
   gboolean active = FALSE;
-  GSList *l = darktable.view_manager->active_images;
-  while(l)
+  for(GSList *l = darktable.view_manager->active_images; l; l = g_slist_next(l))
   {
     int id = GPOINTER_TO_INT(l->data);
     if(id == thumb->imgid)
@@ -1017,7 +1016,6 @@ static void _dt_active_images_callback(gpointer instance, gpointer user_data)
       active = TRUE;
       break;
     }
-    l = g_slist_next(l);
   }
 
   // if there's a change, update the thumb

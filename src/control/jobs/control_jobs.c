@@ -181,7 +181,7 @@ static dt_job_t *dt_control_generic_images_job_create(dt_job_execute_callback ex
   }
   if(progress_type != PROGRESS_NONE)
     dt_control_job_add_progress(job, _(message), progress_type == PROGRESS_CANCELLABLE);
-  params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(only_visible, TRUE));
+  params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(only_visible, TRUE, FALSE));
 
   dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
 
@@ -549,6 +549,9 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
   const guint total = g_list_length(t);
   double fraction = 0.0f;
   char message[512] = { 0 };
+
+  dt_undo_start_group(darktable.undo, DT_UNDO_DUPLICATE);
+
   snprintf(message, sizeof(message), ngettext("duplicating %d image", "duplicating %d images", total), total);
   dt_control_job_set_progress_message(job, message);
   while(t)
@@ -564,6 +567,9 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
   }
+
+  dt_undo_end_group(darktable.undo);
+
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
   dt_control_queue_redraw_center();
   return 0;
@@ -1463,7 +1469,7 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
   if(filmid != -1)
     dt_control_image_enumerator_job_film_init(params, filmid);
   else if(!imgs)
-    params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+    params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
   else
     params->index = imgs;
   dt_control_gpx_apply_t *data = params->data;
@@ -2024,7 +2030,7 @@ static dt_job_t *dt_control_datetime_job_create(const long int offset, const cha
   if(imgs)
     params->index = imgs;
   else
-    params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+    params->index = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
 
   dt_control_datetime_t *data = params->data;
   data->offset = offset;

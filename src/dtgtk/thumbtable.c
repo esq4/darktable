@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
+
 #include "dtgtk/thumbtable.h"
 #include "common/collection.h"
 #include "common/colorlabels.h"
@@ -24,6 +25,7 @@
 #include "common/image_cache.h"
 #include "common/ratings.h"
 #include "common/selection.h"
+#include "common/undo.h"
 #include "control/control.h"
 #include "gui/accelerators.h"
 #include "gui/drag_and_drop.h"
@@ -635,7 +637,7 @@ static gboolean _move(dt_thumbtable_t *table, const int x, const int y, gboolean
       table->realign_top_try = 0;
 
       dt_thumbnail_t *last = (dt_thumbnail_t *)g_list_last(table->list)->data;
-      if(table->thumbs_per_row == 1 && posy < 0 && g_list_length(table->list) == 1)
+      if(table->thumbs_per_row == 1 && posy < 0 && g_list_is_singleton(table->list))
       {
         // special case for zoom == 1 as we don't want any space under last image (the image would have disappear)
         int nbid = 1;
@@ -1239,8 +1241,8 @@ static void _dt_active_images_callback(gpointer instance, gpointer user_data)
   if(!user_data) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
 
-  if(g_slist_length(darktable.view_manager->active_images) == 0) return;
-  int activeid = GPOINTER_TO_INT(g_slist_nth_data(darktable.view_manager->active_images, 0));
+  if(!darktable.view_manager->active_images) return;
+  int activeid = GPOINTER_TO_INT(darktable.view_manager->active_images->data);
   dt_thumbtable_set_offset_image(table, activeid, TRUE);
 }
 
@@ -1373,9 +1375,9 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
 
     // in filmstrip mode, let's first ensure the offset is the right one. Otherwise we move to it
     int old_offset = -1;
-    if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && g_slist_length(darktable.view_manager->active_images) > 0)
+    if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && darktable.view_manager->active_images)
     {
-      const int tmpoff = GPOINTER_TO_INT(g_slist_nth_data(darktable.view_manager->active_images, 0));
+      const int tmpoff = GPOINTER_TO_INT(darktable.view_manager->active_images->data);
       if(tmpoff != table->offset_imgid)
       {
         old_offset = table->offset_imgid;
@@ -1590,7 +1592,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
     case DND_TARGET_URI:
     {
       GList *l = table->drag_list;
-      if(g_list_length(l) == 1)
+      if(g_list_is_singleton(l))
       {
         gchar pathname[PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
@@ -1632,7 +1634,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
 
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
 
-  table->drag_list = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE));
+  table->drag_list = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE, TRUE));
 
 #ifdef HAVE_MAP
   dt_view_manager_t *vm = darktable.view_manager;
@@ -1650,7 +1652,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
     // if we are dragging a single image -> use the thumbnail of that image
     // otherwise use the generic d&d icon
     // TODO: have something pretty in the 2nd case, too.
-    if(g_list_length(table->drag_list) == 1)
+    if(g_list_is_singleton(table->drag_list))
     {
       const int id = GPOINTER_TO_INT(table->drag_list->data);
       dt_mipmap_buffer_t buf;
@@ -2006,7 +2008,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
     // we need to ensure there's no need to load other image on top/bottom
     if(table->mode == DT_THUMBTABLE_MODE_ZOOM) nbnew += _thumbs_load_needed(table);
 
-    if(g_slist_length(darktable.view_manager->active_images) > 0
+    if(darktable.view_manager->active_images
        && (table->mode == DT_THUMBTABLE_MODE_ZOOM || table->mode == DT_THUMBTABLE_MODE_FILEMANAGER))
     {
       // this mean we arrive from filmstrip with some active images
@@ -2014,8 +2016,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
       const int lastid = GPOINTER_TO_INT(g_slist_last(darktable.view_manager->active_images)->data);
       dt_thumbtable_ensure_imgid_visibility(table, lastid);
 
-      GSList *l = darktable.view_manager->active_images;
-      while(l)
+      for(GSList *l = darktable.view_manager->active_images; l; l = g_slist_next(l))
       {
         dt_thumbnail_t *th = _thumbtable_get_thumb(table, GPOINTER_TO_INT(l->data));
         if(th)
@@ -2025,7 +2026,6 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
           th->active = FALSE;
           dt_thumbnail_update_infos(th);
         }
-        l = g_slist_next(l);
       }
       g_slist_free(darktable.view_manager->active_images);
       darktable.view_manager->active_images = NULL;
@@ -2178,12 +2178,12 @@ gboolean dt_thumbtable_set_offset_image(dt_thumbtable_t *table, const int imgid,
 static gboolean _accel_rate(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                             GdkModifierType modifier, gpointer data)
 {
-  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE));
+  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE, FALSE));
   dt_ratings_apply_on_list(imgs, GPOINTER_TO_INT(data), TRUE);
 
   // if we are in darkroom we show a message as there might be no other indication
   const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
-  if(v->view(v) == DT_VIEW_DARKROOM && g_list_length(imgs) == 1 && darktable.develop->preview_pipe)
+  if(v->view(v) == DT_VIEW_DARKROOM && g_list_is_singleton(imgs) && darktable.develop->preview_pipe)
   {
     // we verify that the image is the active one
     const int id = GPOINTER_TO_INT(imgs->data);
@@ -2221,12 +2221,12 @@ static gboolean _accel_rate(GtkAccelGroup *accel_group, GObject *acceleratable, 
 static gboolean _accel_color(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                              GdkModifierType modifier, gpointer data)
 {
-  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE));
+  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(FALSE, TRUE, FALSE));
   dt_colorlabels_toggle_label_on_list(imgs, GPOINTER_TO_INT(data), TRUE);
 
   // if we are in darkroom we show a message as there might be no other indication
   const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
-  if(v->view(v) == DT_VIEW_DARKROOM && g_list_length(imgs) == 1 && darktable.develop->preview_pipe)
+  if(v->view(v) == DT_VIEW_DARKROOM && g_list_is_singleton(imgs) && darktable.develop->preview_pipe)
   {
     // we verify that the image is the active one
     const int id = GPOINTER_TO_INT(imgs->data);
@@ -2272,12 +2272,15 @@ static gboolean _accel_copy_parts(GtkAccelGroup *accel_group, GObject *accelerat
 static gboolean _accel_paste(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                              GdkModifierType modifier, gpointer data)
 {
-  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
 
   dt_dev_undo_start_record(darktable.develop);
 
   const gboolean ret = dt_history_paste_on_list(imgs, TRUE);
-  if(ret) dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  if(ret)
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  else
+    g_list_free(imgs);
 
   dt_dev_undo_end_record(darktable.develop);
 
@@ -2286,12 +2289,15 @@ static gboolean _accel_paste(GtkAccelGroup *accel_group, GObject *acceleratable,
 static gboolean _accel_paste_parts(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                                    GdkModifierType modifier, gpointer data)
 {
-  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
 
   dt_dev_undo_start_record(darktable.develop);
 
   const gboolean ret = dt_history_paste_parts_on_list(imgs, TRUE);
-  if(ret) dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  if(ret)
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  else
+    g_list_free(imgs);
 
   dt_dev_undo_end_record(darktable.develop);
   return TRUE;
@@ -2299,14 +2305,19 @@ static gboolean _accel_paste_parts(GtkAccelGroup *accel_group, GObject *accelera
 static gboolean _accel_hist_discard(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                                     GdkModifierType modifier, gpointer data)
 {
-  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+  GList *imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
   const gboolean ret = dt_history_delete_on_list(imgs, TRUE);
-  if(ret) dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  if(ret)
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, imgs);
+  else
+    g_list_free(imgs);
   return TRUE;
 }
 static gboolean _accel_duplicate(GtkAccelGroup *accel_group, GObject *acceleratable, const guint keyval,
                                  GdkModifierType modifier, gpointer data)
 {
+  dt_undo_start_group(darktable.undo, DT_UNDO_DUPLICATE);
+
   const int sourceid = dt_view_get_image_to_act_on();
   const int newimgid = dt_image_duplicate(sourceid);
   if(newimgid <= 0) return FALSE;
@@ -2315,6 +2326,8 @@ static gboolean _accel_duplicate(GtkAccelGroup *accel_group, GObject *accelerata
     dt_history_delete_on_image(newimgid);
   else
     dt_history_copy_and_paste_on_image(sourceid, newimgid, FALSE, NULL, TRUE, TRUE);
+
+  dt_undo_end_group(darktable.undo);
 
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, NULL);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);

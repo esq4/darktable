@@ -436,17 +436,15 @@ gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolea
   if(!img) return FALSE;
   GList *undo = NULL;
   GList *tags = NULL;
-  GList *imgs = g_list_copy((GList *)img);
 
-  if(imgs)
+  if(img)
   {
     tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
     if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
 
-    const gboolean res = _tag_execute(tags, imgs, &undo, undo_on, DT_TA_ATTACH);
+    const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_ATTACH);
 
     g_list_free(tags);
-    g_list_free(imgs);
     if(undo_on)
     {
       dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
@@ -465,7 +463,7 @@ gboolean dt_tag_attach(const guint tagid, const gint imgid, const gboolean undo_
   gboolean res = FALSE;
   if(imgid == -1)
   {
-    imgs = (GList *)dt_view_get_images_to_act_on(!group_on, TRUE);
+    imgs = (GList *)dt_view_get_images_to_act_on(!group_on, TRUE, FALSE);
     res = dt_tag_attach_images(tagid, imgs, undo_on);
   }
   else
@@ -481,15 +479,13 @@ gboolean dt_tag_attach(const guint tagid, const gint imgid, const gboolean undo_
 gboolean dt_tag_set_tags(const GList *tags, const GList *img, const gboolean ignore_dt_tags,
                          const gboolean clear_on, const gboolean undo_on)
 {
-  GList *imgs = g_list_copy((GList *)img);
-  if(imgs)
+  if(img)
   {
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
 
-    const gboolean res = _tag_execute(tags, imgs, &undo, undo_on,
+    const gboolean res = _tag_execute(tags, img, &undo, undo_on,
                                       clear_on ? ignore_dt_tags ? DT_TA_SET : DT_TA_SET_ALL : DT_TA_ATTACH);
-    g_list_free(imgs);
     if(undo_on)
     {
       dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
@@ -524,15 +520,13 @@ gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gb
     }
 
     // attach newly created tags
-    GList *imgs = g_list_copy((GList *)img);
-    if(imgs)
+    if(img)
     {
       GList *undo = NULL;
       if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
 
-      res = _tag_execute(tagl, imgs, &undo, undo_on, DT_TA_ATTACH);
+      res = _tag_execute(tagl, img, &undo, undo_on, DT_TA_ATTACH);
 
-      g_list_free(imgs);
       if(undo_on)
       {
         dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
@@ -547,18 +541,16 @@ gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gb
 
 gboolean dt_tag_detach_images(const guint tagid, const GList *img, const gboolean undo_on)
 {
-  GList *imgs = g_list_copy((GList *)img);
-  if(imgs)
+  if(img)
   {
     GList *tags = NULL;
     tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
 
-    const gboolean res = _tag_execute(tags, imgs, &undo, undo_on, DT_TA_DETACH);
+    const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_DETACH);
 
     g_list_free(tags);
-    g_list_free(imgs);
     if(undo_on)
     {
       dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
@@ -573,7 +565,7 @@ gboolean dt_tag_detach(const guint tagid, const gint imgid, const gboolean undo_
 {
   GList *imgs = NULL;
   if(imgid == -1)
-    imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE));
+    imgs = g_list_copy((GList *)dt_view_get_images_to_act_on(TRUE, TRUE, FALSE));
   else
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
   if(group_on) dt_grouping_add_grouped_images(&imgs);
@@ -629,7 +621,7 @@ static char *_images_to_act_on_string(const gint imgid, uint32_t *nb)
   }
   else
   {
-    const GList *imgs = dt_view_get_images_to_act_on(TRUE, FALSE);
+    const GList *imgs = dt_view_get_images_to_act_on(TRUE, FALSE, FALSE);
     while(imgs)
     {
       images = dt_util_dstrcat(images, "%d,",GPOINTER_TO_INT(imgs->data));
@@ -896,7 +888,7 @@ GList *dt_tag_get_list_export(gint imgid, int32_t flags)
 
   gboolean omit_tag_hierarchy = flags & DT_META_OMIT_HIERARCHY;
   gboolean export_private_tags = flags & DT_META_PRIVATE_TAG;
-  gboolean export_tag_synomyms = flags & DT_META_SYNONYMS_TAG;
+  gboolean export_tag_synonyms = flags & DT_META_SYNONYMS_TAG;
 
   uint32_t count = _tag_get_attached_export(imgid, &taglist);
 
@@ -942,7 +934,7 @@ GList *dt_tag_get_list_export(gint imgid, int32_t flags)
       }
 
       // add synonyms as necessary
-      if (export_tag_synomyms)
+      if (export_tag_synonyms)
       {
         gchar *synonyms = t->synonym;
         if (synonyms && synonyms[0])

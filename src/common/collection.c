@@ -1802,7 +1802,7 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       if(strcmp(operator, "[]") == 0)
       {
         if(number1 && number2)
-          query = dt_util_dstrcat(query, "((datetime_taken >= '%s') AND (datetime_taken <= '%s'))", number1,
+          query = dt_util_dstrcat(query, "((datetime_taken >= '%s' COLLATE NOCASE) AND (datetime_taken <= '%s' COLLATE NOCASE))", number1,
                                   number2);
       }
       else if((strcmp(operator, "=") == 0 || strcmp(operator, "") == 0) && number1)
@@ -2340,18 +2340,13 @@ void dt_collection_move_before(const int32_t image_id, GList * selected_images)
     return;
   }
 
-  const guint selected_images_length = g_list_length(selected_images);
-
-  if (selected_images_length == 0)
-  {
-    return;
-  }
-
   const uint32_t tagid = darktable.collection->tagid;
   // getting the position of the target image
   const int64_t target_image_pos = dt_collection_get_image_position(image_id, tagid);
   if (target_image_pos >= 0)
   {
+    const guint selected_images_length = g_list_length(selected_images);
+
     dt_collection_shift_image_positions(selected_images_length, target_image_pos, tagid);
 
     sqlite3_stmt *stmt = NULL;
