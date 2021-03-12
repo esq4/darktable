@@ -1134,14 +1134,13 @@ void dt_collection_split_operator_number(const gchar *input, char **number1, cha
 {
   GRegex *regex;
   GMatchInfo *match_info;
-  int match_count;
 
   *number1 = *number2 = *operator= NULL;
 
   // we test the range expression first
   regex = g_regex_new("^\\s*\\[\\s*([0-9]+\\.?[0-9]*)\\s*;\\s*([0-9]+\\.?[0-9]*)\\s*\\]\\s*$", 0, 0, NULL);
   g_regex_match_full(regex, input, -1, 0, 0, &match_info, NULL);
-  match_count = g_match_info_get_match_count(match_info);
+  int match_count = g_match_info_get_match_count(match_info);
 
   if(match_count == 3)
   {
@@ -1179,7 +1178,7 @@ void dt_collection_split_operator_number(const gchar *input, char **number1, cha
 
 static char *_dt_collection_compute_datetime(const char *operator, const char *input)
 {
-  int len = strlen(input);
+  const int len = strlen(input);
   if(len < 4) return NULL;
 
   struct tm tm1 = { 0 };
@@ -1249,7 +1248,6 @@ void dt_collection_split_operator_datetime(const gchar *input, char **number1, c
 {
   GRegex *regex;
   GMatchInfo *match_info;
-  int match_count;
 
   *number1 = *number2 = *operator= NULL;
 
@@ -1257,7 +1255,7 @@ void dt_collection_split_operator_datetime(const gchar *input, char **number1, c
   // 2 elements : date-time1 and  date-time2
   regex = g_regex_new("^\\s*\\[\\s*(\\d{4}[:\\d\\s]*)\\s*;\\s*(\\d{4}[:\\d\\s]*)\\s*\\]\\s*$", 0, 0, NULL);
   g_regex_match_full(regex, input, -1, 0, 0, &match_info, NULL);
-  match_count = g_match_info_get_match_count(match_info);
+  int match_count = g_match_info_get_match_count(match_info);
 
   if(match_count == 3)
   {
@@ -1308,14 +1306,13 @@ void dt_collection_split_operator_exposure(const gchar *input, char **number1, c
 {
   GRegex *regex;
   GMatchInfo *match_info;
-  int match_count;
 
   *number1 = *number2 = *operator= NULL;
 
   // we test the range expression first
   regex = g_regex_new("^\\s*\\[\\s*(1/)?([0-9]+\\.?[0-9]*)(\")?\\s*;\\s*(1/)?([0-9]+\\.?[0-9]*)(\")?\\s*\\]\\s*$", 0, 0, NULL);
   g_regex_match_full(regex, input, -1, 0, 0, &match_info, NULL);
-  match_count = g_match_info_get_match_count(match_info);
+  int match_count = g_match_info_get_match_count(match_info);
 
   if(match_count == 6 || match_count == 7)
   {
@@ -1391,8 +1388,8 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
                               -1, &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    char *exif_maker = (char *)sqlite3_column_text(stmt, 0);
-    char *exif_model = (char *)sqlite3_column_text(stmt, 1);
+    const char *exif_maker = (char *)sqlite3_column_text(stmt, 0);
+    const char *exif_model = (char *)sqlite3_column_text(stmt, 1);
 
     gchar *makermodel =  dt_collection_get_makermodel(exif_maker, exif_model);
 
@@ -1451,7 +1448,7 @@ gchar *dt_collection_get_makermodel(const char *exif_maker, const char *exif_mod
 static gchar *get_query_string(const dt_collection_properties_t property, const gchar *text)
 {
   char *escaped_text = sqlite3_mprintf("%q", text);
-  unsigned int escaped_length = strlen(escaped_text);
+  const unsigned int escaped_length = strlen(escaped_text);
   gchar *query = NULL;
 
   switch(property)
@@ -1467,6 +1464,7 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
 
     case DT_COLLECTION_PROP_FOLDERS: // folders
       {
+        // replace * at the end with OR-clause to include subfolders
         if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '*'))
         {
           escaped_text[escaped_length-1] = '\0';
@@ -1474,7 +1472,8 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
                                   G_DIR_SEPARATOR_S "%%'))",
                                   escaped_text, escaped_text);
         }
-        else if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '%'))
+        // replace |% at the end with /% to only show subfolders
+        else if ((escaped_length > 1) && (strcmp(escaped_text+escaped_length-2, "|%") == 0 ))
         {
           escaped_text[escaped_length-2] = '\0';
           query = g_strdup_printf("(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s"
@@ -1778,7 +1777,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
         g_free(name);			// free the original filename
       }
 
-      query = dt_util_dstrcat(NULL, "(%s)", dt_util_glist_to_str(" OR ", list));
+      char *subquery = dt_util_glist_to_str(" OR ", list);
+      query = g_strdup_printf("(%s)", subquery);
+      g_free(subquery);
       g_list_free_full(list, g_free);	// free the SQL clauses as well as the list
 
       break;
@@ -1941,7 +1942,6 @@ int dt_collection_serialize(char *buf, int bufsize)
 void dt_collection_deserialize(char *buf)
 {
   int num_rules = 0;
-  int mode = 0, item = 0;
   sscanf(buf, "%d", &num_rules);
   if(num_rules == 0)
   {
@@ -1952,13 +1952,14 @@ void dt_collection_deserialize(char *buf)
   }
   else
   {
+    int mode = 0, item = 0;
     dt_conf_set_int("plugins/lighttable/collect/num_rules", num_rules);
     while(buf[0] != '\0' && buf[0] != ':') buf++;
     if(buf[0] == ':') buf++;
     char str[400], confname[200];
     for(int k = 0; k < num_rules; k++)
     {
-      int n = sscanf(buf, "%d:%d:%399[^$]", &mode, &item, str);
+      const int n = sscanf(buf, "%d:%d:%399[^$]", &mode, &item, str);
       if(n == 3)
       {
         snprintf(confname, sizeof(confname), "plugins/lighttable/collect/mode%1d", k);
@@ -1993,6 +1994,12 @@ void dt_collection_deserialize(char *buf)
 void dt_collection_update_query(const dt_collection_t *collection, dt_collection_change_t query_change, GList *list)
 {
   int next = -1;
+  if(!collection->clone && query_change == DT_COLLECTION_CHANGE_NEW_QUERY && darktable.gui)
+  {
+    // if the query has changed, we reset the expanded group
+    darktable.gui->expanded_group_id = -1;
+  }
+
   if(!collection->clone)
   {
     if(list)
@@ -2155,8 +2162,8 @@ void dt_collection_hint_message(const dt_collection_t *collection)
   /* collection hinting */
   gchar *message;
 
-  int c = dt_collection_get_count_no_group(collection);
-  int cs = dt_collection_get_selected_count(collection);
+  const int c = dt_collection_get_count_no_group(collection);
+  const int cs = dt_collection_get_selected_count(collection);
   g_list_free(selected_imgids);
 
   if(cs == 1)
@@ -2198,7 +2205,7 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
 
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
-      int id = sqlite3_column_int(stmt, 0);
+      const int id = sqlite3_column_int(stmt, 0);
       if(imgid == id)
       {
         found = TRUE;
@@ -2222,7 +2229,7 @@ int dt_collection_image_offset(int imgid)
 static void _dt_collection_recount_callback_1(gpointer instance, gpointer user_data)
 {
   dt_collection_t *collection = (dt_collection_t *)user_data;
-  int old_count = collection->count;
+  const int old_count = collection->count;
   collection->count = _dt_collection_compute_count(collection, FALSE);
   collection->count_no_group = _dt_collection_compute_count(collection, TRUE);
   if(!collection->clone)
@@ -2239,7 +2246,7 @@ static void _dt_collection_recount_callback_2(gpointer instance, uint8_t id, gpo
 static void _dt_collection_filmroll_imported_callback(gpointer instance, uint8_t id, gpointer user_data)
 {
   dt_collection_t *collection = (dt_collection_t *)user_data;
-  int old_count = collection->count;
+  const int old_count = collection->count;
   collection->count = _dt_collection_compute_count(collection, FALSE);
   collection->count_no_group = _dt_collection_compute_count(collection, TRUE);
   if(!collection->clone)
@@ -2359,8 +2366,8 @@ void dt_collection_move_before(const int32_t image_id, GList * selected_images)
                                 -1, &stmt, NULL);
 
     for (const GList * selected_images_iter = selected_images;
-        selected_images_iter != NULL;
-        selected_images_iter = selected_images_iter->next)
+         selected_images_iter != NULL;
+         selected_images_iter = g_list_next(selected_images_iter))
     {
       const int moved_image_id = GPOINTER_TO_INT(selected_images_iter->data);
 
@@ -2415,8 +2422,8 @@ void dt_collection_move_before(const int32_t image_id, GList * selected_images)
                                 -1, &update_stmt, NULL);
 
     for (const GList * selected_images_iter = selected_images;
-        selected_images_iter != NULL;
-        selected_images_iter = selected_images_iter->next)
+         selected_images_iter != NULL;
+         selected_images_iter = g_list_next(selected_images_iter))
     {
       max_position++;
       const int moved_image_id = GPOINTER_TO_INT(selected_images_iter->data);

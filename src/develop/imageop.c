@@ -590,8 +590,7 @@ dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module)
 dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module)
 {
   dt_iop_module_t *next = NULL;
-  GList *modules = g_list_last(module->dev->iop);
-  while(modules)
+  for(const GList *modules = g_list_last(module->dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
     if(mod == module)
@@ -607,7 +606,6 @@ dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module)
         next = mod;
       }
     }
-    modules = g_list_previous(modules);
   }
   return next;
 }
@@ -2288,38 +2286,61 @@ gboolean dt_iop_show_hide_header_buttons(GtkWidget *header, GdkEventCrossing *ev
   return TRUE;
 }
 
-void add_remove_mask_indicator(GtkWidget *header, gboolean add)
+static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_t *module)
 {
-  GList *children = gtk_container_get_children(GTK_CONTAINER(header));
-  GList *button;
-  gboolean found = FALSE;
-  gboolean show = add && dt_conf_get_bool("darkroom/ui/show_mask_indicator");
-  for(button = g_list_last(children);
-      button && GTK_IS_BUTTON(button->data);
-      button = g_list_previous(button))
-  {
-    if (strcmp(gtk_widget_get_name(button->data), "module-mask-indicator") == 0)
-    {
-      found = TRUE;
-      break;
-    }
-  }
+  if(darktable.gui->reset) return;
 
-  if(found)
+  const gboolean is_active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bt));
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+
+  module->request_mask_display &= ~DT_DEV_PIXELPIPE_DISPLAY_MASK;
+  module->request_mask_display |= (is_active ? DT_DEV_PIXELPIPE_DISPLAY_MASK : 0);
+
+  // set the module show mask button too
+  ++darktable.gui->reset;
+  if(bd->showmask)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), is_active);
+  --darktable.gui->reset;
+
+  dt_iop_request_focus(module);
+  dt_iop_refresh_center(module);
+}
+
+void add_remove_mask_indicator(dt_iop_module_t *module, gboolean add)
+{
+  gboolean show = add && dt_conf_get_bool("darkroom/ui/show_mask_indicator");
+  gboolean raster = module->blend_params->mask_mode & DEVELOP_MASK_RASTER;
+
+  if(module->mask_indicator)
   {
-    if(!show) gtk_widget_destroy(button->data);
+    if(!show)
+      {
+        gtk_widget_destroy(module->mask_indicator);
+        module->mask_indicator = NULL;
+        dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, FALSE);
+      }
+    else
+        gtk_widget_set_sensitive(module->mask_indicator, !(raster));
   }
   else if(show)
     {
-      GtkWidget *mi = dtgtk_togglebutton_new(dtgtk_cairo_paint_showmask,
-                                             CPF_STYLE_FLAT | CPF_BG_TRANSPARENT | CPF_IGNORE_FG_STATE, NULL);
-      gtk_widget_set_tooltip_text(mi, _("this module has a mask"));
-      gtk_widget_set_name(mi, "module-mask-indicator");
-      gtk_widget_set_sensitive(mi, FALSE);
-      gtk_box_pack_end(GTK_BOX(header), mi, FALSE, FALSE, 0);
+      module->mask_indicator = dtgtk_togglebutton_new(dtgtk_cairo_paint_showmask,
+                                                      CPF_STYLE_FLAT | CPF_BG_TRANSPARENT, NULL);
+      gtk_widget_set_name(module->mask_indicator, "module-mask-indicator");
+      g_signal_connect(G_OBJECT(module->mask_indicator), "toggled",
+                       G_CALLBACK(_display_mask_indicator_callback), module);
+      gtk_widget_set_sensitive(module->mask_indicator, !(raster));
+      gtk_box_pack_end(GTK_BOX(module->header), module->mask_indicator, FALSE, FALSE, 0);
+      dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, FALSE);
     }
 
-  dt_iop_show_hide_header_buttons(header, NULL, FALSE, FALSE);
+  if(module->mask_indicator)
+  {
+    if(raster)
+      gtk_widget_set_tooltip_text(module->mask_indicator, _("this module has a raster mask"));
+    else
+      gtk_widget_set_tooltip_text(module->mask_indicator, _("this module has a mask\nclick to display"));
+  }
 }
 
 void dt_iop_gui_set_expander(dt_iop_module_t *module)
@@ -2885,12 +2906,10 @@ void dt_iop_connect_accels_multi(dt_iop_module_so_t *module)
 
 void dt_iop_connect_accels_all()
 {
-  GList *iop_mods = g_list_last(darktable.develop->iop);
-  while(iop_mods)
+  for(const GList *iop_mods = g_list_last(darktable.develop->iop); iop_mods; iop_mods = g_list_previous(iop_mods))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)iop_mods->data;
     dt_iop_connect_accels_multi(mod->so);
-    iop_mods = g_list_previous(iop_mods);
   }
 }
 
@@ -2916,18 +2935,14 @@ dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules, const char *
 int dt_iop_count_instances(dt_iop_module_so_t *module)
 {
   int inst_count = 0;
-  GList *iop_mods = NULL;                 //All modules in iop
-  dt_iop_module_t *mod = NULL;            //Used while iterating module lists
 
-  iop_mods = g_list_last(darktable.develop->iop);
-  while(iop_mods)
+  for(const GList *iop_mods = g_list_last(darktable.develop->iop); iop_mods; iop_mods = g_list_previous(iop_mods))
   {
-    mod = (dt_iop_module_t *)iop_mods->data;
+    dt_iop_module_t *mod = (dt_iop_module_t *)iop_mods->data;
     if(mod->so == module && mod->iop_order != INT_MAX)
     {
       inst_count++;
     }
-    iop_mods = g_list_previous(iop_mods);
   }
   return inst_count;
 }
