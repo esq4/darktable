@@ -222,9 +222,7 @@ void _display_module_trouble_message_callback(gpointer instance,
 
   if(module && module->has_trouble && module->widget)
   {
-    GList *children = gtk_container_get_children(GTK_CONTAINER(gtk_widget_get_parent(module->widget)));
-    label_widget = children->data;
-    g_list_free(children);
+    label_widget = dt_gui_container_first_child(GTK_CONTAINER(gtk_widget_get_parent(module->widget)));
     if(strcmp(gtk_widget_get_name(label_widget), "iop-plugin-warning"))
       label_widget = NULL;
   }
@@ -476,16 +474,9 @@ void expose(
     image_surface_imgid = dev->image_storage.id;
   }
   else if(dev->preview_pipe->output_imgid != dev->image_storage.id)
-  {
-    dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_DARKROOM_BG);
-    cairo_paint(cr);
-
-    // waiting message
-    PangoRectangle ink;
-    PangoLayout *layout;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-    float fontsize;
+  { 
     gchar *load_txt;
+    float fontsize;
 
     if(dev->image_invalid_cnt)
     {
@@ -508,24 +499,38 @@ void expose(
       load_txt = dt_util_dstrcat(NULL, C_("darkroom", "loading `%s' ..."), dev->image_storage.filename);
     }
 
-    pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
-    pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    layout = pango_cairo_create_layout(cr);
-    pango_layout_set_font_description(layout, desc);
-    pango_layout_set_text(layout, load_txt, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    const float xc = width / 2.0, yc = height * 0.85 - DT_PIXEL_APPLY_DPI(10), wd = ink.width * .5f;
-    cairo_move_to(cr, xc - wd, yc + 1. / 3. * fontsize - fontsize);
-    pango_cairo_layout_path(cr, layout);
-    cairo_set_line_width(cr, 2.0);
-    dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
-    cairo_stroke_preserve(cr);
-    dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
-    cairo_fill(cr);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
-    g_free(load_txt);
-    image_surface_imgid = dev->image_storage.id;
+    if(dt_conf_get_bool("darkroom/ui/loading_screen"))
+    {
+      dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_DARKROOM_BG);
+      cairo_paint(cr);
+
+      // waiting message
+      PangoRectangle ink;
+      PangoLayout *layout;
+      PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+      pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
+      pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
+      layout = pango_cairo_create_layout(cr);
+      pango_layout_set_font_description(layout, desc);
+      pango_layout_set_text(layout, load_txt, -1);
+      pango_layout_get_pixel_extents(layout, &ink, NULL);
+      const float xc = width / 2.0, yc = height * 0.85 - DT_PIXEL_APPLY_DPI(10), wd = ink.width * .5f;
+      cairo_move_to(cr, xc - wd, yc + 1. / 3. * fontsize - fontsize);
+      pango_cairo_layout_path(cr, layout);
+      cairo_set_line_width(cr, 2.0);
+      dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
+      cairo_stroke_preserve(cr);
+      dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
+      cairo_fill(cr);
+      pango_font_description_free(desc);
+      g_object_unref(layout);
+      g_free(load_txt);
+      image_surface_imgid = dev->image_storage.id;
+    }
+    else
+    {
+      dt_toast_log("%s", load_txt);
+    }
   }
   cairo_restore(cri);
 
@@ -591,7 +596,7 @@ void expose(
     {
       sample = samples->data;
 
-      // only dislay selected sample, skip if not the selected sample
+      // only display selected sample, skip if not the selected sample
       if(only_selected_sample
          && sample != darktable.lib->proxy.colorpicker.selected_sample)
       {
@@ -1011,6 +1016,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
       {
         snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
         module->expanded = dt_conf_get_bool(option);
+        dt_iop_gui_update_expanded(module);
         if(module->change_image) module->change_image(module);
         dt_iop_gui_update_header(module);
       }
@@ -2954,6 +2960,7 @@ void enter(dt_view_t *self)
       {
         snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
         module->expanded = dt_conf_get_bool(option);
+        dt_iop_gui_update_expanded(module);
       }
 
       dt_iop_reload_defaults(module);
@@ -3062,7 +3069,7 @@ void leave(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
                                      G_CALLBACK(_preference_changed_button_hide), dev);
 
-  // reset color assesment mode
+  // reset color assessment mode
   if(dev->iso_12646.enabled)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->iso_12646.button), FALSE);
@@ -3194,7 +3201,7 @@ void mouse_leave(dt_view_t *self)
 }
 
 /* This helper function tests for a position to be within the displayed area
-   of an image. To avoid "border cases" we accept values to be slighly out of area too.
+   of an image. To avoid "border cases" we accept values to be slightly out of area too.
 */
 static int mouse_in_imagearea(dt_view_t *self, double x, double y)
 {
@@ -3570,7 +3577,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   zoom = DT_ZOOM_FREE;
   closeup = 0;
 
-  const gboolean constrained = !((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK);
+  const gboolean constrained = !dt_modifier_is(state, GDK_CONTROL_MASK);
   if(up)
   {
     if(fitscale <= 1.0f && (scale == 1.0f || scale == 2.0f) && constrained) return; // for large image size
@@ -3751,16 +3758,13 @@ int key_pressed(dt_view_t *self, guint key, guint state)
     int procw, proch;
     dt_dev_get_processed_size(dev, &procw, &proch);
 
-    GdkModifierType modifiers;
-    modifiers = gtk_accelerator_get_default_mod_mask();
-
     // For each cursor press, move one screen by default
     float step_changex = dev->width / (procw * scale);
     float step_changey = dev->height / (proch * scale);
     float factor = 0.2f;
 
-    if((state & modifiers) == GDK_MOD1_MASK) factor = 0.02f;
-    if((state & modifiers) == GDK_CONTROL_MASK) factor = 1.0f;
+    if(dt_modifier_is(state, GDK_MOD1_MASK)) factor = 0.02f;
+    if(dt_modifier_is(state, GDK_CONTROL_MASK)) factor = 1.0f;
 
     float old_zoom_x, old_zoom_y;
 
@@ -3883,7 +3887,7 @@ void init_key_accels(dt_view_t *self)
   // toggle gamut check
   dt_accel_register_view(self, NC_("accel", "gamut check"), GDK_KEY_g, GDK_CONTROL_MASK);
 
-  // toggle visability of drawn masks for current gui module
+  // toggle visibility of drawn masks for current gui module
   dt_accel_register_view(self, NC_("accel", "show drawn masks"), 0, 0);
 
   // brush size +/-
@@ -3974,7 +3978,7 @@ void connect_key_accels(dt_view_t *self)
   closure = g_cclosure_new(G_CALLBACK(_overlay_cycle_callback), (gpointer)self->data, NULL);
   dt_accel_connect_view(self, "cycle overlay colors", closure);
 
-  // toggle visability of drawn masks for current gui module
+  // toggle visibility of drawn masks for current gui module
   closure = g_cclosure_new(G_CALLBACK(_toggle_mask_visibility_callback), (gpointer)self->data, NULL);
   dt_accel_connect_view(self, "show drawn masks", closure);
 
@@ -4214,7 +4218,7 @@ static void second_window_scrolled(GtkWidget *widget, dt_develop_t *dev, double 
   closeup = 0;
   if(up)
   {
-    if((scale == 1.0f || scale == 2.0f) && !((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)) return;
+    if((scale == 1.0f || scale == 2.0f) && !dt_modifier_is(state, GDK_CONTROL_MASK)) return;
     if(scale >= 16.0f)
       return;
     else if(scale >= 8.0f)
@@ -4230,7 +4234,7 @@ static void second_window_scrolled(GtkWidget *widget, dt_develop_t *dev, double 
   }
   else
   {
-    if(scale == fitscale && !((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK))
+    if(scale == fitscale && !dt_modifier_is(state, GDK_CONTROL_MASK))
       return;
     else if(scale < 0.5 * fitscale)
       return;
@@ -4688,7 +4692,7 @@ static gboolean _second_window_key_pressed_callback(GtkWidget *widget, GdkEventK
   gtk_accel_map_lookup_entry(path_on, &key_on);
   gtk_accel_map_lookup_entry(path_off, &key_off);
 
-  if(event->keyval == key_on.accel_key && (event->state & KEY_STATE_MASK) == key_on.accel_mods)
+  if(event->keyval == key_on.accel_key && dt_modifier_is(event->state, key_on.accel_mods))
   {
     fullscreen = gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_FULLSCREEN;
     if(fullscreen)
@@ -4696,7 +4700,7 @@ static gboolean _second_window_key_pressed_callback(GtkWidget *widget, GdkEventK
     else
       gtk_window_fullscreen(GTK_WINDOW(widget));
   }
-  else if(event->keyval == key_off.accel_key && (event->state & KEY_STATE_MASK) == key_off.accel_mods)
+  else if(event->keyval == key_off.accel_key && dt_modifier_is(event->state, key_off.accel_mods))
   {
     gtk_window_unfullscreen(GTK_WINDOW(widget));
   }

@@ -75,11 +75,12 @@ static gchar *_thumbs_get_overlays_class(dt_thumbnail_overlay_t over)
   }
 }
 
-// get the size categorie, depending on the thumb size
+// get the size category, depending on the thumb size
 static int _thumbs_get_prefs_size(dt_thumbtable_t *table)
 {
   // we get the size delimitations to differentiate sizes categories
-  // one we set as many categories as we want (this can be usefull if we want to finetune very precisely css)
+  // one we set as many categories as we want (this can be useful if
+  // we want to finetune css very precisely)
   gchar *txt = dt_conf_get_string("plugins/lighttable/thumbnail_sizes");
   gchar **ts = g_strsplit(txt, "|", -1);
   int i = 0;
@@ -94,7 +95,7 @@ static int _thumbs_get_prefs_size(dt_thumbtable_t *table)
   return i;
 }
 
-// update thumbtable class and overlays mode, depending on size categorie
+// update thumbtable class and overlays mode, depending on size category
 static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
 {
   int ns = _thumbs_get_prefs_size(table);
@@ -460,8 +461,8 @@ static gboolean _thumbtable_update_scrollbars(dt_thumbtable_t *table)
   return FALSE;
 }
 
-// remove all uneeded thumbnails from the list and the widget
-// uneeded == completly hidden
+// remove all unneeded thumbnails from the list and the widget
+// unneeded == completely hidden
 static int _thumbs_remove_unneeded(dt_thumbtable_t *table)
 {
   int changed = 0;
@@ -496,7 +497,7 @@ static int _thumbs_load_needed(dt_thumbtable_t *table)
   sqlite3_stmt *stmt;
   int changed = 0;
 
-  // we rememeber image margins for new thumbs (this limit flickering)
+  // we remember image margins for new thumbs (this limit flickering)
   dt_thumbnail_t *first = (dt_thumbnail_t *)table->list->data;
   const int old_margin_start = gtk_widget_get_margin_start(first->w_image_box);
   const int old_margin_top = gtk_widget_get_margin_top(first->w_image_box);
@@ -659,7 +660,7 @@ static gboolean _move(dt_thumbtable_t *table, const int x, const int y, gboolean
     }
     else if(table->mode == DT_THUMBTABLE_MODE_ZOOM)
     {
-      // we stop before thumb area completly disappear from screen
+      // we stop before thumb area completely disappear from screen
       const int space = table->thumb_size * 0.5; // we want at least 1/2 thumb to stay visible
       posy = MIN(table->view_height - space - table->thumbs_area.y, posy);
       posy = MAX(space - table->thumbs_area.y - table->thumbs_area.height, posy);
@@ -757,7 +758,7 @@ static void _zoomable_zoom(dt_thumbtable_t *table, int oldzoom, int newzoom)
   const int new_size = table->view_width / newzoom;
   const double ratio = (double)new_size / (double)table->thumb_size;
 
-  // we get row/collumn numbers of the image under cursor
+  // we get row/column numbers of the image under cursor
   const int anchor_x = (x - table->thumbs_area.x) / table->thumb_size;
   const int anchor_y = (y - table->thumbs_area.y) / table->thumb_size;
   // we compute the new position of this image. This will be our reference to compute sizes of other thumbs
@@ -768,7 +769,7 @@ static void _zoomable_zoom(dt_thumbtable_t *table, int oldzoom, int newzoom)
   for(const GList *l = table->list; l; l = g_list_next(l))
   {
     dt_thumbnail_t *th = (dt_thumbnail_t *)l->data;
-    // we get row/collumn numbers
+    // we get row/column numbers
     const int posx = (th->x - table->thumbs_area.x) / table->thumb_size;
     const int posy = (th->y - table->thumbs_area.y) / table->thumb_size;
     // we compute new position taking anchor image as reference
@@ -884,7 +885,7 @@ static gboolean _event_scroll(GtkWidget *widget, GdkEvent *event, gpointer user_
 
   if(dt_gui_get_scroll_unit_delta(e, &delta))
   {
-    if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && (e->state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)
+    if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && dt_modifier_is(e->state, GDK_CONTROL_MASK))
     {
       const int old = dt_view_lighttable_get_zoom(darktable.view_manager);
       int new = old;
@@ -987,7 +988,7 @@ static gboolean _event_button_press(GtkWidget *widget, GdkEventButton *event, gp
   }
   else if(id > 0 && event->button == 1 && table->mode == DT_THUMBTABLE_MODE_FILMSTRIP
           && event->type == GDK_BUTTON_PRESS && strcmp(view->module_name, "map")
-          && (event->state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK)) == 0)
+          && dt_modifier_is(event->state, 0))
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, id);
   }
@@ -1060,8 +1061,8 @@ static gboolean _event_button_release(GtkWidget *widget, GdkEventButton *event, 
     dt_view_t *view = vm->current_view;
     const int id = dt_control_get_mouse_over_id();
     if(id > 0 && event->button == 1 && table->mode == DT_THUMBTABLE_MODE_FILMSTRIP
-            && event->type == GDK_BUTTON_RELEASE && !strcmp(view->module_name, "map")
-            && (event->state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK)) == 0)
+       && event->type == GDK_BUTTON_RELEASE && !strcmp(view->module_name, "map")
+       && dt_modifier_is(event->state, 0))
     {
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, id);
       return TRUE;
@@ -1648,7 +1649,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
       dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     }
   }
-  // if we can reorder, let's update the thumbtable class acoordingly
+  // if we can reorder, let's update the thumbtable class accordingly
   // this will show up vertical bar for the image destination point
   if(darktable.collection->params.sort == DT_COLLECTION_SORT_CUSTOM_ORDER && table->mode != DT_THUMBTABLE_MODE_ZOOM)
   {
@@ -1899,7 +1900,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
       posx += empty_start * table->thumb_size;
     }
 
-    // we store image margin from frist thumb to apply to new ones and limit flickering
+    // we store image margin from first thumb to apply to new ones and limit flickering
     int old_margin_start = 0;
     int old_margin_top = 0;
     if(table->list)
@@ -1949,7 +1950,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
       }
       else
       {
-        // we create a completly new thumb
+        // we create a completely new thumb
         dt_thumbnail_t *thumb
             = dt_thumbnail_new(table->thumb_size, table->thumb_size, IMG_TO_FIT, nid, nrow, table->overlays,
                                DT_THUMBNAIL_CONTAINER_LIGHTTABLE, table->show_tooltips);
@@ -2204,7 +2205,7 @@ static gboolean _accel_color(GtkAccelGroup *accel_group, GObject *acceleratable,
       gchar *result = NULL;
       for(GList *res_iter = res; res_iter; res_iter = g_list_next(res_iter))
       {
-        const GdkRGBA c = darktable.bauhaus->colorlabels[GPOINTER_TO_INT(res->data)];
+        const GdkRGBA c = darktable.bauhaus->colorlabels[GPOINTER_TO_INT(res_iter->data)];
         result = dt_util_dstrcat(result,
                                  "<span foreground='#%02x%02x%02x'>⬤ </span>",
                                  (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255));

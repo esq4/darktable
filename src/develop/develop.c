@@ -837,16 +837,17 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
 
   history = g_list_nth(dev->history, dev->history_end - 1);
   dt_dev_history_item_t *hist = history ? (dt_dev_history_item_t *)(history->data) : 0;
-  if(!history // if no history yet, push new item for sure.
+  if(!history                                                  // no history yet, push new item
      || new_item                                               // a new item is requested
      || module != hist->module
      || module->instance != hist->module->instance             // add new item for different op
      || module->multi_priority != hist->module->multi_priority // or instance
      || ((dev->focus_hash != hist->focus_hash)                 // or if focused out and in
-         && (// but only add item if there is a difference at all for the same module
-           (module->params_size != hist->module->params_size) ||
-           include_masks ||
-           (module->params_size == hist->module->params_size && memcmp(hist->params, module->params, module->params_size)))))
+         // but only add item if there is a difference at all for the same module
+         && ((module->params_size != hist->module->params_size)
+             || include_masks
+             || (module->params_size == hist->module->params_size
+                 && memcmp(hist->params, module->params, module->params_size)))))
   {
     // new operation, push new item
     // printf("adding new history item %d - %s\n", dev->history_end, module->op);
@@ -1115,14 +1116,10 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
     else if(!dt_iop_is_hidden(module) && module->expander)
     {
       // we have to ensure that the name of the widget is correct
-      GtkWidget *wlabel;
-      GList *childs = gtk_container_get_children(GTK_CONTAINER(module->expander));
-      GtkWidget *header = gtk_bin_get_child(GTK_BIN(childs->data));
-      g_list_free(childs);
+      GtkWidget *child = dt_gui_container_first_child(GTK_CONTAINER(module->expander));
+      GtkWidget *header = gtk_bin_get_child(GTK_BIN(child));
 
-      childs = gtk_container_get_children(GTK_CONTAINER(header));
-      wlabel = g_list_nth(childs, IOP_MODULE_LABEL)->data;
-      g_list_free(childs);
+      GtkWidget *wlabel = dt_gui_container_nth_child(GTK_CONTAINER(header), IOP_MODULE_LABEL);
       gchar *label = dt_history_item_get_name_html(module);
       gtk_label_set_markup(GTK_LABEL(wlabel), label);
       g_free(label);
