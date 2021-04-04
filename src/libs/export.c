@@ -384,8 +384,7 @@ static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
 {
   const char *validSign = ",.0123456789";
   const gchar *value = gtk_entry_get_text(spin);
-
-  const int len = sizeof(value);
+  const int len = strlen(value);
   int i, j = 0, idec = 0, idiv = 0, pdiv = 0;
   char new_value[30] = "";
 
