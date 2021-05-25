@@ -10,7 +10,7 @@
 //#include "common/darktable.h"
 
 // из src/views/darkroom.c
-static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
+static void dr_dev_change_image(dt_develop_t *dev, const int32_t imgid)
 {
   // stop crazy users from sleeping on key-repeat spacebar:
   if(dev->image_loading) return;
@@ -23,9 +23,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
   // change active image
   g_slist_free(darktable.view_manager->active_images);
-  darktable.view_manager->active_images = NULL;
-  darktable.view_manager->active_images
-      = g_slist_append(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
+  darktable.view_manager->active_images = g_slist_prepend(NULL, GINT_TO_POINTER(imgid));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 
   // if the previous shown image is selected and the selection is unique
@@ -117,7 +115,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   if (!dt_history_hash_is_mipmap_synced(dev->image_storage.id))
   {
     dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id);
-    dt_image_reset_final_size(dev->image_storage.id);
+    dt_image_update_final_size(dev->image_storage.id);
     dt_image_synch_xmp(dev->image_storage.id);
     dt_history_hash_set_mipmap(dev->image_storage.id);
   }
@@ -207,8 +205,8 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   dt_dev_read_history(dev);
 
   // we have to init all module instances other than "base" instance
-  GList *modules = g_list_last(dev->iop);
-  while(modules)
+  char option[1024];
+  for(const GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
     if(module->multi_priority > 0)
@@ -219,7 +217,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
 
         /* add module to right panel */
         dt_iop_gui_set_expander(module);
-        dt_iop_gui_set_expanded(module, FALSE, dt_conf_get_bool("darkroom/ui/single_module"));
         dt_iop_gui_update_blending(module);
       }
     }
@@ -228,12 +225,13 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       //  update the module header to ensure proper multi-name display
       if(!dt_iop_is_hidden(module))
       {
+        snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
+        module->expanded = dt_conf_get_bool(option);
+        dt_iop_gui_update_expanded(module);
         if(module->change_image) module->change_image(module);
         dt_iop_gui_update_header(module);
       }
     }
-
-    modules = g_list_previous(modules);
   }
 
   dt_dev_pop_history_items(dev, dev->history_end);
@@ -256,8 +254,7 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   if(active_plugin)
   {
     gboolean valid = FALSE;
-    modules = dev->iop;
-    while(modules)
+    for(const GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
       if(!strcmp(module->op, active_plugin))
@@ -266,7 +263,6 @@ static void dr_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
         dt_conf_set_string("plugins/darkroom/active", active_plugin);
         dt_iop_request_focus(module);
       }
-      modules = g_list_next(modules);
     }
     if(!valid)
     {
