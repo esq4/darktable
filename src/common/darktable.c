@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2009-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -160,6 +160,51 @@ static int usage(const char *argv0)
 #endif
 
   return 1;
+}
+
+gboolean dt_is_dev_version()
+{
+  // a dev version as an odd number after the first dot
+  char *p = (char *)darktable_package_string;
+  while(*p && (*p != '.')) p++;
+  if(p && (*p != '\0'))
+  {
+    p++;
+    const int val = *p - '0';
+    return val % 2 == 0 ? FALSE : TRUE;
+  }
+  return FALSE;
+}
+
+char *dt_version_major_minor()
+{
+  char ver[100] = { 0 };
+  g_strlcpy(ver, darktable_package_string, sizeof(ver));
+  int count = -1;
+  char *start = ver;
+  for(char *p = ver; *p; p++)
+  {
+    // first look for a number
+    if(count == -1)
+    {
+      if(*p >= '0' && *p <= '9')
+      {
+        count++;
+        start = p;
+      }
+    }
+    // then check for <major>.<minor>
+    else
+    {
+      if(*p == '.' || *p == '+') count++;
+      if(count == 2)
+      {
+        *p = '\0';
+        break;
+      }
+    }
+  }
+  return g_strdup(start);
 }
 
 gboolean dt_supported_image(const gchar *filename)
@@ -904,13 +949,15 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 #endif
     gtk_init(&argc, &argv);
 
+    darktable.themes = NULL;
+
     // execute a performance check and configuration if needed
     int last_configure_version = dt_conf_get_int("performance_configuration_version_completed");
     if(last_configure_version < DT_CURRENT_PERFORMANCE_CONFIGURE_VERSION)
     {
       // ask the user whether he/she would like
       // dt to make changes in the settings
-      gboolean run_configure = dt_gui_show_standalone_yes_no_dialog(
+      const gboolean run_configure = dt_gui_show_standalone_yes_no_dialog(
           _("darktable - run performance configuration?"),
           _("we have an updated performance configuration logic - executing that might improve the performance of "
             "darktable.\nthis will potentially overwrite some of your existing settings - especially in case you "
@@ -978,6 +1025,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     dt_database_perform_maintenance(darktable.db);
   }
 
+  // init darktable tags table
+  dt_set_darktable_tags();
+
   // Initialize the signal system
   darktable.signals = dt_control_signal_init();
 
@@ -1023,8 +1073,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.pwstorage = dt_pwstorage_new();
 
   darktable.guides = dt_guides_init();
-
-  darktable.themes = NULL;
 
 #ifdef HAVE_GRAPHICSMAGICK
   /* GraphicsMagick init */

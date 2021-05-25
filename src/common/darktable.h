@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2009-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -192,6 +192,11 @@ static inline int dt_version()
   return DT_MODULE_VERSION;
 #endif
 }
+
+// returns true if the running darktable corresponds to a dev version
+gboolean dt_is_dev_version();
+// returns the darktable version as <major>.<minor>
+char *dt_version_major_minor();
 
 // Golden number (1+sqrt(5))/2
 #ifndef PHI
@@ -483,6 +488,12 @@ static inline void *dt_alloc_perthread(const size_t n, const size_t objsize, siz
   const size_t cache_lines = (alloc_size+63)/64;
   *padded_size = 64 * cache_lines / objsize;
   return __builtin_assume_aligned(dt_alloc_align(64, 64 * cache_lines * dt_get_num_threads()), 64);
+}
+static inline void *dt_calloc_perthread(const size_t n, const size_t objsize, size_t* padded_size)
+{
+  void *const buf = (float*)dt_alloc_perthread(n, objsize, padded_size);
+  memset(buf, 0, *padded_size * dt_get_num_threads() * objsize);
+  return buf;
 }
 // Same as dt_alloc_perthread, but the object is a float.
 static inline float *dt_alloc_perthread_float(const size_t n, size_t* padded_size)

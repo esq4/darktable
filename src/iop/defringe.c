@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2013-2020 darktable developers.
+    Copyright (C) 2013-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -86,13 +86,18 @@ const char *description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_CORRECT | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_CORRECT | IOP_GROUP_TECHNICAL | IOP_FLAGS_DEPRECATED;
 }
 
 int flags()
 {
   // a second instance might help to reduce artifacts when thick fringe needs to be removed
   return IOP_FLAGS_SUPPORTS_BLENDING;
+}
+
+const char *deprecated_msg()
+{
+  return _("this module is deprecated. please use the chromatic aberration module instead.");
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

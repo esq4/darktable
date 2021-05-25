@@ -17,7 +17,8 @@
 */
 
 #include "common.h"
-#include "colorspace.cl"
+#include "colorspace.h"
+#include "color_conversion.h"
 
 
 __kernel void
@@ -277,26 +278,6 @@ vibrance (read_only image2d_t in, write_only image2d_t out, const int width, con
   pixel.x *= ls;
   pixel.y *= ss;
   pixel.z *= ss;
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
-__kernel void
-vibrancergb (read_only image2d_t in, write_only image2d_t out, const int width, const int height, const float vibrance)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  if(x >= width || y >= height) return;
-
-  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-  const float w = pixel.w;
-
-  const float average = (pixel.x + pixel.y + pixel.z) / 3.0f;
-  const float delta = fast_length(average - pixel.xyz);
-  const float P = vibrance * (1.0f - pow(delta, fabs(vibrance)));
-  pixel = average + (1.0f + P) * (pixel - average);
-  pixel.w = w;
 
   write_imagef (out, (int2)(x, y), pixel);
 }
@@ -739,6 +720,221 @@ colorbalance_cdl (read_only image2d_t in, write_only image2d_t out, const int wi
 
   write_imagef (out, (int2)(x, y), Lab);
 }
+
+
+inline float sqf(const float x)
+{
+  return x * x;
+}
+
+
+inline float4 opacity_masks(const float x,
+                            const float shadows_weight, const float highlights_weight,
+                            const float midtones_weight, const float mask_grey_fulcrum)
+{
+  float4 output;
+  const float x_offset = (x - mask_grey_fulcrum);
+  const float x_offset_norm = x_offset / mask_grey_fulcrum;
+  const float alpha = 1.f / (1.f + native_exp(x_offset_norm * shadows_weight));    // opacity of shadows
+  const float beta = 1.f / (1.f + native_exp(-x_offset_norm * highlights_weight)); // opacity of highlights
+  const float gamma = native_exp(-sqf(x_offset) * midtones_weight / 4.f) * sqf(1.f - alpha) * sqf(1.f - beta) * 8.f; // opacity of midtones
+
+  output.x = alpha;
+  output.y = gamma;
+  output.z = beta;
+  output.w = 0.f;
+
+  return output;
+}
+
+
+#define LUT_ELEM 360 // gamut LUT number of elements: resolution of 1°
+
+inline float lookup_gamut(read_only image2d_t gamut_lut, const float x)
+{
+  const int xi = clamp((int)(LUT_ELEM * (x + M_PI_F) / (2.f * M_PI_F)), 0, LUT_ELEM - 1);
+  return read_imagef(gamut_lut, sampleri, (int2)(xi, 0)).x;
+}
+
+
+inline float soft_clip(const float x, const float soft_threshold, const float hard_threshold)
+{
+  // use an exponential soft clipping above soft_threshold
+  // hard threshold must be > soft threshold
+  const float norm = hard_threshold - soft_threshold;
+  return (x > soft_threshold) ? soft_threshold + (1.f - native_exp(-(x - soft_threshold) / norm)) * norm : x;
+}
+
+
+kernel void
+colorbalancergb (read_only image2d_t in, write_only image2d_t out,
+                 const int width, const int height,
+                 constant const dt_colorspaces_iccprofile_info_cl_t *const profile_info,
+                 constant const float *const matrix_in, constant const float *const matrix_out,
+                 read_only image2d_t gamut_lut,
+                 const float shadows_weight, const float highlights_weight, const float midtones_weight, const float mask_grey_fulcrum,
+                 const float hue_angle, const float chroma_global, const float4 chroma, const float vibrance,
+                 const float4 global_offset, const float4 shadows, const float4 highlights, const float4 midtones,
+                 const float white_fulcrum, const float midtones_Y,
+                 const float grey_fulcrum, const float contrast,
+                 const float brilliance_global, const float4 brilliance,
+                 const float saturation_global, const float4 saturation,
+                 const int mask_display, const int mask_type, const int checker_1, const int checker_2,
+                 const float4 checker_color_1, const float4 checker_color_2)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const float4 pix_in = read_imagef(in, sampleri, (int2)(x, y));
+
+  float4 XYZ_D65 = 0.f;
+  float4 LMS = 0.f;
+  float4 RGB = 0.f;
+  float4 Yrg = 0.f;
+  float4 Ych = 0.f;
+
+  // clip pipeline RGB
+  RGB = fmax(pix_in, 0.f);
+
+  // go to CIE 2006 LMS D65
+  LMS = matrix_product_float4(RGB, matrix_in);
+
+  // go to Filmlight Yrg
+  Yrg = LMS_to_Yrg(LMS);
+
+  // go to Ych
+  Ych = Yrg_to_Ych(Yrg);
+
+  // Sanitize input : no negative luminance
+  Ych.x = fmax(Ych.x, 0.f);
+  const float4 opacities = opacity_masks(native_powr(Ych.x, 0.4101205819200422f), // center middle grey in 50 %
+                                         shadows_weight, highlights_weight, midtones_weight, mask_grey_fulcrum);
+  const float4 opacities_comp = (float4)1.f - opacities;
+
+  // Hue shift - do it now because we need the gamut limit at output hue right after
+  Ych.z += hue_angle;
+
+  // Ensure hue ± correction is in [-PI; PI]
+  if(Ych.z > M_PI_F) Ych.z -= 2.f * M_PI_F;
+  else if(Ych.z < -M_PI_F) Ych.z += 2.f * M_PI_F;
+
+  // Linear chroma : distance to achromatic at constant luminance in scene-referred
+  const float chroma_boost = chroma_global + dot(opacities, chroma);
+  const float vib = vibrance * (1.0f - native_powr(Ych.y, fabs(vibrance)));
+  const float chroma_factor = fmax(1.f + chroma_boost + vib, 0.f);
+  Ych.y *= chroma_factor;
+
+  // Go to Yrg
+  Yrg = Ych_to_Yrg(Ych);
+
+  // Go to LMS
+  LMS = Yrg_to_LMS(Yrg);
+
+  // Go to Filmlight RGB
+  RGB = LMS_to_gradingRGB(LMS);
+
+  // Color balance
+
+  // global : offset
+  RGB += global_offset;
+
+  // highlights, shadows : 2 slopes with masking
+  RGB *= opacities_comp.z * (opacities_comp.x + opacities.x * shadows) + opacities.z * highlights;
+  // factorization of : (RGB[c] * (1.f - alpha) + RGB[c] * d->shadows[c] * alpha) * (1.f - beta)  + RGB[c] * d->highlights[c] * beta;
+
+  // midtones : power with sign preservation
+  RGB = sign(RGB) * native_powr(fabs(RGB) / white_fulcrum, midtones) * white_fulcrum;
+
+  // for the non-linear ops we need to go in Yrg again because RGB doesn't preserve color
+  LMS = gradingRGB_to_LMS(RGB);
+  Yrg = LMS_to_Yrg(LMS);
+
+  // Y midtones power (gamma)
+  Yrg.x = native_powr(fmax(Yrg.x / white_fulcrum, 0.f), midtones_Y) * white_fulcrum;
+
+  // Y fulcrumed contrast
+  Yrg.x = grey_fulcrum * native_powr(Yrg.x / grey_fulcrum, contrast);
+
+  LMS = Yrg_to_LMS(Yrg);
+  XYZ_D65 = LMS_to_XYZ(LMS);
+
+  // Perceptual color adjustments
+
+  // Go to JzAzBz for perceptual saturation
+  float4 Jab = XYZ_to_JzAzBz(XYZ_D65);
+
+  // Convert to JCh
+  float JC[2] = { Jab.x, hypot(Jab.y, Jab.z) };               // brightness/chroma vector
+  const float h = atan2(Jab.z, Jab.y);  // hue : (a, b) angle
+
+  // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
+  // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
+  // so we add the chroma projected along the orthogonal axis to get some control value
+  const float T = atan2(JC[1], JC[0]); // angle of the eigenvector over the hue plane
+  const float sin_T = native_sin(T);
+  const float cos_T = native_cos(T);
+  const float M_rot_dir[2][2] = { {  cos_T,  sin_T },
+                                  { -sin_T,  cos_T } };
+  const float M_rot_inv[2][2] = { {  cos_T, -sin_T },
+                                  {  sin_T,  cos_T } };
+  float SO[2];
+
+  // brilliance & Saturation : mix of chroma and luminance
+  const float boosts[2] = { 1.f + brilliance_global + dot(opacities, brilliance),     // move in S direction
+                            saturation_global + dot(opacities, saturation) }; // move in O direction
+
+  SO[0] = JC[0] * M_rot_dir[0][0] + JC[1] * M_rot_dir[0][1];
+  SO[1] = SO[0] * clamp(T * boosts[1], -T, M_PI_F / 2.f - T);
+  SO[0] = fmax(SO[0] * boosts[0], 0.f);
+
+  // Project back to JCh, that is rotate back of -T angle
+  JC[0] = fmax(SO[0] * M_rot_inv[0][0] + SO[1] * M_rot_inv[0][1], 0.f);
+  JC[1] = fmax(SO[0] * M_rot_inv[1][0] + SO[1] * M_rot_inv[1][1], 0.f);
+
+  // Gamut mapping
+  const float out_max_chroma_h = JC[0] * lookup_gamut(gamut_lut, h);
+  JC[1] = soft_clip(JC[1], 0.8f * out_max_chroma_h, out_max_chroma_h);
+
+  // Project back to JzAzBz
+  Jab.x = JC[0];
+  Jab.y = JC[1] * native_cos(h);
+  Jab.z = JC[1] * native_sin(h);
+
+  XYZ_D65 = JzAzBz_2_XYZ(Jab);
+
+  // Project back to D50 pipeline RGB
+  RGB = matrix_product_float4(XYZ_D65, matrix_out);
+
+  if(mask_display)
+  {
+    // draw checkerboard
+    float4 color;
+    if(x % checker_1 < x % checker_2)
+    {
+      if(y % checker_1 < y % checker_2) color = checker_color_2;
+      else color = checker_color_1;
+    }
+    else
+    {
+      if(y % checker_1 < y % checker_2) color = checker_color_1;
+      else color = checker_color_2;
+    }
+    const float *op = (const float *)&opacities;
+    float opacity = op[mask_type];
+    const float opacity_comp = 1.0f - opacity;
+
+    RGB = opacity_comp * color + opacity * fmax(RGB, 0.f);
+    RGB.w = 1.0f; // alpha is opaque, we need to preview it
+  }
+  else
+  {
+    RGB = fmax(RGB, 0.f);
+    RGB.w = pix_in.w; // alpha copy
+  }
+
+  write_imagef (out, (int2)(x, y), RGB);
+}
+
 
 /* helpers and kernel for the colorchecker module */
 float fastlog2(float x)

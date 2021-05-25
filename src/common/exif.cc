@@ -1,6 +1,6 @@
 /*
    This file is part of darktable,
-   Copyright (C) 2009-2020 darktable developers.
+   Copyright (C) 2009-2021 darktable developers.
 
    darktable is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -4222,6 +4222,10 @@ void dt_exif_init()
 {
   // preface the exiv2 messages with "[exiv2] "
   Exiv2::LogMsg::setHandler(&dt_exif_log_handler);
+
+  #ifdef HAVE_LIBEXIV2_WITH_ISOBMFF
+  Exiv2::enableBMFF();
+  #endif
 
   Exiv2::XmpParser::initialize();
   // this has to stay with the old url (namespace already propagated outside dt)

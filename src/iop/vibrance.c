@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2011-2020 darktable developers.
+    Copyright (C) 2011-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ typedef struct dt_iop_vibrance_global_data_t
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the vibrance rgb module instead.");
+  return _("this module is deprecated. please use the vibrance slider in the color balance rgb module instead.");
 }
 
 const char *name()

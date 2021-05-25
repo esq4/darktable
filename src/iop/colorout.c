@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2009-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -724,10 +724,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    */
 
   /* get matrix from profile, if softproofing or high quality exporting always go xform codepath */
-  if(d->mode != DT_PROFILE_NORMAL
-     || force_lcms2
+  if(d->mode != DT_PROFILE_NORMAL || force_lcms2
      || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1], d->lut[2],
-                                                      LUT_SAMPLES, out_intent))
+                                                      LUT_SAMPLES))
   {
     d->cmatrix[0] = NAN;
     piece->process_cl_ready = 0;
@@ -743,8 +742,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT)->profile;
 
     if(d->mode != DT_PROFILE_NORMAL
-       || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1],
-                                                        d->lut[2], LUT_SAMPLES, out_intent))
+       || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1], d->lut[2],
+                                                        LUT_SAMPLES))
     {
       d->cmatrix[0] = NAN;
       piece->process_cl_ready = 0;

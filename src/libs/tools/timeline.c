@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2019-2020 darktable developers.
+    Copyright (C) 2019-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -889,6 +889,12 @@ static void _lib_timeline_collection_changed(gpointer instance, dt_collection_ch
 }
 
 
+static gboolean _timespec_has_date_only(const char *const spec)
+{
+  // spec could be "YYYY:MM", "YYYY:MM:DD", "YYYY:MM:DD HH", etc.
+  return strlen(spec) <= 10; // is string YYYY:MM:DD or shorter?
+}
+
 // add the selected portions to the collect
 static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t mode)
 {
@@ -907,8 +913,8 @@ static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t 
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", nb_rules - 1);
     gchar *string = dt_conf_get_string(confname);
     string = g_strstrip(string);
-    if((prop == DT_COLLECTION_PROP_TIME && rmode == 0) || !string || strlen(string) == 0
-       || g_strcmp0(string, "%") == 0)
+    if(((prop == DT_COLLECTION_PROP_TIME || prop == DT_COLLECTION_PROP_DAY) && rmode == 0)
+       || !string || strlen(string) == 0 || g_strcmp0(string, "%") == 0)
       new_rule = nb_rules - 1;
     else
       new_rule = nb_rules;
@@ -917,9 +923,11 @@ static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t 
 
   // we construct the rule
   gchar *coll = NULL;
+  gboolean date_only = FALSE;
   if(strip->start_x == strip->stop_x)
   {
     coll = _time_format_for_db(strip->start_t, (strip->zoom + 1) / 2 * 2 + 2, FALSE);
+    date_only = _timespec_has_date_only(coll);
   }
   else
   {
@@ -933,7 +941,11 @@ static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t 
     }
     gchar *d1 = _time_format_for_db(start, (strip->zoom + 1) / 2 * 2 + 2, FALSE);
     gchar *d2 = _time_format_for_db(stop, (strip->zoom + 1) / 2 * 2 + 2, FALSE);
-    if(d1 && d2) coll = g_strdup_printf("[%s;%s]", d1, d2);
+    if(d1 && d2)
+    {
+      coll = g_strdup_printf("[%s;%s]", d1, d2);
+      date_only = _timespec_has_date_only(d1) && _timespec_has_date_only(d2);
+    }
     g_free(d1);
     g_free(d2);
   }
@@ -943,7 +955,7 @@ static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t 
     dt_conf_set_int("plugins/lighttable/collect/num_rules", new_rule + 1);
     char confname[200] = { 0 };
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/item%1d", new_rule);
-    dt_conf_set_int(confname, DT_COLLECTION_PROP_TIME);
+    dt_conf_set_int(confname, date_only ? DT_COLLECTION_PROP_DAY : DT_COLLECTION_PROP_TIME);
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/mode%1d", new_rule);
     dt_conf_set_int(confname, 0);
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", new_rule);
@@ -1373,13 +1385,17 @@ static gboolean _lib_timeline_scroll_callback(GtkWidget *w, GdkEventScroll *e, g
   if(dt_modifier_is(e->state, GDK_CONTROL_MASK))
   {
     int z = strip->zoom;
-    if(e->direction == GDK_SCROLL_UP)
+    int delta_y = 0;
+    if(dt_gui_get_scroll_unit_deltas(e, NULL, &delta_y))
     {
-      if(z != DT_LIB_TIMELINE_ZOOM_HOUR) z++;
-    }
-    else if(e->direction == GDK_SCROLL_DOWN)
-    {
-      if(z != DT_LIB_TIMELINE_ZOOM_YEAR) z--;
+      if(delta_y < 0)
+      {
+        if(z != DT_LIB_TIMELINE_ZOOM_HOUR) z++;
+      }
+      else if(delta_y > 0)
+      {
+        if(z != DT_LIB_TIMELINE_ZOOM_YEAR) z--;
+      }
     }
 
     // if the zoom as changed, we need to recompute blocks and redraw
@@ -1403,7 +1419,7 @@ static gboolean _lib_timeline_scroll_callback(GtkWidget *w, GdkEventScroll *e, g
     int delta;
     if(dt_gui_get_scroll_unit_delta(e, &delta))
     {
-      int move = -delta;
+      int move = delta;
       if(dt_modifier_is(e->state, GDK_SHIFT_MASK)) move *= 2;
 
       _time_add(&(strip->time_pos), move, strip->zoom);
@@ -1464,6 +1480,7 @@ void gui_init(dt_lib_module_t *self)
   d->time_pos = d->time_mini;
   /* creating drawing area */
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
 
   /* creating timeline box*/
   d->timeline = gtk_event_box_new();

@@ -1,6 +1,6 @@
 /*
    This file is part of darktable,
-   Copyright (C) 2013-2020 darktable developers.
+   Copyright (C) 2013-2021 darktable developers.
 
    darktable is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -110,7 +110,7 @@ void dt_lua_event_add(lua_State *L, const char *evt_name)
   if(args != 3)
   {
     lua_pop(L, args);
-    dt_print(DT_DEBUG_LUA, "LUA ERROR : %s: wrong number of args for %s, expected 4, got %d\n", __FUNCTION__, evt_name, args);
+    dt_print(DT_DEBUG_LUA, "LUA ERROR : %s: wrong number of args for %s, expected 3, got %d\n", __FUNCTION__, evt_name, args);
     return;
   }
 

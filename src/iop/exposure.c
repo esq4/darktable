@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2009-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -834,7 +834,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_step(g->exposure, 0.02);
   dt_bauhaus_slider_set_digits(g->exposure, 3);
   dt_bauhaus_slider_set_format(g->exposure, _("%.2f EV"));
-  dt_bauhaus_slider_set_soft_range(g->exposure, -3.0, 3.0);
+  dt_bauhaus_slider_set_soft_range(g->exposure, -3.0, 4.0);
 
   g->autoexpp = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
                 dt_bauhaus_slider_new_with_range(self, 0.0, 0.2, .001, 0.01, 3));

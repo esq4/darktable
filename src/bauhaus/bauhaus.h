@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2012-2020 darktable developers.
+    Copyright (C) 2012-2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -146,6 +146,9 @@ typedef struct dt_bauhaus_widget_t
   dt_iop_module_t *module;
   // label text, short
   char label[256];
+  // section, short
+  gchar *section;
+  gboolean show_extended_label;
   // callback function to draw the quad icon
   dt_bauhaus_quad_paint_f quad_paint;
   // minimal modifiers for paint function.
@@ -154,6 +157,8 @@ typedef struct dt_bauhaus_widget_t
   void *quad_paint_data;
   // quad is a toggle button?
   int quad_toggle;
+  // if a section label
+  gboolean is_section;
 
   // function to populate the combo list on the fly
   void (*combo_populate)(GtkWidget *w, struct dt_iop_module_t **module);
@@ -218,11 +223,8 @@ typedef struct dt_bauhaus_t
   float baseline_size;                   // height of the slider bar
   float border_width;                    // width of the border of the slider marker
   float quad_width;                      // width of the quad area to paint icons
-  float label_font_size;                 // percent of line height to fill with font for labels
-  float value_font_size;                 // percent of line height to fill with font for values
-  char label_font[256];                  // font to draw the label with
-  char value_font[256];                  // font to draw the value with
   PangoFontDescription *pango_font_desc; // no need to recreate this for every string we want to print
+  PangoFontDescription *pango_sec_font_desc; // as above but for section labels
 
   // the slider popup has a blinking cursor
   guint cursor_timeout;
@@ -233,8 +235,8 @@ typedef struct dt_bauhaus_t
   GdkRGBA color_fg, color_fg_insensitive, color_bg, color_border, indicator_border, color_fill;
 
   // colors for graphs
-  GdkRGBA graph_bg, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay, inset_histogram;
-  GdkRGBA graph_primaries[3];
+  GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay, inset_histogram;
+  GdkRGBA graph_colors[3];               // primaries
   GdkRGBA colorlabels[DT_COLORLABELS_LAST];
 } dt_bauhaus_t;
 
@@ -246,6 +248,10 @@ void dt_bauhaus_cleanup();
 
 // load theme colors, fonts, etc
 void dt_bauhaus_load_theme();
+
+// set the bauhaus widget as a module section and in this case the font used will be the one
+// from the CSS section_label.
+void dt_bauhaus_widget_set_section(GtkWidget *w, const gboolean is_section);
 
 // common functions:
 // set the label text:

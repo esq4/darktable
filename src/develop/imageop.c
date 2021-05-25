@@ -744,6 +744,9 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
                           module->expander, g_value_get_int(&gv) + pos_base - pos_module + 1);
     dt_iop_gui_set_expanded(module, TRUE, FALSE);
 
+    if(dt_conf_get_bool("darkroom/ui/scroll_to_module"))
+        darktable.gui->scroll_to[1] = module->expander;
+
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
     if(copy_params)
@@ -1167,7 +1170,7 @@ void dt_iop_set_module_trouble_message(dt_iop_module_t *const module,
     fprintf(stderr, "[%s] %s\n", name, stderr_message ? stderr_message : trouble_msg);
   }
 
-  if(!dt_iop_is_hidden(module) && module->gui_data)
+  if(!dt_iop_is_hidden(module) && module->gui_data && dt_conf_get_bool("plugins/darkroom/show_warnings"))
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TROUBLE_MESSAGE,
                                   module, trouble_msg, trouble_tooltip);
 }
@@ -1934,6 +1937,9 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(out_focus_module));
     GtkStyleContext *context = gtk_widget_get_style_context(iop_w);
     gtk_style_context_remove_class(context, "dt_module_focus");
+
+    // if the module change the image size, we update the final sizes
+    if(out_focus_module->modify_roi_out) dt_image_update_final_size(darktable.develop->preview_pipe->output_imgid);
   }
 
   /* set the focus on module */
@@ -3077,7 +3083,10 @@ void dt_iop_cancel_history_update(dt_iop_module_t *module)
 
 char *dt_iop_warning_message(const char *message)
 {
-  return g_strdup_printf("<span foreground='red'>⚠</span> %s", message);
+  if(dt_conf_get_bool("plugins/darkroom/show_warnings"))
+    return g_strdup_printf("<span foreground='red'>⚠</span> %s", message);
+  else
+    return g_strdup_printf("%s", message);
 }
 
 char *dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,
