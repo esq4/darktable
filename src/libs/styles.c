@@ -562,7 +562,16 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
       /* extract name from xml file */
       gchar *bname = "";
       xmlDoc *document = xmlReadFile((char*)filename->data, NULL, 0);
-      xmlNode *root = xmlDocGetRootElement(document);
+      xmlNode *root = NULL;
+      if(document != NULL)
+        root = xmlDocGetRootElement(document);
+
+      if(document == NULL || root == NULL)
+      {
+        dt_print(DT_DEBUG_CONTROL,
+                 "[styles] file %s is not a style file\n", (char*)filename->data);
+        continue;
+      }
 
       for(xmlNode *node = root->children->children; node; node = node->next)
       {
@@ -763,8 +772,9 @@ static void _image_selection_changed_callback(gpointer instance, dt_lib_module_t
   _update(self);
 }
 
-static void _collection_updated_callback(gpointer instance, dt_collection_change_t query_change, gpointer imgs,
-                                        int next, dt_lib_module_t *self)
+static void _collection_updated_callback(gpointer instance, dt_collection_change_t query_change,
+                                         dt_collection_properties_t changed_property, gpointer imgs, int next,
+                                         dt_lib_module_t *self)
 {
   _update(self);
 }
