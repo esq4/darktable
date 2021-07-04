@@ -159,8 +159,7 @@ static void load_button_clicked(GtkWidget *widget, dt_lib_module_t *self)
 
   if(gtk_dialog_run(GTK_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
   {
-    char *dtfilename;
-    dtfilename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
+    gchar *dtfilename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
     if(dt_history_load_and_apply_on_list(dtfilename, imgs) != 0)
     {
       GtkWidget *dialog
@@ -401,7 +400,7 @@ void gui_init(dt_lib_module_t *self)
                                        "history_stack.html#history_stack_usage");
   gtk_grid_attach(grid, d->discard_button, 3, line++, 3, 1);
 
-  d->pastemode = dt_bauhaus_combobox_new(NULL);
+  d->pastemode = dt_bauhaus_combobox_new_action(DT_ACTION(self));
   dt_bauhaus_widget_set_label(d->pastemode, NULL, N_("mode"));
   dt_bauhaus_combobox_add(d->pastemode, _("append"));
   dt_bauhaus_combobox_add(d->pastemode, _("overwrite"));

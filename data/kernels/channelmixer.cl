@@ -43,17 +43,17 @@ typedef enum dt_adaptation_t
 #define FALSE 0
 #define NORM_MIN 1e-6f
 
-inline float sqf(const float x)
+static inline float sqf(const float x)
 {
   return x * x;
 }
 
-inline float euclidean_norm(const float4 input)
+static inline float euclidean_norm(const float4 input)
 {
   return fmax(native_sqrt(sqf(input.x) + sqf(input.y) + sqf(input.z)), NORM_MIN);
 }
 
-inline float4 gamut_mapping(const float4 input, const float compression, const int clip)
+static inline float4 gamut_mapping(const float4 input, const float compression, const int clip)
 {
   // Get the sum XYZ
   float sum = input.x + input.y + input.z;
@@ -100,8 +100,8 @@ inline float4 gamut_mapping(const float4 input, const float compression, const i
   return dt_xyY_to_XYZ(xyY);
 }
 
-inline float4 luma_chroma(const float4 input, const float4 saturation, const float4 lightness,
-                          const dt_iop_channelmixer_rgb_version_t version)
+static inline float4 luma_chroma(const float4 input, const float4 saturation, const float4 lightness,
+                                 const dt_iop_channelmixer_rgb_version_t version)
 {
   float4 output;
 
@@ -199,22 +199,23 @@ inline float4 luma_chroma(const float4 input, const float4 saturation, const flo
   }})
 
 
-inline void downscale_vector(float4 *const vector, const float scaling)
+static inline void downscale_vector(float4 *const vector, const float scaling)
 {
   const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   *vector /= (valid) ? (scaling + NORM_MIN) : NORM_MIN;
 }
 
-inline void upscale_vector(float4 *const vector, const float scaling)
+static inline void upscale_vector(float4 *const vector, const float scaling)
 {
   const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   *vector *= (valid) ? (scaling + NORM_MIN) : NORM_MIN;
 }
 
-inline float4 chroma_adapt_bradford(const float4 RGB,
-                                    constant const float *const RGB_to_XYZ,
-                                    constant const float *const MIX, const float4 illuminant, const float p,
-                                    const int full)
+static inline float4 chroma_adapt_bradford(const float4 RGB,
+                                           constant const float *const RGB_to_XYZ,
+                                           constant const float *const MIX,
+                                           const float4 illuminant, const float p,
+                                           const int full)
 {
   // Convert from RGB to XYZ
   const float4 XYZ = matrix_product_float4(RGB, RGB_to_XYZ);
@@ -234,10 +235,11 @@ inline float4 chroma_adapt_bradford(const float4 RGB,
   return convert_bradford_LMS_to_XYZ(LMS_mixed);
 };
 
-inline float4 chroma_adapt_CAT16(const float4 RGB,
-                                 constant const float *const RGB_to_XYZ,
-                                 constant const float *const MIX, const float4 illuminant, const float p,
-                                 const int full)
+static inline float4 chroma_adapt_CAT16(const float4 RGB,
+                                        constant const float *const RGB_to_XYZ,
+                                        constant const float *const MIX,
+                                        const float4 illuminant, const float p,
+                                        const int full)
 {
   // Convert from RGB to XYZ
   const float4 XYZ = matrix_product_float4(RGB, RGB_to_XYZ);
@@ -257,9 +259,9 @@ inline float4 chroma_adapt_CAT16(const float4 RGB,
   return convert_CAT16_LMS_to_XYZ(LMS_mixed);
 }
 
-inline float4 chroma_adapt_XYZ(const float4 RGB,
-                               constant const float *const RGB_to_XYZ,
-                               constant const float *const MIX, const float4 illuminant)
+static inline float4 chroma_adapt_XYZ(const float4 RGB,
+                                      constant const float *const RGB_to_XYZ,
+                                      constant const float *const MIX, const float4 illuminant)
 {
   // Convert from RGB to XYZ
   float4 XYZ_mixed = matrix_product_float4(RGB, RGB_to_XYZ);
@@ -274,7 +276,7 @@ inline float4 chroma_adapt_XYZ(const float4 RGB,
   return matrix_product_float4(XYZ_mixed, MIX);
 }
 
-inline float4 chroma_adapt_RGB(const float4 RGB,
+static inline float4 chroma_adapt_RGB(const float4 RGB,
                                constant const float *const RGB_to_XYZ,
                                constant const float *const MIX)
 {
@@ -341,6 +343,7 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
                       const float4 lightness,
                       const float4 grey,
                       const float p, const float gamut, const int clip, const int apply_grey,
+                      const int do_gamut_mapping,
                       const dt_iop_channelmixer_rgb_version_t version)
 {
   const dt_adaptation_t kind = DT_ADAPTATION_CAT16;
@@ -364,7 +367,7 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
   /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
-  XYZ = gamut_mapping(XYZ, gamut, clip);
+  if(do_gamut_mapping) XYZ = gamut_mapping(XYZ, gamut, clip);
 
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
@@ -421,6 +424,7 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
                                 const float4 lightness,
                                 const float4 grey,
                                 const float p, const float gamut, const int clip, const int apply_grey,
+                                const int do_gamut_mapping,
                                 const dt_iop_channelmixer_rgb_version_t version)
 {
   const dt_adaptation_t kind = DT_ADAPTATION_LINEAR_BRADFORD;
@@ -444,7 +448,7 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
   /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
-  XYZ = gamut_mapping(XYZ, gamut, clip);
+  if(do_gamut_mapping) XYZ = gamut_mapping(XYZ, gamut, clip);
 
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
@@ -500,6 +504,7 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
                               const float4 lightness,
                               const float4 grey,
                               const float p, const float gamut, const int clip, const int apply_grey,
+                              const int do_gamut_mapping,
                               const dt_iop_channelmixer_rgb_version_t version)
 {
   const dt_adaptation_t kind = DT_ADAPTATION_FULL_BRADFORD;
@@ -523,7 +528,7 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
   /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
-  XYZ = gamut_mapping(XYZ, gamut, clip);
+  if(do_gamut_mapping) XYZ = gamut_mapping(XYZ, gamut, clip);
 
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
@@ -580,6 +585,7 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
                     const float4 lightness,
                     const float4 grey,
                     const float p, const float gamut, const int clip, const int apply_grey,
+                    const int do_gamut_mapping,
                     const dt_iop_channelmixer_rgb_version_t version)
 {
   const dt_adaptation_t kind = DT_ADAPTATION_XYZ;
@@ -603,7 +609,7 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
   /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
-  XYZ = gamut_mapping(XYZ, gamut, clip);
+  if(do_gamut_mapping) XYZ = gamut_mapping(XYZ, gamut, clip);
 
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
@@ -659,6 +665,7 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
                     const float4 lightness,
                     const float4 grey,
                     const float p, const float gamut, const int clip, const int apply_grey,
+                    const int do_gamut_mapping,
                     const dt_iop_channelmixer_rgb_version_t version)
 {
   const dt_adaptation_t kind = DT_ADAPTATION_RGB;
@@ -682,7 +689,7 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
   /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
-  XYZ = gamut_mapping(XYZ, gamut, clip);
+  if(do_gamut_mapping) XYZ = gamut_mapping(XYZ, gamut, clip);
 
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);

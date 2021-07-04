@@ -70,20 +70,24 @@ int position()
 
 void init_key_accels(dt_lib_module_t *self)
 {
+  dt_accel_register_lib(self, NC_("accel", "create"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "remove"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "export"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "import"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "edit"), 0, 0);
+  dt_accel_register_lib(self, NC_("accel", "apply"), 0, 0);
 }
 
 void connect_key_accels(dt_lib_module_t *self)
 {
   dt_lib_styles_t *d = (dt_lib_styles_t *)self->data;
 
+  dt_accel_connect_button_lib(self, "create", d->create_button);
   dt_accel_connect_button_lib(self, "remove", d->delete_button);
   dt_accel_connect_button_lib(self, "export", d->export_button);
   dt_accel_connect_button_lib(self, "import", d->import_button);
   if(d->edit_button) dt_accel_connect_button_lib(self, "edit", d->edit_button);
+  dt_accel_connect_button_lib(self, "apply", d->apply_button);
 }
 
 typedef enum _styles_columns_t
@@ -119,12 +123,13 @@ static gboolean _get_node_for_name(GtkTreeModel *model, gboolean root, GtkTreeIt
   }
 
   // here we have iter to be on the right level, let's check if we can find parent_name
-  gchar *name;
-
   do
   {
+    gchar *name;
     gtk_tree_model_get(model, iter, DT_STYLES_COL_NAME, &name, -1);
-    if(!g_strcmp0(name, parent_name))
+    const gboolean match = !g_strcmp0(name, parent_name);
+    g_free(name);
+    if(match)
     {
       return TRUE;
     }
@@ -218,7 +223,11 @@ static void _styles_row_activated_callback(GtkTreeView *view, GtkTreePath *path,
   gtk_tree_model_get(model, &iter, DT_STYLES_COL_FULLNAME, &name, -1);
 
   const GList *list = dt_view_get_images_to_act_on(TRUE, TRUE, FALSE);
-  if(name) dt_styles_apply_to_list(name, list, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
+  if(name)
+  {
+    dt_styles_apply_to_list(name, list, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
+    g_free(name);
+  }
 }
 
 // get list of style names from selection
@@ -842,7 +851,7 @@ void gui_init(dt_lib_module_t *self)
                                dt_conf_get_bool("ui_last/styles_create_duplicate"));
   gtk_widget_set_tooltip_text(d->duplicate, _("creates a duplicate of the image before applying style"));
 
-  d->applymode = dt_bauhaus_combobox_new(NULL);
+  d->applymode = dt_bauhaus_combobox_new_action(DT_ACTION(self));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->applymode), TRUE, FALSE, 0);
   dt_bauhaus_widget_set_label(d->applymode, NULL, N_("mode"));
   dt_bauhaus_combobox_add(d->applymode, _("append"));

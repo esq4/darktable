@@ -33,6 +33,7 @@
 #include "dtgtk/icon.h"
 #include "dtgtk/thumbnail_btn.h"
 #include "gui/drag_and_drop.h"
+#include "gui/accelerators.h"
 #include "views/view.h"
 
 #include "dtgtk/thumbtable.h" //ab
@@ -885,9 +886,9 @@ static gboolean _event_grouping_release(GtkWidget *widget, GdkEventButton *event
   if(event->button == 1 && !thumb->moved)
   {
     //TODO: will succeed if either or *both* of Shift and Control are pressed.  Do we want this?
-    if(event->state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK)) // just add the whole group to the selection. TODO:
-                                                           // make this also work for collapsed groups.
+    if(dt_modifier_is(event->state, GDK_SHIFT_MASK) | dt_modifier_is(event->state, GDK_CONTROL_MASK))
     {
+      // just add the whole group to the selection. TODO: make this also work for collapsed groups.
       sqlite3_stmt *stmt;
       DT_DEBUG_SQLITE3_PREPARE_V2(
           dt_database_get(darktable.db),
@@ -1092,6 +1093,9 @@ static gboolean _event_image_enter_leave(GtkWidget *widget, GdkEventCrossing *ev
 static gboolean _event_btn_enter_leave(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
+
+  if(event->type == GDK_ENTER_NOTIFY && widget == thumb->w_reject) darktable.control->element = DT_VIEW_REJECT;
+
   // if we leave for ancestor, that means we leave for blank thumbtable area
   if(event->type == GDK_LEAVE_NOTIFY && event->detail == GDK_NOTIFY_ANCESTOR) dt_control_set_mouse_over_id(-1);
 
@@ -1114,7 +1118,11 @@ static gboolean _event_star_enter(GtkWidget *widget, GdkEventCrossing *event, gp
   {
     _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_PRELIGHT, pre);
     gtk_widget_queue_draw(thumb->w_stars[i]);
-    if(thumb->w_stars[i] == widget) pre = FALSE;
+    if(thumb->w_stars[i] == widget)
+    {
+      darktable.control->element = i + 1;
+      pre = FALSE;
+    }
   }
   return TRUE;
 }
@@ -1286,6 +1294,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
     // the reject icon
     thumb->w_reject = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_reject, 0, NULL);
     gtk_widget_set_name(thumb->w_reject, "thumb_reject");
+    dt_action_define(&darktable.control->actions_thumb, NULL, "rating", thumb->w_reject, &dt_action_def_rating);
     gtk_widget_set_valign(thumb->w_reject, GTK_ALIGN_END);
     gtk_widget_set_halign(thumb->w_reject, GTK_ALIGN_START);
     gtk_widget_show(thumb->w_reject);
@@ -1305,6 +1314,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
       g_signal_connect(G_OBJECT(thumb->w_stars[i]), "button-release-event", G_CALLBACK(_event_rating_release),
                        thumb);
       gtk_widget_set_name(thumb->w_stars[i], "thumb_star");
+      dt_action_define(&darktable.control->actions_thumb, NULL, "rating", thumb->w_stars[i], &dt_action_def_rating);
       gtk_widget_set_valign(thumb->w_stars[i], GTK_ALIGN_END);
       gtk_widget_set_halign(thumb->w_stars[i], GTK_ALIGN_START);
       gtk_widget_show(thumb->w_stars[i]);

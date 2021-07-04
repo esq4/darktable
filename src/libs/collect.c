@@ -53,6 +53,7 @@ typedef struct dt_lib_collect_rule_t
   GtkWidget *text;
   GtkWidget *button;
   gboolean typing;
+  gchar *searchstring;
 } dt_lib_collect_rule_t;
 
 typedef struct dt_lib_collect_t
@@ -524,14 +525,14 @@ static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
   GtkTreeIter iter, model_iter;
   GtkTreeModel *model;
 
-  gchar *filmroll_path = NULL;
-  gchar *fullq = NULL;
-
   /* Get info about the filmroll (or parent) selected */
   model = gtk_tree_view_get_model(treeview);
   selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
   if (gtk_tree_selection_get_selected(selection, &model, &iter))
   {
+    gchar *filmroll_path = NULL;
+    gchar *fullq = NULL;
+
     gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &filmroll_path, -1);
 
     /* Clean selected images, and add to the table those which are going to be deleted */
@@ -544,6 +545,7 @@ static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
                             " WHERE film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s%%')",
                             filmroll_path);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), fullq, NULL, NULL, NULL);
+    g_free(filmroll_path);
 
     if (dt_control_remove_images())
     {
@@ -836,12 +838,11 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
   dt_lib_collect_rule_t *dr = (dt_lib_collect_rule_t *)data;
   gchar *str = NULL;
   gboolean visible = FALSE;
-
-  gtk_tree_model_get(model, iter, DT_LIB_COLLECT_COL_PATH, &str, -1);
+  gboolean was_visible;
+  gtk_tree_model_get(model, iter, DT_LIB_COLLECT_COL_PATH, &str, DT_LIB_COLLECT_COL_VISIBLE, &was_visible, -1);
 
   gchar *haystack = g_utf8_strdown(str, -1);
-  gchar *needle = g_utf8_strdown(gtk_entry_get_text(GTK_ENTRY(dr->text)), -1);
-  if(g_str_has_suffix(needle, "%")) needle[strlen(needle) - 1] = '\0';
+  const gchar *needle = dr->searchstring;
 
   const int property = _combo_get_active_collection(dr->combo);
   if(property == DT_COLLECTION_PROP_APERTURE
@@ -890,20 +891,14 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
     g_free(number);
     g_free(number2);
   }
-  else if (property == DT_COLLECTION_PROP_FILENAME)
+  else if (property == DT_COLLECTION_PROP_FILENAME && strchr(needle,',') != NULL)
   {
     GList *list = dt_util_str_to_glist(",", needle);
 
     for (const GList *l = list; l; l = g_list_next(l))
     {
-      if(g_str_has_prefix((char *)l->data, "%"))
-      {
-        if((visible = (g_strrstr(haystack, (char *)l->data + 1) != NULL))) break;
-      }
-      else
-      {
-        if((visible = (g_strrstr(haystack, (char *)l->data) != NULL))) break;
-      }
+      const char *name = (char *)l->data;
+      if((visible = (g_strrstr(haystack, name + (name[0]=='%')) != NULL))) break;
     }
 
     g_list_free_full(list, g_free);
@@ -911,18 +906,29 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
   }
   else
   {
-    if(g_str_has_prefix(needle, "%"))
-      visible = (g_strrstr(haystack, needle + 1) != NULL);
+    if (needle[0] == '%')
+      needle++;
+    if (!needle[0])
+    {
+      // empty search string matches all
+      visible = TRUE;
+    }
+    else if (!needle[1])
+    {
+      // single-char search, use faster strchr instead of strstr
+      visible = (strchr(haystack, needle[0]) != NULL);
+    }
     else
+    {
       visible = (g_strrstr(haystack, needle) != NULL);
+    }
   }
 
   g_free(haystack);
-  g_free(needle);
-
   g_free(str);
 
-  gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_COLLECT_COL_VISIBLE, visible, -1);
+  if (visible != was_visible)
+    gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_COLLECT_COL_VISIBLE, visible, -1);
   return FALSE;
 }
 
@@ -1961,7 +1967,14 @@ static void list_view(dt_lib_collect_rule_t *dr)
                     || property == DT_COLLECTION_PROP_ORDER
                     || (property >= DT_COLLECTION_PROP_METADATA
                         && property < DT_COLLECTION_PROP_METADATA + DT_METADATA_NUMBER)))
+  {
+    gchar *needle = g_utf8_strdown(gtk_entry_get_text(GTK_ENTRY(dr->text)), -1);
+    if(g_str_has_suffix(needle, "%")) needle[strlen(needle) - 1] = '\0';
+    dr->searchstring = needle;
     gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)list_match_string, dr);
+    dr->searchstring = NULL;
+    g_free(needle);
+  }
   // we update list selection
   gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(d->view));
 
@@ -2084,7 +2097,9 @@ static void _set_tooltip(dt_lib_collect_rule_t *d)
   }
 
   //set the combobox tooltip as well
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->combo), gtk_widget_get_tooltip_text(d->text));
+  gchar *tip = gtk_widget_get_tooltip_text(d->text);
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->combo), tip);
+  g_free(tip);
 }
 
 
