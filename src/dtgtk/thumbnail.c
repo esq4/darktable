@@ -37,6 +37,7 @@
 #include "views/view.h"
 
 #include "dtgtk/thumbtable.h" //ab
+#include "dr_next_img.c" //ab
 
 static void _thumb_resize_overlays(dt_thumbnail_t *thumb);
 
@@ -1985,3 +1986,46 @@ void dt_thumbnail_reload_infos(dt_thumbnail_t *thumb)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 
+//ab
+gboolean dr_event_rating_release(dt_develop_t *user_data)
+{
+  dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
+  const int imgid = thumb->imgid;
+  int new_offset = 1;
+  int new_id = -1;
+  int diff = 1;
+  new_offset = 1;
+
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+
+  // we new offset and imgid after the jump
+  sqlite3_stmt *stmt;
+  gchar *query = dt_util_dstrcat(NULL, "SELECT rowid, imgid "
+                                          "FROM memory.collected_images "
+                                          "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
+                                 imgid, diff);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    new_offset = sqlite3_column_int(stmt, 0);
+    new_id = sqlite3_column_int(stmt, 1);
+  }
+  else
+  {
+    // if we are here, that means that the current is not anymore in the list
+    // in this case, let's use the current offset image
+    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
+    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+  }
+  g_free(query);
+  sqlite3_finalize(stmt);
+
+  if(new_id < 0 || new_id == imgid) return FALSE;
+  dr_dev_change_image(dev, new_id);
+  //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+  dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
+  // if it's a change by key_press, we set mouse_over to the active image
+  dt_control_set_mouse_over_id(new_id);
+  return TRUE;
+}
+//ba
