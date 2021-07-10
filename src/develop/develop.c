@@ -125,9 +125,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->overexposed.lower = dt_conf_get_float("darkroom/ui/overexposed/lower");
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
 
-  dev->overlay_color.enabled = FALSE;
-  dev->overlay_color.color = dt_conf_get_int("darkroom/ui/overlay_color");
-
   dev->iso_12646.enabled = FALSE;
 
   dev->second_window.zoom = DT_ZOOM_FIT;
@@ -199,8 +196,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_int("darkroom/ui/overexposed/colorscheme", dev->overexposed.colorscheme);
   dt_conf_set_float("darkroom/ui/overexposed/lower", dev->overexposed.lower);
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
-
-  dt_conf_set_int("darkroom/ui/overlay_color", dev->overlay_color.color);
 }
 
 float dt_dev_get_preview_downsampling()
@@ -2579,7 +2574,7 @@ gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
   gchar *label;
   /* create a history button and add to box */
   if(!module->multi_name[0] || strcmp(module->multi_name, "0") == 0)
-    label = g_strdup_printf("%s", module->name());
+    label = g_strdup(module->name());
   else
     label = g_strdup_printf("%s %s", module->name(), module->multi_name);
   return label;
@@ -2590,7 +2585,7 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
   gchar *label;
   /* create a history button and add to box */
   if(!module->multi_name[0] || strcmp(module->multi_name, "0") == 0)
-    label = g_strdup_printf("%s", module->name());
+    label = g_strdup(module->name());
   else
     label = g_markup_printf_escaped("%s <span size=\"smaller\">%s</span>", module->name(), module->multi_name);
   return label;

@@ -28,6 +28,7 @@
 #include "develop/develop.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
+#include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/modulegroups.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -270,8 +271,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
     if(g->old_id >= 0)
     {
       // we update presets values
-      query = dt_util_dstrcat(query,
-                              "UPDATE data.presets "
+      query = g_strdup_printf("UPDATE data.presets "
                               "SET"
                               " name=?1, description=?2,"
                               " model=?3, maker=?4, lens=?5, iso_min=?6, iso_max=?7, exposure_min=?8,"
@@ -284,8 +284,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
     else
     {
       // we create a new preset
-      query = dt_util_dstrcat(query,
-                              "INSERT INTO data.presets"
+      query = g_strdup_printf("INSERT INTO data.presets"
                               " (name, description, "
                               "  model, maker, lens, iso_min, iso_max, exposure_min, exposure_max, aperture_min,"
                               "  aperture_max, focal_length_min, focal_length_max, autoapply,"
@@ -368,12 +367,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(filechooser);
 #endif
-    gchar *import_path = dt_conf_get_string("ui_last/export_path");
-    if(import_path != NULL)
-    {
-      gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), import_path);
-      g_free(import_path);
-    }
+    dt_conf_get_folder_to_file_chooser("ui_last/export_path", filechooser);
 
     // save if accepted
     if(gtk_dialog_run(GTK_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
@@ -382,9 +376,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
       dt_presets_save_to_file(g->old_id, name, filedir);
       dt_control_log(_("preset %s was successfully exported"), name);
       g_free(filedir);
-      gchar *folder = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(filechooser));
-      dt_conf_set_string("ui_last/export_path", folder);
-      g_free(folder);
+      dt_conf_set_folder_from_file_chooser("ui_last/export_path", filechooser);
     }
 
     gtk_widget_destroy(GTK_WIDGET(filechooser));
@@ -1157,7 +1149,7 @@ static void _menuitem_manage_quick_presets(GtkMenuItem *menuitem, gpointer data)
         const char *name = (char *)sqlite3_column_text(stmt, 0);
         gchar *presetname = g_markup_escape_text(name, -1);
         // is this preset part of the list ?
-        gchar *txt = dt_util_dstrcat(NULL, "ꬹ%s|%sꬹ", iop->op, name);
+        gchar *txt = g_strdup_printf("ꬹ%s|%sꬹ", iop->op, name);
         const gboolean inlist = (config && strstr(config, txt));
         g_free(txt);
         gtk_tree_store_append(treestore, &child, &toplevel);
@@ -1235,14 +1227,14 @@ void dt_gui_favorite_presets_menu_show()
         if(retrieve_list)
         {
           // we only show it if module is in favorite
-          gchar *key = dt_util_dstrcat(NULL, "plugins/darkroom/%s/favorite", iop->so->op);
+          gchar *key = g_strdup_printf("plugins/darkroom/%s/favorite", iop->so->op);
           const gboolean fav = dt_conf_get_bool(key);
           g_free(key);
           if(fav) config = dt_util_dstrcat(config, "ꬹ%s|%sꬹ", iop->so->op, name);
         }
 
         // check that this preset is in the config list
-        gchar *txt = dt_util_dstrcat(NULL, "ꬹ%s|%sꬹ", iop->so->op, name);
+        gchar *txt = g_strdup_printf("ꬹ%s|%sꬹ", iop->so->op, name);
         if(config && strstr(config, txt))
         {
           GtkMenuItem *mi = (GtkMenuItem *)gtk_menu_item_new_with_label(name);
@@ -1399,7 +1391,7 @@ static void _dt_gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int3
     if(isdefault)
       label = g_strdup_printf("%s %s", name, _("(default)"));
     else
-      label = g_strdup_printf("%s", name);
+      label = g_strdup(name);
     mi = gtk_menu_item_new_with_label(label);
     g_free(label);
 
@@ -1467,6 +1459,16 @@ static void _dt_gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int3
         g_free(markup);
       }
     }
+  }
+
+  // and the parameters entry if needed
+  if(module && (module->set_preferences || module->flags() & IOP_FLAGS_GUIDES_WIDGET))
+  {
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    // the guide checkbox
+    if(module->flags() & IOP_FLAGS_GUIDES_WIDGET) dt_guides_add_module_menuitem(menu, module);
+    // the specific parameters
+    if(module->set_preferences) module->set_preferences(GTK_MENU_SHELL(menu), module);
   }
 }
 

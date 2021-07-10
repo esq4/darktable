@@ -18,16 +18,16 @@
 
 #include "develop/imageop.h"
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/exif.h"
 #include "common/collection.h"
+#include "common/debug.h"
 #include "common/dtpthread.h"
+#include "common/exif.h"
+#include "common/history.h"
 #include "common/imagebuf.h"
 #include "common/imageio_rawspeed.h"
 #include "common/interpolation.h"
 #include "common/iop_group.h"
 #include "common/module.h"
-#include "common/history.h"
 #include "common/opencl.h"
 #include "common/usermanual_url.h"
 #include "control/control.h"
@@ -41,9 +41,10 @@
 #include "dtgtk/gradientslider.h"
 #include "dtgtk/icon.h"
 #include "gui/accelerators.h"
-#include "gui/gtk.h"
-#include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/gtk.h"
+#include "gui/guides.h"
+#include "gui/presets.h"
 #include "libs/modulegroups.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -63,9 +64,9 @@
 
 enum
 {
-  DT_ACTION_ELEMENT_FOCUS = 0,
+  DT_ACTION_ELEMENT_SHOW = 0,
   DT_ACTION_ELEMENT_ENABLE = 1,
-  DT_ACTION_ELEMENT_SHOW = 2,
+  DT_ACTION_ELEMENT_FOCUS = 2,
   DT_ACTION_ELEMENT_INSTANCE = 3,
   DT_ACTION_ELEMENT_RESET = 4,
   DT_ACTION_ELEMENT_PRESETS = 5,
@@ -441,7 +442,7 @@ static gboolean _header_enter_notify_callback(GtkWidget *eventbox, GdkEventCross
 
 static gboolean _header_motion_notify_show_callback(GtkWidget *eventbox, GdkEventCrossing *event, GtkWidget *header)
 {
-  darktable.control->element = DT_ACTION_ELEMENT_FOCUS;
+  darktable.control->element = DT_ACTION_ELEMENT_SHOW;
   return dt_iop_show_hide_header_buttons(header, event, TRUE, FALSE);
 }
 
@@ -1011,6 +1012,8 @@ static void dt_iop_gui_off_callback(GtkToggleButton *togglebutton, gpointer user
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
 
+  const gboolean basics = (dt_dev_modulegroups_get_activated(module->dev) == DT_MODULEGROUP_BASICS);
+
   if(!darktable.gui->reset)
   {
     if(gtk_toggle_button_get_active(togglebutton))
@@ -1020,7 +1023,7 @@ static void dt_iop_gui_off_callback(GtkToggleButton *togglebutton, gpointer user
       if(dt_conf_get_bool("darkroom/ui/scroll_to_module"))
         darktable.gui->scroll_to[1] = module->expander;
 
-      if(dt_conf_get_bool("darkroom/ui/activate_expand") && !module->expanded)
+      if(!basics && dt_conf_get_bool("darkroom/ui/activate_expand") && !module->expanded)
         dt_iop_gui_set_expanded(module, TRUE, dt_conf_get_bool("darkroom/ui/single_module"));
 
       dt_dev_add_history_item(module->dev, module, FALSE);
@@ -1035,7 +1038,7 @@ static void dt_iop_gui_off_callback(GtkToggleButton *togglebutton, gpointer user
 
       dt_dev_add_history_item(module->dev, module, FALSE);
 
-      if(dt_conf_get_bool("darkroom/ui/activate_expand") && module->expanded)
+      if(!basics && dt_conf_get_bool("darkroom/ui/activate_expand") && module->expanded)
         dt_iop_gui_set_expanded(module, FALSE, FALSE);
     }
 
@@ -1959,6 +1962,9 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(darktable.view_manager->accels_window.window && darktable.view_manager->accels_window.sticky)
     dt_view_accels_refresh(darktable.view_manager);
 
+  // update guides button state
+  dt_guides_update_button_state();
+
   dt_control_change_cursor(GDK_LEFT_PTR);
   dt_control_queue_redraw_center();
 }
@@ -2668,7 +2674,7 @@ void dt_iop_set_darktable_iop_table()
   if(module_list)
   {
     module_list[strlen(module_list) - 1] = '\0';
-    char *query = dt_util_dstrcat(NULL, "INSERT INTO memory.darktable_iop_names (operation, name) VALUES %s", module_list);
+    gchar *query = g_strdup_printf("INSERT INTO memory.darktable_iop_names (operation, name) VALUES %s", module_list);
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -3066,7 +3072,7 @@ char *dt_iop_warning_message(const char *message)
   if(dt_conf_get_bool("plugins/darkroom/show_warnings"))
     return g_strdup_printf("<span foreground='red'>⚠</span> %s", message);
   else
-    return g_strdup_printf("%s", message);
+    return g_strdup(message);
 }
 
 char *dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,
@@ -3225,9 +3231,9 @@ const gchar *dt_action_effect_instance[]
       NULL };
 
 static const dt_action_element_def_t _action_elements[]
-  = { { N_("focus"), dt_action_effect_toggle },
+  = { { N_("show"), dt_action_effect_toggle },
       { N_("enable"), dt_action_effect_toggle },
-      { N_("show"), dt_action_effect_toggle },
+      { N_("focus"), dt_action_effect_toggle },
       { N_("instance"), dt_action_effect_instance },
       { N_("reset"), dt_action_effect_activate },
       { N_("presets"), dt_action_effect_presets },
@@ -3235,7 +3241,7 @@ static const dt_action_element_def_t _action_elements[]
 
 static const dt_shortcut_fallback_t _action_fallbacks[]
   = { { .element = DT_ACTION_ELEMENT_ENABLE, .button = DT_SHORTCUT_LEFT },
-      { .element = DT_ACTION_ELEMENT_SHOW, .button = DT_SHORTCUT_LEFT, .click = DT_SHORTCUT_LONG },
+      { .element = DT_ACTION_ELEMENT_FOCUS, .button = DT_SHORTCUT_LEFT, .click = DT_SHORTCUT_LONG },
       { .element = DT_ACTION_ELEMENT_INSTANCE, .button = DT_SHORTCUT_RIGHT, .click = DT_SHORTCUT_DOUBLE },
       { .element = DT_ACTION_ELEMENT_RESET, .button = DT_SHORTCUT_LEFT, .click = DT_SHORTCUT_DOUBLE },
       { .element = DT_ACTION_ELEMENT_PRESETS, .button = DT_SHORTCUT_RIGHT },

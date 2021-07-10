@@ -91,9 +91,7 @@ const struct _modifier_name
       { GDK_CONTROL_MASK, N_("ctrl" ) },
       { GDK_MOD1_MASK   , N_("alt"  ) },
       { GDK_MOD2_MASK   , N_("cmd"  ) },
-      { GDK_SUPER_MASK  , N_("super") },
-      { GDK_HYPER_MASK  , N_("hyper") },
-      { GDK_META_MASK   , N_("meta" ) },
+      { GDK_MOD5_MASK   , N_("altgr") },
       { 0, NULL } };
 
 static dt_shortcut_t _sc = { 0 };  //  shortcut under construction
@@ -586,7 +584,7 @@ static gboolean _shortcut_tooltip_callback(GtkWidget *widget, gint x, gint y, gb
     if(!gtk_widget_is_sensitive(widget)) return FALSE;
     if(user_data) // shortcuts treeview
     {
-      gtk_tooltip_set_text(tooltip, _("press Del to delete selected shortcut\ndouble click to add new shortcut"));
+      gtk_tooltip_set_text(tooltip, _("press Del to delete selected shortcut\ndouble click to add new shortcut\nstart typing for incremental search"));
       return TRUE;
     }
 
@@ -600,7 +598,7 @@ static gboolean _shortcut_tooltip_callback(GtkWidget *widget, gint x, gint y, gb
     gtk_tree_view_set_tooltip_row(GTK_TREE_VIEW(widget), tooltip, path);
     gtk_tree_path_free(path);
 
-    markup_text = g_markup_escape_text(_("click to filter shortcut list\ndouble click to define new shortcut"), -1);
+    markup_text = g_markup_escape_text(_("click to filter shortcut list\ndouble click to define new shortcut\nstart typing for incremental search"), -1);
   }
   else
   {
@@ -1215,7 +1213,8 @@ static void grab_in_tree_view(GtkTreeView *tree_view)
                                              "a key can be double or triple pressed, with a long last press\n"
                                              "while the key is held, a combination of mouse buttons can be (double/triple/long) clicked\n"
                                              "still holding the key (and modifiers and/or buttons) a scroll or mouse move can be added\n"
-                                             "connected devices can send keys or moves using their physical controllers"));
+                                             "connected devices can send keys or moves using their physical controllers\n\n"
+                                             "right-click to cancel"));
   g_set_weak_pointer(&grab_window, gtk_widget_get_toplevel(grab_widget));
   if(_sc.action && _sc.action->type == DT_ACTION_TYPE_FALLBACK)
     dt_shortcut_key_press(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, 0, 0);
@@ -2355,9 +2354,9 @@ float dt_shortcut_move(dt_input_device_t id, guint time, guint move, double size
     _sc.effect = DT_ACTION_EFFECT_DEFAULT_KEY;
 
   GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
-  if(id) _sc.mods = gdk_keymap_get_modifier_state(keymap);
-  _sc.mods &= gdk_keymap_get_modifier_mask(keymap, GDK_MODIFIER_INTENT_DEFAULT_MOD_MASK);
-  gdk_keymap_add_virtual_modifiers(keymap, &_sc.mods);
+  if(id) _sc.mods = dt_key_modifier_state();
+  _sc.mods &= GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_MOD5_MASK |
+              gdk_keymap_get_modifier_mask(keymap, GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR);
 
   float return_value = 0;
   if(!size)
@@ -2540,6 +2539,7 @@ void dt_shortcut_key_release(dt_input_device_t id, guint time, guint key)
 
         if(!_sc.press && !_sc.action)
         {
+          // detect if any double or triple press shortcuts exist for this key; otherwise skip delay
           dt_shortcut_t key_23press = { .key_device = id, .key = key, .press = DT_SHORTCUT_DOUBLE, .views =
                                         darktable.view_manager->current_view->view(darktable.view_manager->current_view) };
           GSequenceIter *double_press = g_sequence_search(darktable.control->shortcuts, &key_23press, shortcut_compare_func,
@@ -2548,7 +2548,11 @@ void dt_shortcut_key_release(dt_input_device_t id, guint time, guint key)
           {
             dt_shortcut_t *dp = g_sequence_get(double_press);
             if(!dp || dp->key_device != id || dp->key != key || dp->press <= DT_SHORTCUT_LONG)
-              passed_time = delay;
+            {
+              dp = g_sequence_get(g_sequence_iter_prev(double_press));
+              if(!dp || dp->key_device != id || dp->key != key || dp->press <= DT_SHORTCUT_LONG)
+                passed_time = delay;
+            }
           }
         }
 
@@ -2637,7 +2641,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
   switch(event->type)
   {
   case GDK_KEY_PRESS:
-    if(event->key.is_modifier) return FALSE;
+    if(event->key.is_modifier || event->key.keyval == GDK_KEY_ISO_Level3_Shift) return FALSE;
 
     _sc.mods = event->key.state;
 
@@ -2647,7 +2651,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
     dt_shortcut_key_press(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->key.time, _fix_keyval(event));
     break;
   case GDK_KEY_RELEASE:
-    if(event->key.is_modifier)
+    if(event->key.is_modifier || event->key.keyval == GDK_KEY_ISO_Level3_Shift)
     {
       if(_sc.action)
         dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, 0, DT_SHORTCUT_MOVE_NONE, 1);
@@ -2866,7 +2870,7 @@ void dt_action_define_key_pressed_accel(dt_action_t *action, const gchar *path, 
 {
   dt_action_t *new_action = calloc(1, sizeof(dt_action_t));
   new_action->id = path_without_symbols(path);
-  new_action->label = g_strdup(Q_(path));
+  new_action->label = g_strdup(g_dpgettext2(NULL, "accel", path));
   new_action->type = DT_ACTION_TYPE_KEY_PRESSED;
   new_action->target = key;
   new_action->owner = action;
@@ -3045,10 +3049,8 @@ void dt_accel_register_shortcut(dt_action_t *owner, const gchar *path_string, gu
     // find the first key in group 0, if any
     while(i < n_keys - 1 && (keys[i].group > 0 || keys[i].level > 1)) i++;
 
-    if(keys[i].level > 1)
-      fprintf(stderr, "[dt_accel_register_shortcut] expected to find a key in group 0 with only shift\n");
-
-    if(keys[i].level == 1) mods |= GDK_SHIFT_MASK;
+    if(keys[i].level & 1) mods |= GDK_SHIFT_MASK;
+    if(keys[i].level & 2) mods |= GDK_MOD5_MASK;
 
     mods = _mods_fix_primary(mods);
 

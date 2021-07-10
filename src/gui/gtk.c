@@ -39,6 +39,7 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
+#include "gui/guides.h"
 #include "gui/presets.h"
 #include "views/view.h"
 
@@ -220,6 +221,14 @@ static gboolean focuspeaking_switch_key_accel_callback(GtkAccelGroup *accel_grou
   return TRUE;
 }
 
+static gboolean _toggle_guides_accel_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,
+                                              GdkModifierType modifier, gpointer data)
+{
+  dt_guides_button_toggled();
+  dt_guides_update_button_state();
+  return TRUE;
+}
+
 static void focuspeaking_switch_button_callback(GtkWidget *button, gpointer user_data)
 {
   // button method
@@ -257,7 +266,7 @@ static gchar *_panels_get_view_path(char *suffix)
     g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
   }
 
-  return dt_util_dstrcat(NULL, "%s/ui/%s%s", cv->module_name, lay, suffix);
+  return g_strdup_printf("%s/ui/%s%s", cv->module_name, lay, suffix);
 }
 
 static gchar *_panels_get_panel_path(dt_ui_panel_t panel, char *suffix)
@@ -1330,6 +1339,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_accel_register_global(NC_("accel", "toggle focus peaking"), GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
   dt_accel_connect_global("toggle focus peaking",
                           g_cclosure_new(G_CALLBACK(focuspeaking_switch_key_accel_callback), NULL, NULL));
+
+  // toggle focus peaking everywhere
+  dt_accel_register_global(NC_("accel", "toggle guides"), GDK_KEY_g, 0);
+  dt_accel_connect_global("toggle guides", g_cclosure_new(G_CALLBACK(_toggle_guides_accel_callback), NULL, NULL));
 
   // View-switch
   dt_accel_register_global(NC_("accel", "switch view"), GDK_KEY_period, 0);
@@ -2754,9 +2767,9 @@ void dt_gui_load_theme(const char *theme)
   {
     //font name can only use period as decimal separator
     //but printf format strings use comma for some locales, so replace comma with period
-    gchar *font_size = dt_util_dstrcat(NULL, _("%.1f"), dt_conf_get_float("font_size"));
+    gchar *font_size = g_strdup_printf(_("%.1f"), dt_conf_get_float("font_size"));
     gchar *font_size_updated = dt_util_str_replace(font_size, ",", ".");
-    gchar *font_name = dt_util_dstrcat(NULL, _("Sans %s"), font_size_updated);
+    gchar *font_name = g_strdup_printf(_("Sans %s"), font_size_updated);
     g_object_set(gtk_settings_get_default(), "gtk-font-name", font_name, NULL);
     g_free(font_size_updated);
     g_free(font_size);
