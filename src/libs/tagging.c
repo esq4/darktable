@@ -128,6 +128,8 @@ void init_key_accels(dt_lib_module_t *self)
   dt_accel_register_lib(self, NC_("accel", "attach"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "detach"), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "new"), 0, 0);
+  dt_accel_register_lib(self, NC_("accel", "import..."), 0, 0);
+  dt_accel_register_lib(self, NC_("accel", "export..."), 0, 0);
   dt_accel_register_lib(self, NC_("accel", "tag"), GDK_KEY_t, GDK_CONTROL_MASK);
   dt_accel_register_lib(self, NC_("accel", "redo last tag"), GDK_KEY_t, GDK_MOD1_MASK);
 }
@@ -139,6 +141,8 @@ void connect_key_accels(dt_lib_module_t *self)
   dt_accel_connect_button_lib(self, "attach", d->attach_button);
   dt_accel_connect_button_lib(self, "detach", d->detach_button);
   dt_accel_connect_button_lib(self, "new", d->new_button);
+  dt_accel_connect_button_lib(self, "import...", d->import_button);
+  dt_accel_connect_button_lib(self, "export...", d->export_button);
   dt_accel_connect_lib(self, "tag", g_cclosure_new(G_CALLBACK(_lib_tagging_tag_show), self, NULL));
   dt_accel_connect_lib(self, "redo last tag", g_cclosure_new(G_CALLBACK(_lib_tagging_tag_redo), self, NULL));
 }
@@ -2295,11 +2299,10 @@ static gboolean _row_tooltip_setup(GtkWidget *treeview, gint x, gint y, gboolean
 
 static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
 {
-  char *last_dirname = dt_conf_get_string("plugins/lighttable/tagging/last_import_export_location");
+  const char *last_dirname = dt_conf_get_string_const("plugins/lighttable/tagging/last_import_export_location");
   if(!last_dirname || !*last_dirname)
   {
-    g_free(last_dirname);
-    last_dirname = g_strdup(g_get_home_dir());
+    last_dirname = g_get_home_dir();
   }
 
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
@@ -2327,7 +2330,6 @@ static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
     g_free(dirname);
   }
 
-  g_free(last_dirname);
   gtk_widget_destroy(filechooser);
   _init_treeview(self, 1);
 }
@@ -2336,11 +2338,10 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
 {
   GDateTime *now = g_date_time_new_now_local();
   char *export_filename = g_date_time_format(now, "darktable_tags_%F_%R.txt");
-  char *last_dirname = dt_conf_get_string("plugins/lighttable/tagging/last_import_export_location");
+  const char *last_dirname = dt_conf_get_string_const("plugins/lighttable/tagging/last_import_export_location");
   if(!last_dirname || !*last_dirname)
   {
-    g_free(last_dirname);
-    last_dirname = g_strdup(g_get_home_dir());
+    last_dirname = g_get_home_dir();
   }
 
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
@@ -2370,7 +2371,6 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
   }
 
   g_date_time_unref(now);
-  g_free(last_dirname);
   g_free(export_filename);
   gtk_widget_destroy(filechooser);
 }

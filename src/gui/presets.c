@@ -504,6 +504,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   gtk_box_pack_start(box, GTK_WIDGET(g->filter), FALSE, FALSE, 0);
   if(!g->iop)
   {
+    // lib usually don't support autoapply
+    gtk_widget_set_no_show_all(GTK_WIDGET(g->autoapply), !dt_presets_module_can_autoapply(g->module_name));
     // for libs, we don't want the filtering option as it's not implemented...
     gtk_widget_set_no_show_all(GTK_WIDGET(g->filter), TRUE);
   }
@@ -918,11 +920,10 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
 {
   dt_image_t *image = &module->dev->image_storage;
 
-  gchar *workflow = dt_conf_get_string("plugins/darkroom/workflow");
+  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
   const gboolean is_display_referred = strcmp(workflow, "display-referred") == 0;
   const gboolean is_scene_referred = strcmp(workflow, "scene-referred") == 0;
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
-  g_free(workflow);
 
   char query[2024];
   snprintf(query, sizeof(query),
