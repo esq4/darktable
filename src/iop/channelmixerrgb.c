@@ -1566,9 +1566,9 @@ void extract_color_checker(const float *const restrict in, float *const restrict
       GET_WEIGHT;
     }
     else if(g->optimization == DT_SOLVE_OPTIMIZE_AVG_DELTA_E)
-      w = sqrtf(sqrtf(g->delta_E_in[k] / 100.f));
+      w = sqrtf(sqrtf(1.f / g->delta_E_in[k]));
     else if(g->optimization == DT_SOLVE_OPTIMIZE_MAX_DELTA_E)
-      w = sqrtf(g->delta_E_in[k] / 100.f);
+      w = sqrtf(sqrtf(g->delta_E_in[k]));
 
     // fill 3 rows of the y column vector
     for(size_t c = 0; c < 3; c++) Y[k * 3 + c] = w * LMS_ref[c];
@@ -3491,6 +3491,11 @@ void reload_defaults(dt_iop_module_t *module)
     dt_bauhaus_slider_set_default(g->temperature, d->temperature);
     dt_bauhaus_combobox_set_default(g->illuminant, d->illuminant);
     dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
+    if(g->delta_E_label_text) 
+    {
+      g_free(g->delta_E_label_text);
+      g->delta_E_label_text = NULL;
+    }
 
     if(dt_image_is_matrix_correction_supported(img))
     {
