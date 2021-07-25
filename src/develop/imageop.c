@@ -440,20 +440,20 @@ static gboolean _header_enter_notify_callback(GtkWidget *eventbox, GdkEventCross
   return FALSE;
 }
 
-static gboolean _header_motion_notify_show_callback(GtkWidget *eventbox, GdkEventCrossing *event, GtkWidget *header)
+static gboolean _header_motion_notify_show_callback(GtkWidget *eventbox, GdkEventCrossing *event, dt_iop_module_t *module)
 {
   darktable.control->element = DT_ACTION_ELEMENT_SHOW;
-  return dt_iop_show_hide_header_buttons(header, event, TRUE, FALSE);
+  return dt_iop_show_hide_header_buttons(module, event, TRUE, FALSE);
 }
 
-static gboolean _header_motion_notify_hide_callback(GtkWidget *eventbox, GdkEventCrossing *event, GtkWidget *header)
+static gboolean _header_motion_notify_hide_callback(GtkWidget *eventbox, GdkEventCrossing *event, dt_iop_module_t *module)
 {
-  return dt_iop_show_hide_header_buttons(header, event, FALSE, FALSE);
+  return dt_iop_show_hide_header_buttons(module, event, FALSE, FALSE);
 }
 
-static gboolean _header_menu_deactivate_callback(GtkMenuShell *menushell, GtkWidget *header)
+static gboolean _header_menu_deactivate_callback(GtkMenuShell *menushell, dt_iop_module_t *module)
 {
-  return dt_iop_show_hide_header_buttons(header, NULL, FALSE, FALSE);
+  return dt_iop_show_hide_header_buttons(module, NULL, FALSE, FALSE);
 }
 
 static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
@@ -563,16 +563,7 @@ static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *modul
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
 
-  // we refresh the pipe
-  dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-  dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  dev->pipe->cache_obsolete = 1;
-  dev->preview_pipe->cache_obsolete = 1;
-  dev->preview2_pipe->cache_obsolete = 1;
-
-  // invalidate buffers and force redraw of darkroom
-  dt_dev_invalidate_all(dev);
+  dt_dev_pixelpipe_rebuild(dev);
 
   /* redraw */
   dt_control_queue_redraw_center();
@@ -655,20 +646,12 @@ static void dt_iop_gui_movedown_callback(GtkButton *button, dt_iop_module_t *mod
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback end");
 
-  // we rebuild the pipe
-  module->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-  module->dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  module->dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  module->dev->pipe->cache_obsolete = 1;
-  module->dev->preview_pipe->cache_obsolete = 1;
-  module->dev->preview2_pipe->cache_obsolete = 1;
-
   // rebuild the accelerators
   dt_iop_connect_accels_multi(module->so);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 
-  // invalidate buffers and force redraw of darkroom
-  dt_dev_invalidate_all(module->dev);
+  dt_dev_pixelpipe_rebuild(module->dev);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 static void dt_iop_gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
@@ -699,20 +682,12 @@ static void dt_iop_gui_moveup_callback(GtkButton *button, dt_iop_module_t *modul
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback end");
 
-  // we rebuild the pipe
-  next->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-  next->dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  next->dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  next->dev->pipe->cache_obsolete = 1;
-  next->dev->preview_pipe->cache_obsolete = 1;
-  next->dev->preview2_pipe->cache_obsolete = 1;
-
   // rebuild the accelerators
   dt_iop_connect_accels_multi(module->so);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 
-  // invalidate buffers and force redraw of darkroom
-  dt_dev_invalidate_all(next->dev);
+  dt_dev_pixelpipe_rebuild(next->dev);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params)
@@ -799,15 +774,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
   if(module->dev->gui_attached)
   {
-    module->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-    module->dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    module->dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    module->dev->pipe->cache_obsolete = 1;
-    module->dev->preview_pipe->cache_obsolete = 1;
-    module->dev->preview2_pipe->cache_obsolete = 1;
-
-    // invalidate buffers and force redraw of darkroom
-    dt_dev_invalidate_all(module->dev);
+    dt_dev_pixelpipe_rebuild(module->dev);
   }
 
   /* update ui to new parameters */
@@ -878,7 +845,7 @@ static gboolean _rename_module_key_press(GtkWidget *entry, GdkEventKey *event, d
   {
     g_signal_handlers_disconnect_by_func(entry, G_CALLBACK(_rename_module_key_press), module);
     gtk_widget_destroy(entry);
-    dt_iop_show_hide_header_buttons(module->header, NULL, TRUE, FALSE); // after removing entry
+    dt_iop_show_hide_header_buttons(module, NULL, TRUE, FALSE); // after removing entry
     dt_iop_gui_update_header(module);
     dt_masks_group_update_name(module);
     return TRUE;
@@ -926,7 +893,7 @@ static void _iop_gui_rename_module(dt_iop_module_t *module)
   g_signal_connect(entry, "enter-notify-event", G_CALLBACK(_header_enter_notify_callback),
                    GINT_TO_POINTER(DT_ACTION_ELEMENT_SHOW));
 
-  dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, TRUE); // before adding entry
+  dt_iop_show_hide_header_buttons(module, NULL, FALSE, TRUE); // before adding entry
   gtk_box_pack_start(GTK_BOX(module->header), entry, TRUE, TRUE, 0);
   gtk_widget_show(entry);
   gtk_widget_grab_focus(entry);
@@ -989,7 +956,7 @@ static void dt_iop_gui_multiinstance_callback(GtkButton *button, GdkEventButton 
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(dt_iop_gui_rename_callback), module);
   gtk_menu_shell_append(menu, item);
 
-  g_signal_connect(G_OBJECT(menu), "deactivate", G_CALLBACK(_header_menu_deactivate_callback), module->header);
+  g_signal_connect(G_OBJECT(menu), "deactivate", G_CALLBACK(_header_menu_deactivate_callback), module);
 
   dt_gui_menu_popup(GTK_MENU(menu), GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
@@ -1831,6 +1798,7 @@ void dt_iop_gui_update(dt_iop_module_t *module)
     }
     _iop_gui_update_label(module);
     dt_iop_gui_set_enable_button(module);
+    dt_iop_show_hide_header_buttons(module, NULL, FALSE, FALSE);
   }
   --darktable.gui->reset;
 }
@@ -1844,6 +1812,10 @@ void dt_iop_gui_reset(dt_iop_module_t *module)
 
 static void dt_iop_gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
+  // never use the callback if module is always disabled
+  const gboolean disabled = !module->default_enabled && module->hide_enable_button;
+  if(disabled) return;
+
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
   if(!(event && dt_modifier_is(event->state, GDK_CONTROL_MASK)) || !dt_gui_presets_autoapply_for_module(module))
@@ -1886,10 +1858,13 @@ static void _preset_popup_position(GtkMenu *menu, gint *x, gint *y, gboolean *pu
 
 static void presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 {
+  const gboolean disabled = !module->default_enabled && module->hide_enable_button;
+  if(disabled) return;
+
   dt_gui_presets_popup_menu_show_for_module(module);
 
 #if GTK_CHECK_VERSION(3, 22, 0)
-  g_signal_connect(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate", G_CALLBACK(_header_menu_deactivate_callback), module->header);
+  g_signal_connect(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate", G_CALLBACK(_header_menu_deactivate_callback), module);
 
   dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 #else
@@ -2217,9 +2192,10 @@ static void header_size_callback(GtkWidget *widget, GdkRectangle *allocation, Gt
   if(header_allocation.width > 1) gtk_widget_size_allocate(header, &header_allocation);
 }
 
-gboolean dt_iop_show_hide_header_buttons(GtkWidget *header, GdkEventCrossing *event, gboolean show_buttons, gboolean always_hide)
+gboolean dt_iop_show_hide_header_buttons(dt_iop_module_t *module, GdkEventCrossing *event, gboolean show_buttons, gboolean always_hide)
 {
   // check if Entry widget for module name edit exists
+  GtkWidget *header = module->header;
   GtkWidget *focused = gtk_container_get_focus_child(GTK_CONTAINER(header));
   if(focused && GTK_IS_ENTRY(focused)) return TRUE;
 
@@ -2245,6 +2221,8 @@ gboolean dt_iop_show_hide_header_buttons(GtkWidget *header, GdkEventCrossing *ev
   else
     dynamic = TRUE;
 
+  const gboolean disabled = !module->default_enabled && module->hide_enable_button;
+
   GList *children = gtk_container_get_children(GTK_CONTAINER(header));
 
   GList *button;
@@ -2253,7 +2231,7 @@ gboolean dt_iop_show_hide_header_buttons(GtkWidget *header, GdkEventCrossing *ev
       button = g_list_previous(button))
   {
     gtk_widget_set_no_show_all(GTK_WIDGET(button->data), TRUE);
-    gtk_widget_set_visible(GTK_WIDGET(button->data), show_buttons && !always_hide);
+    gtk_widget_set_visible(GTK_WIDGET(button->data), show_buttons && !always_hide && !disabled);
     gtk_widget_set_opacity(GTK_WIDGET(button->data), opacity);
   }
   if(GTK_IS_DRAWING_AREA(button->data))
@@ -2315,7 +2293,7 @@ void add_remove_mask_indicator(dt_iop_module_t *module, gboolean add)
     {
       gtk_widget_destroy(module->mask_indicator);
       module->mask_indicator = NULL;
-      dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, FALSE);
+      dt_iop_show_hide_header_buttons(module, NULL, FALSE, FALSE);
     }
     else
       gtk_widget_set_sensitive(module->mask_indicator, !raster && module->enabled);
@@ -2345,7 +2323,7 @@ void add_remove_mask_indicator(dt_iop_module_t *module, gboolean add)
     }
     g_list_free(children);
 
-    dt_iop_show_hide_header_buttons(module->header, NULL, FALSE, FALSE);
+    dt_iop_show_hide_header_buttons(module, NULL, FALSE, FALSE);
   }
 
   if(module->mask_indicator)
@@ -2395,14 +2373,14 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   /* setup the header box */
   g_signal_connect(G_OBJECT(header_evb), "button-press-event", G_CALLBACK(_iop_plugin_header_button_press), module);
   gtk_widget_add_events(header_evb, GDK_POINTER_MOTION_MASK);
-  g_signal_connect(G_OBJECT(header_evb), "enter-notify-event", G_CALLBACK(_header_motion_notify_show_callback), header);
-  g_signal_connect(G_OBJECT(header_evb), "leave-notify-event", G_CALLBACK(_header_motion_notify_hide_callback), header);
+  g_signal_connect(G_OBJECT(header_evb), "enter-notify-event", G_CALLBACK(_header_motion_notify_show_callback), module);
+  g_signal_connect(G_OBJECT(header_evb), "leave-notify-event", G_CALLBACK(_header_motion_notify_hide_callback), module);
 
   /* connect mouse button callbacks for focus and presets */
   g_signal_connect(G_OBJECT(body_evb), "button-press-event", G_CALLBACK(_iop_plugin_body_button_press), module);
   gtk_widget_add_events(body_evb, GDK_POINTER_MOTION_MASK);
-  g_signal_connect(G_OBJECT(body_evb), "enter-notify-event", G_CALLBACK(_header_motion_notify_show_callback), header);
-  g_signal_connect(G_OBJECT(body_evb), "leave-notify-event", G_CALLBACK(_header_motion_notify_hide_callback), header);
+  g_signal_connect(G_OBJECT(body_evb), "enter-notify-event", G_CALLBACK(_header_motion_notify_show_callback), module);
+  g_signal_connect(G_OBJECT(body_evb), "leave-notify-event", G_CALLBACK(_header_motion_notify_hide_callback), module);
 
   /*
    * initialize the header widgets
@@ -2524,7 +2502,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   if(module->connect_key_accels) module->connect_key_accels(module);
 
   dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
-  dt_iop_show_hide_header_buttons(header, NULL, FALSE, FALSE);
+  dt_iop_show_hide_header_buttons(module, NULL, FALSE, FALSE);
 }
 
 GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module)

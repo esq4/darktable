@@ -70,7 +70,8 @@ typedef struct dt_lib_history_t
 #define HIST_WIDGET_STATUS 2
 
 /* compress history stack */
-static void _lib_history_compress_clicked_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
+static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data);
+static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
 static void _lib_history_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 static void _lib_history_create_style_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 /* signal callback for history change */
@@ -140,7 +141,8 @@ void gui_init(dt_lib_module_t *self)
   d->compress_button = dt_ui_button_new(_("compress history stack"),
                                         _("create a minimal history stack which produces the same image\n"
                                           "ctrl-click to truncate history to the selected item"), NULL);
-  g_signal_connect(G_OBJECT(d->compress_button), "button-press-event", G_CALLBACK(_lib_history_compress_clicked_callback), self);
+  g_signal_connect(G_OBJECT(d->compress_button), "clicked", G_CALLBACK(_lib_history_compress_clicked_callback), self);
+  g_signal_connect(G_OBJECT(d->compress_button), "button-press-event", G_CALLBACK(_lib_history_compress_pressed_callback), self);
 
   /* add toolbar button for creating style */
   d->create_button = dtgtk_button_new(dtgtk_cairo_paint_styles, CPF_NONE, NULL);
@@ -605,16 +607,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
     // topology has changed
     if(pipe_remove)
     {
-      // we refresh the pipe
-      dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-      dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-      dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-      dev->pipe->cache_obsolete = 1;
-      dev->preview_pipe->cache_obsolete = 1;
-      dev->preview2_pipe->cache_obsolete = 1;
-
-      // invalidate buffers and force redraw of darkroom
-      dt_dev_invalidate_all(dev);
+      dt_dev_pixelpipe_rebuild(dev);
     }
 
     dt_pthread_mutex_unlock(&dev->history_mutex);
@@ -1135,10 +1128,18 @@ static void _lib_history_truncate(gboolean compress)
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 }
 
-static void _lib_history_compress_clicked_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
+
+static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data)
+{
+  _lib_history_truncate(TRUE);
+}
+
+static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
 {
   const gboolean compress = !dt_modifier_is(e->state, GDK_CONTROL_MASK);
   _lib_history_truncate(compress);
+
+  return TRUE;
 }
 
 static void _lib_history_button_clicked_callback(GtkWidget *widget, gpointer user_data)

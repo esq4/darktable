@@ -211,7 +211,7 @@ float dt_dev_get_preview_downsampling()
 void dt_dev_process_image(dt_develop_t *dev)
 {
   if(!dev->gui_attached || dev->pipe->processing) return;
-  int err
+  const int err
       = dt_control_add_job_res(darktable.control, dt_dev_process_image_job_create(dev), DT_CTL_WORKER_ZOOM_1);
   if(err) fprintf(stderr, "[dev_process_image] job queue exceeded!\n");
 }
@@ -219,7 +219,7 @@ void dt_dev_process_image(dt_develop_t *dev)
 void dt_dev_process_preview(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
-  int err = dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev),
+  const int err = dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev),
                                    DT_CTL_WORKER_ZOOM_FILL);
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
@@ -228,7 +228,7 @@ void dt_dev_process_preview2(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
   if(!(dev->second_window.widget && GTK_IS_WIDGET(dev->second_window.widget))) return;
-  int err = dt_control_add_job_res(darktable.control, dt_dev_process_preview2_job_create(dev),
+  const int err = dt_control_add_job_res(darktable.control, dt_dev_process_preview2_job_create(dev),
                                    DT_CTL_WORKER_ZOOM_2);
   if(err) fprintf(stderr, "[dev_process_preview2] job queue exceeded!\n");
 }
@@ -1245,12 +1245,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   }
   else
   {
-    dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-    dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    dev->pipe->cache_obsolete = 1;
-    dev->preview_pipe->cache_obsolete = 1;
-    dev->preview2_pipe->cache_obsolete = 1;
+    dt_dev_pixelpipe_rebuild(dev);
   }
 
   --darktable.gui->reset;

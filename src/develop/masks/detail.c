@@ -26,7 +26,7 @@
   As the DM using algorithms (like dual demosaicing, sharpening ...) are all pixel peeping we
   want the "original data" from the sensor to calculate it.
   (Calculating the mask from the modules roi might not detect such regions at all because of
-  scaling / rotating artefacts, some blurring earlier in the pipeline, color changes ...)
+  scaling / rotating artifacts, some blurring earlier in the pipeline, color changes ...)
 
   In all cases the user interface is pretty simple, we just pass a threshold value, which
   is in the range of -1.0 to 1.0 by an additional slider in the masks refinement section.
@@ -42,7 +42,7 @@
   telling a) we want a DM and b) we want it from either demosaic or from rawprepare.
   If such a flag has not been previously set we will force a pipeline reprocessing.
   
-  gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode, const float wb[3]);
+  gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const rgb, const dt_iop_roi_t *const roi_in, const int mode, const dt_aligned_pixel_t wb);
   or it's _cl equivalent write a preliminary mask holding signal-change values for every pixel.
   These mask values are calculated as
   a) get Y0 for every pixel
@@ -74,7 +74,7 @@
 
   Some additional comments:
   1. intentionally this details mask refinement has only been implemented for raws. Especially for compressed
-     inmages like jpegs or 8bit input the algo didn't work as good because of input precision and compression artefacts.
+     inmages like jpegs or 8bit input the algo didn't work as good because of input precision and compression artifacts.
   2. In the gui the slider is above the rest of the refinemt sliders to emphasize that blurring & feathering use the
      mask corrected by detail refinemnt.
   3. Of course credit goes to Ingo @heckflosse from rt team for the original idea. (in the rt world this is knowb
@@ -114,6 +114,9 @@ void dt_masks_extend_border(float *mask, const int width, const int height, cons
   }
 }
 
+#ifdef _OPENMP
+#pragma omp declare simd aligned(src, out : 64)
+#endif
 void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, const int width, const int height, const float sigma)
 {
   // For a blurring sigma of 2.0f a 13x13 kernel would be optimally required but the 9x9 is by far good enough here
@@ -151,10 +154,10 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
   const int w3 = 3*width;
   const int w4 = 4*width;
 #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) \
+  #pragma omp parallel for default(none) \
   dt_omp_firstprivate(src, out) \
   dt_omp_sharedconst(c42, c41, c40, c33, c32, c31, c30, c22, c21, c20, c11, c10, c00, w1, w2, w3, w4, width, height) \
-  schedule(simd:static) aligned(src, out : 64)
+  schedule(simd:static)
  #endif
   for(int row = 4; row < height - 4; row++)
   {
@@ -185,7 +188,8 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
   dt_masks_extend_border(out, width, height, 4);
 }
 
-void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restrict mask, float *const restrict tmp, const int width, const int height, const float wb[3])
+void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restrict mask, float *const restrict tmp,
+                                  const int width, const int height, const dt_aligned_pixel_t wb)
 {
   const int msize = width * height;
 #ifdef _OPENMP

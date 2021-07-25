@@ -289,6 +289,20 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   dt_pthread_mutex_unlock(&pipe->busy_mutex);	// safe for others to mess with the pipe now
 }
 
+void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
+{
+  dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
+  dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
+  dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
+
+  dev->pipe->cache_obsolete = 1;
+  dev->preview_pipe->cache_obsolete = 1;
+  dev->preview2_pipe->cache_obsolete = 1;
+
+  // invalidate buffers and force redraw of darkroom
+  dt_dev_invalidate_all(dev);
+}
+
 void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   dt_pthread_mutex_lock(&pipe->busy_mutex); // block until pipe is idle
@@ -658,7 +672,7 @@ static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
     return;
   }
 
-  float min[4] DT_ALIGNED_PIXEL, max[4] DT_ALIGNED_PIXEL, avg[4] DT_ALIGNED_PIXEL;
+  dt_aligned_pixel_t min, max, avg;
   for(int k = 0; k < 4; k++)
   {
     min[k] = INFINITY;
@@ -743,7 +757,7 @@ static void pixelpipe_picker_cl(int devid, dt_iop_module_t *module, dt_dev_pixel
   box[2] = region[0];
   box[3] = region[1];
 
-  float min[4] DT_ALIGNED_PIXEL, max[4] DT_ALIGNED_PIXEL, avg[4] DT_ALIGNED_PIXEL;
+  dt_aligned_pixel_t min, max, avg;
   for(int k = 0; k < 4; k++)
   {
     min[k] = INFINITY;
@@ -774,9 +788,9 @@ static void _pixelpipe_pick_from_image(const float *const pixel, const dt_iop_ro
                                        float *pick_color_rgb_mean, float *pick_color_lab_min,
                                        float *pick_color_lab_max, float *pick_color_lab_mean)
 {
-  float picked_color_rgb_min[3] = { 0.0f };
-  float picked_color_rgb_max[3] = { 0.0f };
-  float picked_color_rgb_mean[3] = { 0.0f };
+  dt_aligned_pixel_t picked_color_rgb_min = { 0.0f };
+  dt_aligned_pixel_t picked_color_rgb_max = { 0.0f };
+  dt_aligned_pixel_t picked_color_rgb_mean = { 0.0f };
 
   for(int k = 0; k < 3; k++) picked_color_rgb_min[k] = FLT_MAX;
   for(int k = 0; k < 3; k++) picked_color_rgb_max[k] = FLT_MIN;
@@ -791,7 +805,7 @@ static void _pixelpipe_pick_from_image(const float *const pixel, const dt_iop_ro
   point[0] = MIN(roi_in->width - 1, MAX(0, pick_point[0] * roi_in->width));
   point[1] = MIN(roi_in->height - 1, MAX(0, pick_point[1] * roi_in->height));
 
-  float rgb[3] = { 0.0f };
+  dt_aligned_pixel_t rgb = { 0.0f };
 
   const float w = 1.0 / ((box[3] - box[1] + 1) * (box[2] - box[0] + 1));
 
@@ -1117,7 +1131,7 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
      !dt_tiling_piece_fits_host_memory(MAX(roi_in->width, roi_out->width),
                                        MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
                                           tiling->factor, tiling->overhead));
-  
+
   /* process module on cpu. use tiling if needed and possible. */
   if(needs_tiling || (darktable.unmuted & DT_DEBUG_TILING))
   {
@@ -1292,7 +1306,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       }
       else if(dt_dev_pixelpipe_cache_get(&(pipe->cache), basichash, hash, bufsize, output, out_format))
       {
-        memset(*output, 0, bufsize);
         if(roi_in.scale == 1.0f)
         {
           // fast branch for 1:1 pixel copies.
@@ -2085,8 +2098,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       if((*out_format)->datatype == TYPE_FLOAT && (*out_format)->channels == 4)
       {
         int hasinf = 0, hasnan = 0;
-        float min[3] = { FLT_MAX };
-        float max[3] = { FLT_MIN };
+        dt_aligned_pixel_t min = { FLT_MAX };
+        dt_aligned_pixel_t max = { FLT_MIN };
 
         for(int k = 0; k < 4 * roi_out->width * roi_out->height; k++)
         {
@@ -2201,10 +2214,12 @@ post_process_collect_info:
         {
           const uint8_t *in = (uint8_t *)(*output);
           // FIXME: it would be nice to use dt_imageio_flip_buffers_ui8_to_float() but then we'd need to make another pass to convert RGB to BGR
+          #ifdef _OPENMP
+          #pragma omp parallel for default(none) dt_omp_firstprivate(buf, in, roi_out) schedule(simd:static)
+          #endif
           for(size_t k = 0; k < (size_t)roi_out->width * roi_out->height * 4; k += 4)
           {
-            for(size_t c = 0; c < 3; c++)
-              buf[k + c] = in[k + 2 - c] / 255.0f;
+            for_four_channels(c, aligned(in, buf:64)) buf[k + c] = (float)in[k + 2 - c] / 255.0f;
           }
           darktable.lib->proxy.histogram.process(darktable.lib->proxy.histogram.module, buf,
                                                  roi_out->width, roi_out->height,
@@ -2598,7 +2613,9 @@ gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const
   p->rawdetail_mask_data = mask;
   memcpy(&p->rawdetail_mask_roi, roi_in, sizeof(dt_iop_roi_t));
 
-  float wb[3] = {piece->pipe->dsc.temperature.coeffs[0], piece->pipe->dsc.temperature.coeffs[1], piece->pipe->dsc.temperature.coeffs[2]};
+  dt_aligned_pixel_t wb = { piece->pipe->dsc.temperature.coeffs[0],
+                            piece->pipe->dsc.temperature.coeffs[1],
+                            piece->pipe->dsc.temperature.coeffs[2] };
   if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
   {
     wb[0] = wb[1] = wb[2] = 1.0f;
@@ -2639,7 +2656,9 @@ gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in
   if(tmp == NULL) goto error;
   {
     const int kernel = darktable.opencl->blendop->kernel_calc_Y0_mask;
-    float wb[3] = {piece->pipe->dsc.temperature.coeffs[0], piece->pipe->dsc.temperature.coeffs[1], piece->pipe->dsc.temperature.coeffs[2]};
+    dt_aligned_pixel_t wb = { piece->pipe->dsc.temperature.coeffs[0],
+                              piece->pipe->dsc.temperature.coeffs[1],
+                              piece->pipe->dsc.temperature.coeffs[2] };
     if((p->want_detail_mask & ~DT_DEV_DETAIL_MASK_REQUIRED) == DT_DEV_DETAIL_MASK_RAWPREPARE)
     {
       wb[0] = wb[1] = wb[2] = 1.0f;

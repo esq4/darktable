@@ -1156,7 +1156,7 @@ static void _blendop_blendif_showmask_clicked(GtkWidget *button, GdkEventButton 
 
     // note that a ctrl+click followed by a shift-click must keep the
     // toggle button active. But a single click must invert current
-    // toggle buttong.  That's why we check for request_mask_display
+    // toggle button.  That's why we check for request_mask_display
     // value below. But note that the toggle button state has not yet
     // been inverted by Gtk at this stage. So if a button must be ON
     // we ensure it is OFF now.
@@ -1474,9 +1474,9 @@ gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt
     dt_develop_blend_params_t *bp = module->blend_params;
 
     const int tab = data->tab;
-    float raw_min[4] DT_ALIGNED_PIXEL, raw_max[4] DT_ALIGNED_PIXEL;
+    dt_aligned_pixel_t raw_min, raw_max;
     float picker_min[8] DT_ALIGNED_PIXEL, picker_max[8] DT_ALIGNED_PIXEL;
-    float picker_values[4] DT_ALIGNED_PIXEL;
+    dt_aligned_pixel_t picker_values;
 
     const int in_out = ((dt_key_modifier_state() == GDK_CONTROL_MASK) && data->output_channels_shown) ? 1 : 0;
 

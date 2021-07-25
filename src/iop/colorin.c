@@ -532,16 +532,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_WORK);
 
-    // we need to rebuild the pipe so the profile take effect
-    self->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-    self->dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    self->dev->preview2_pipe->changed |= DT_DEV_PIPE_REMOVE;
-    self->dev->pipe->cache_obsolete = 1;
-    self->dev->preview_pipe->cache_obsolete = 1;
-    self->dev->preview2_pipe->cache_obsolete = 1;
-
-    // invalidate buffers and force redraw of darkroom
-    dt_dev_invalidate_all(self->dev);
+    dt_dev_pixelpipe_rebuild(self->dev);
   }
   else
   {
@@ -689,7 +680,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   {
     const float *in = (const float *)ivoid + (size_t)ch * j * roi_out->width;
     float *out = (float *)ovoid + (size_t)ch * j * roi_out->width;
-    float cam[3];
+    dt_aligned_pixel_t cam;
 
     for(int i = 0; i < roi_out->width; i++, in += ch, out += ch)
     {
@@ -705,7 +696,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
 
       if(!clipping)
       {
-        float DT_ALIGNED_PIXEL _xyz[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t _xyz = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         for(int c = 0; c < 3; c++)
         {
@@ -720,7 +711,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
       }
       else
       {
-        float DT_ALIGNED_PIXEL nRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t nRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           nRGB[c] = 0.0f;
@@ -730,13 +721,13 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
           }
         }
 
-        float DT_ALIGNED_PIXEL cRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t cRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           cRGB[c] = CLAMP(nRGB[c], 0.0f, 1.0f);
         }
 
-        float DT_ALIGNED_PIXEL XYZ[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t XYZ = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           XYZ[c] = 0.0f;
@@ -771,7 +762,7 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev
     float *in = (float *)ivoid + (size_t)ch * k;
     float *out = (float *)ovoid + (size_t)ch * k;
 
-    float DT_ALIGNED_PIXEL _xyz[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_t _xyz = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     for(int c = 0; c < 3; c++)
     {
@@ -805,7 +796,7 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
     float *in = (float *)ivoid + (size_t)ch * k;
     float *out = (float *)ovoid + (size_t)ch * k;
 
-    float DT_ALIGNED_PIXEL nRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_t nRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
     for(int c = 0; c < 3; c++)
     {
       nRGB[c] = 0.0f;
@@ -815,13 +806,13 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
       }
     }
 
-    float DT_ALIGNED_PIXEL cRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_t cRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
     for(int c = 0; c < 3; c++)
     {
       cRGB[c] = CLAMP(nRGB[c], 0.0f, 1.0f);
     }
 
-    float DT_ALIGNED_PIXEL XYZ[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_t XYZ = { 0.0f, 0.0f, 0.0f, 0.0f };
     for(int c = 0; c < 3; c++)
     {
       XYZ[c] = 0.0f;
@@ -871,7 +862,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
   {
     const float *in = (const float *)ivoid + (size_t)ch * j * roi_out->width;
     float *out = (float *)ovoid + (size_t)ch * j * roi_out->width;
-    float cam[3];
+    dt_aligned_pixel_t cam;
 
     for(int i = 0; i < roi_out->width; i++, in += ch, out += ch)
     {
@@ -885,7 +876,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
 
       if(!clipping)
       {
-        float DT_ALIGNED_PIXEL _xyz[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t _xyz = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         for(int c = 0; c < 3; c++)
         {
@@ -900,7 +891,7 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
       }
       else
       {
-        float DT_ALIGNED_PIXEL nRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t nRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           nRGB[c] = 0.0f;
@@ -910,13 +901,13 @@ static void process_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pixelpip
           }
         }
 
-        float DT_ALIGNED_PIXEL cRGB[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t cRGB = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           cRGB[c] = CLAMP(nRGB[c], 0.0f, 1.0f);
         }
 
-        float DT_ALIGNED_PIXEL XYZ[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_t XYZ = { 0.0f, 0.0f, 0.0f, 0.0f };
         for(int c = 0; c < 3; c++)
         {
           XYZ[c] = 0.0f;
@@ -1104,7 +1095,7 @@ static void process_sse2_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpi
 
     float *buf_in = in + (size_t)ch * roi_in->width * j;
     float *buf_out = out + (size_t)ch * roi_out->width * j;
-    float cam[3];
+    dt_aligned_pixel_t cam;
     const __m128 cm0 = _mm_set_ps(0.0f, cmat[6], cmat[3], cmat[0]);
     const __m128 cm1 = _mm_set_ps(0.0f, cmat[7], cmat[4], cmat[1]);
     const __m128 cm2 = _mm_set_ps(0.0f, cmat[8], cmat[5], cmat[2]);
@@ -1274,7 +1265,7 @@ static void process_sse2_cmatrix_proper(struct dt_iop_module_t *self, dt_dev_pix
 
     float *buf_in = in + (size_t)ch * roi_in->width * j;
     float *buf_out = out + (size_t)ch * roi_out->width * j;
-    float cam[3];
+    dt_aligned_pixel_t cam;
     const __m128 cm0 = _mm_set_ps(0.0f, cmat[6], cmat[3], cmat[0]);
     const __m128 cm1 = _mm_set_ps(0.0f, cmat[7], cmat[4], cmat[1]);
     const __m128 cm2 = _mm_set_ps(0.0f, cmat[8], cmat[5], cmat[2]);

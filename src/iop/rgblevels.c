@@ -780,7 +780,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
      && self->picked_color_max[0] >= 0.0f
      && mean_picked_color != c->last_picked_color)
   {
-    float previous_color[3];
+    dt_aligned_pixel_t previous_color;
     previous_color[0] = p->levels[channel][0];
     previous_color[1] = p->levels[channel][1];
     previous_color[2] = p->levels[channel][2];
@@ -1260,9 +1260,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     }
   }
 
-  const float mult[3] = { 1.f / (d->params.levels[0][2] - d->params.levels[0][0]),
-                          1.f / (d->params.levels[1][2] - d->params.levels[1][0]),
-                          1.f / (d->params.levels[2][2] - d->params.levels[2][0]) };
+  const dt_aligned_pixel_t mult = { 1.f / (d->params.levels[0][2] - d->params.levels[0][0]),
+                                    1.f / (d->params.levels[1][2] - d->params.levels[1][0]),
+                                    1.f / (d->params.levels[2][2] - d->params.levels[2][0]) };
 
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
   const float *const restrict in = (const float*)ivoid;
