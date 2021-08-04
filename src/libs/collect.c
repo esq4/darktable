@@ -123,6 +123,7 @@ static void collection_updated(gpointer instance, dt_collection_change_t query_c
 static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *col, GdkEventButton *event, dt_lib_collect_t *d);
 static int is_time_property(int property);
 static void _populate_collect_combo(GtkWidget *w);
+int last_state = 0;
 
 const char *name(dt_lib_module_t *self)
 {
@@ -599,6 +600,22 @@ static void view_popup_menu(GtkWidget *treeview, GdkEventButton *event, dt_lib_c
 
 static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_collect_t *d)
 {
+  /* Get tree path for row that was clicked */
+  GtkTreePath *path = NULL;
+  int get_path = gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL);
+
+  if(event->type == GDK_DOUBLE_BUTTON_PRESS)
+  {
+    if(event->state == last_state)
+    {
+      if(gtk_tree_view_row_expanded(GTK_TREE_VIEW(treeview), path))
+        gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
+      else
+        gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+    }
+    last_state = event->state;
+  }
+
   if(((d->view_rule == DT_COLLECTION_PROP_FOLDERS
        || d->view_rule == DT_COLLECTION_PROP_FILMROLL)
       && event->type == GDK_BUTTON_PRESS && event->button == 3)
@@ -609,11 +626,8 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
               (dt_modifier_is(event->state, GDK_SHIFT_MASK) || dt_modifier_is(event->state, GDK_CONTROL_MASK)))))
   {
     GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
-    GtkTreePath *path = NULL;
 
-    /* Get tree path for row that was clicked */
-    if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL,
-                                     NULL))
+    if(get_path)
     {
       if(d->singleclick && dt_modifier_is(event->state, GDK_SHIFT_MASK)
          && gtk_tree_selection_count_selected_rows(selection) > 0
@@ -2063,9 +2077,11 @@ static void _set_tooltip(dt_lib_collect_rule_t *d)
     /* xgettext:no-c-format */
                                 _("use `%' as wildcard\n"
     /* xgettext:no-c-format */
-                                  "use `|%' to include all sub-hierarchies (ctrl-click)\n"
+                                  "click to include hierarchy + sub-hierarchies (suffix `*')\n"
     /* xgettext:no-c-format */
-                                  "use `*' to include hierarchy and sub-hierarchies (shift-click)"));
+                                  "shift+click to include only the current hierarchy (no suffix)\n"
+    /* xgettext:no-c-format */
+                                  "ctrl+click to include only sub-hierarchies (suffix `|%')"));
   }
   else if(property == DT_COLLECTION_PROP_GEOTAGGING)
   {
@@ -2073,9 +2089,11 @@ static void _set_tooltip(dt_lib_collect_rule_t *d)
     /* xgettext:no-c-format */
                                 _("use `%' as wildcard\n"
     /* xgettext:no-c-format */
-                                  "use `|%' to include all sub-locations (ctrl-click)\n"
+                                  "click to include location + sub-locations (suffix `*')\n"
     /* xgettext:no-c-format */
-                                  "use `*' to include locations and sub-locations (shift-click)"));
+                                  "shift+click to include only the current location (no suffix)\n"
+    /* xgettext:no-c-format */
+                                  "ctrl+click to include only sub-locations (suffix `|%')"));
   }
   else if(property == DT_COLLECTION_PROP_FOLDERS)
   {
@@ -2083,11 +2101,11 @@ static void _set_tooltip(dt_lib_collect_rule_t *d)
     /* xgettext:no-c-format */
                                 _("use `%' as wildcard\n"
     /* xgettext:no-c-format */
-                                  "ctrl+click to include only sub-folders\n"
+                                  "click to include current + sub-folders (suffix `*')\n"
     /* xgettext:no-c-format */
-                                  "shift+click to include current + sub-folders\n"
+                                  "shift+click to include only the current folder (no suffix)\n"
     /* xgettext:no-c-format */
-                                  "double-click to include only the current folder"));
+                                  "ctrl+click to include only sub-folders (suffix `|%')"));
   }
   else
   {
@@ -2318,9 +2336,9 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
           g_free(text);
           text = n_text;
         }
-        /* if a tag has children, shift-clicking on a parent node should display all images in and under this
+        /* if a tag has children, left-clicking on a parent node should display all images in and under this
          * hierarchy. */
-        else if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
+        else if(!dt_modifier_is(event->state, GDK_SHIFT_MASK))
         {
           gchar *n_text = g_strconcat(text, "*", NULL);
           g_free(text);
@@ -2926,7 +2944,6 @@ void gui_init(dt_lib_module_t *self)
 
     w = gtk_entry_new();
     d->rule[i].text = w;
-    dt_gui_key_accel_block_on_focus_connect(d->rule[i].text);
     gtk_widget_add_events(w, GDK_FOCUS_CHANGE_MASK);
     g_signal_connect(G_OBJECT(w), "focus-in-event", G_CALLBACK(entry_focus_in_callback), d->rule + i);
 
@@ -3033,9 +3050,6 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
-
-  for(int i = 0; i < MAX_RULES; i++)
-    dt_gui_key_accel_block_on_focus_disconnect(d->rule[i].text);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(collection_updated), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(filmrolls_updated), self);

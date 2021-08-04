@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2013-2020 darktable developers.
+    Copyright (C) 2021 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,16 +18,10 @@
 
 #pragma once
 
-#include "develop/imageop.h"
+#include "common/dttypes.h"
 
-/* Import some lightroom develop options
-   When called from lightable : dev == NULL, in this case only the tags are imported
-   When called from darkroom  : dev != NULL, in this case only develop data are imported
-*/
-gboolean dt_lightroom_import(int imgid, dt_develop_t *dev, gboolean iauto);
-
-/* returns NULL if not found, or g_strdup'ed pathname, the caller should g_free it. */
-char *dt_get_lightroom_xmp(int imgid);
+// inverts the given padded 3x3 matrix
+int mat3SSEinv(dt_colormatrix_t dst, const dt_colormatrix_t src);
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

@@ -638,7 +638,6 @@ void dt_bauhaus_init()
   // this is needed for popup, not for toplevel.
   // since popup_area gets the focus if we show the window, this is all
   // we need.
-  dt_gui_key_accel_block_on_focus_connect(darktable.bauhaus->popup_area);
 
   gtk_widget_set_size_request(darktable.bauhaus->popup_area, DT_PIXEL_APPLY_DPI(300), DT_PIXEL_APPLY_DPI(300));
   gtk_window_set_resizable(GTK_WINDOW(darktable.bauhaus->popup_window), FALSE);
@@ -2244,9 +2243,9 @@ static gboolean dt_bauhaus_slider_key_press(GtkWidget *widget, GdkEventKey *even
     delta = -d->scale / 5.0f;
   }
 
-  if(!handled) return dt_control_key_pressed(gdk_keyval_to_lower(event->keyval), dt_gui_translated_key_state(event));
+  if(handled) return dt_bauhaus_slider_add_delta_internal(widget, delta, event->state);
 
-  return dt_bauhaus_slider_add_delta_internal(widget, delta, event->state);
+  return FALSE;
 }
 
 
@@ -2301,7 +2300,7 @@ static gboolean dt_bauhaus_combobox_key_press(GtkWidget *widget, GdkEventKey *ev
       dt_bauhaus_combobox_set(widget, new_pos);
     return TRUE;
   }
-  return dt_control_key_pressed(gdk_keyval_to_lower(event->keyval), dt_gui_translated_key_state(event));
+  return FALSE;
 }
 
 static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -2958,7 +2957,10 @@ static float _action_process_slider(gpointer target, dt_action_element_t element
         fprintf(stderr, "[_action_process_slider] unknown shortcut effect (%d) for slider\n", effect);
         break;
       }
-      dt_accel_widget_toast(widget);
+
+      gchar *text = dt_bauhaus_slider_get_text(widget);
+      dt_action_widget_toast(bhw->module, widget, text);
+      g_free(text);
 
       break;
     case DT_ACTION_ELEMENT_BUTTON:
@@ -3068,7 +3070,9 @@ static float _action_process_combo(gpointer target, dt_action_element_t element,
       break;
     }
 
-    dt_accel_widget_toast(widget);
+    gchar *text = g_strdup_printf("\n%s", dt_bauhaus_combobox_get_text(widget));
+    dt_action_widget_toast(w->module, widget, text);
+    g_free(text);
   }
 
   GList *e = w->data.combobox.entries;

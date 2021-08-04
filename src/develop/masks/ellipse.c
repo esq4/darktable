@@ -980,12 +980,12 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
 
     const float pts[8] = { xref, yref, x , y, 0, 0, gui->dx, gui->dy };
 
-    const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
+    const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2f(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
 
     float pts2[8] = { xref, yref, x , y, xref+10.0f, yref, xref, yref+10.0f };
     dt_dev_distort_backtransform(darktable.develop, pts2, 4);
 
-    float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2(pts2[5] - pts2[1], pts2[4] - pts2[0]);
+    float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2f(pts2[5] - pts2[1], pts2[4] - pts2[0]);
     // Normalize to the range -180 to 180 degrees
     check_angle = atan2f(sinf(check_angle), cosf(check_angle));
     if (check_angle < 0)
@@ -1230,12 +1230,12 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     const float pts[8] = { xref, yref, x, y, 0, 0, gui->dx, gui->dy };
 
-    const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
+    const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2f(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
 
     float pts2[8] = { xref, yref, x, y, xref + 10.0f, yref, xref, yref + 10.0f };
     dt_dev_distort_backtransform(darktable.develop, pts2, 4);
 
-    float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2(pts2[5] - pts2[1], pts2[4] - pts2[0]);
+    float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2f(pts2[5] - pts2[1], pts2[4] - pts2[0]);
     // Normalize to the range -180 to 180 degrees
     check_angle = atan2f(sinf(check_angle), cosf(check_angle));
     if(check_angle < 0)
@@ -1815,7 +1815,6 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
     dt_free_align(points);
     return 0;
   }
-  memset(*buffer, 0, sizeof(float) * w * h);
 
   // we populate the buffer
   const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
@@ -1843,27 +1842,47 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
     alpha = ((ellipse->rotation - 90.0f) / 180.0f) * M_PI;
   }
 
-  for(int i = 0; i < h; i++)
-    for(int j = 0; j < w; j++)
-    {
-      float x = points[(i * w + j) * 2] - center[0];
-      float y = points[(i * w + j) * 2 + 1] - center[1];
-      float v = atan2f(y, x) - alpha;
-      float cosv = cosf(v);
-      float sinv = sinf(v);
-      float radius2 = a * a * b * b / (a * a * sinv * sinv + b * b * cosv * cosv);
-      float total2 = ta * ta * tb * tb / (ta * ta * sinv * sinv + tb * tb * cosv * cosv);
-      float l2 = x * x + y * y;
+  float *const bufptr = *buffer;
+  const float a2 = a * a;
+  const float b2 = b * b;
+  const float ta2 = ta * ta;
+  const float tb2 = tb * tb;
+  const float cos_alpha = cosf(alpha);
+  const float sin_alpha = sinf(alpha);
 
-      if(l2 < radius2)
-        (*buffer)[i * w + j] = 1.0f;
-      else if(l2 < total2)
-      {
-        float f = (total2 - l2) / (total2 - radius2);
-        (*buffer)[i * w + j] = f * f;
-      }
-      else
-        (*buffer)[i * w + j] = 0.0f;
+  // Determine the strength of the mask for each of the distorted points.  If inside the border of the ellipse,
+  // the strength is always 1.0; if outside the fallow region, it is 0.0, and in between it falls off quadratically.
+  // To compute this, we need to do the equivalent of projecting the vector from the center of the ellipse to the
+  // given point until it intersect the ellipse and the outer edge of the falloff, respectively.  The ellipse can
+  // be rotated, but we can compensate for that by applying a rotation matrix for the same rotation in the opposite
+  // direction before projecting the vector.
+  for(int i = 0; i < h*w; i++)
+    {
+      const float x = points[2 * i] - center[0];
+      const float y = points[2 * i + 1] - center[1];
+      // find the square of the distance from the center
+      const float l2 = x * x + y * y;
+      const float l = sqrtf(l2);
+      // normalize the point's coordinate to form a unit vector, taking care not to divide by zero
+      const float x_norm = l ? x / l : 0.0f;
+      const float y_norm = l ? y / l : 1.0f;  // ensure we don't get 0 for both sine and cosine below
+      // apply the rotation matrix
+      const float x_rot = x_norm * cos_alpha + y_norm * sin_alpha;
+      const float y_rot = -x_norm * sin_alpha + y_norm * cos_alpha;
+      // at this point, x_rot = cos(v) and y_rot = sin(v) since they are on the unit circle; we need the squared values
+      const float cosv2 = x_rot * x_rot;
+      const float sinv2 = y_rot * y_rot;
+
+      // project the rotated unit vector out to the ellipse and the outer border
+      const float radius2 = a2 * b2 / (a2 * sinv2 + b2 * cosv2);
+      const float total2 = ta2 * tb2 / (ta2 * sinv2 + tb2 * cosv2);
+
+      // quadratic falloff between the ellipses's radius and the radius of the outside of the feathering
+      // ratio = 0.0 at the outer border, >= 1.0 within the ellipse, negative outside the falloff
+      const float ratio = (total2 - l2) / (total2 - radius2);
+      // enforce 1.0 inside the ellipse and 0.0 outside the feathering
+      const float f = CLIP(ratio);
+      bufptr[i] = f * f;
     }
   dt_free_align(points);
 
@@ -1937,9 +1956,6 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int grid = CLAMP((10.0f * roi->scale + 2.0f) / 3.0f, 1, 4); // scale dependent resolution
   const int gw = (w + grid - 1) / grid + 1;  // grid dimension of total roi
   const int gh = (h + grid - 1) / grid + 1;  // grid dimension of total roi
-
-  // initialize output buffer with zero
-  memset(buffer, 0, sizeof(float) * w * h);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
