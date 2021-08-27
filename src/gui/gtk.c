@@ -718,7 +718,6 @@ static gboolean scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user
                              delta_y < 0,
                              event->state & 0xf,
                              _button_pressed);
-    _button_pressed = 0;
     gtk_widget_queue_draw(widget);
   }
   return TRUE;
@@ -1023,6 +1022,7 @@ static gboolean button_released(GtkWidget *w, GdkEventButton *event, gpointer us
 {
   dt_control_button_released(event->x, event->y, event->button, event->state & 0xf);
   gtk_widget_queue_draw(w);
+  _button_pressed = 0;
   return TRUE;
 }
 

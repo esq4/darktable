@@ -3617,7 +3617,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_bu
   {
     if(m_button == 3)
     {
-      dt_dev_jump_image(dev, 1, TRUE);
+      dt_dev_jump_image(dev, -1, TRUE);
       return;
     }
     if(fitscale <= 1.0f && (scale == (1.0f / ppd) || scale == (2.0f / ppd)) && constrained) return; // for large image size
@@ -3645,7 +3645,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_bu
   {
     if(m_button == 3)
     {
-      dt_dev_jump_image(dev, -1, TRUE);
+      dt_dev_jump_image(dev, 1, TRUE);
       return;
     }
 
