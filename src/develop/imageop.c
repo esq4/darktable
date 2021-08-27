@@ -785,20 +785,28 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   return module;
 }
 
+static void _iop_gui_rename_module(dt_iop_module_t *module);
+
 static void dt_iop_gui_copy_callback(GtkButton *button, gpointer user_data)
 {
-  dt_iop_gui_duplicate(user_data, FALSE);
+  dt_iop_module_t *module = dt_iop_gui_duplicate(user_data, FALSE);
 
   /* setup key accelerators */
   dt_iop_connect_accels_multi(((dt_iop_module_t *)user_data)->so);
+
+  if(dt_conf_get_bool("darkroom/ui/rename_new_instance"))
+    _iop_gui_rename_module(module);
 }
 
 static void dt_iop_gui_duplicate_callback(GtkButton *button, gpointer user_data)
 {
-  dt_iop_gui_duplicate(user_data, TRUE);
+  dt_iop_module_t *module = dt_iop_gui_duplicate(user_data, TRUE);
 
   /* setup key accelerators */
   dt_iop_connect_accels_multi(((dt_iop_module_t *)user_data)->so);
+
+  if(dt_conf_get_bool("darkroom/ui/rename_new_instance"))
+    _iop_gui_rename_module(module);
 }
 
 static gboolean _rename_module_key_press(GtkWidget *entry, GdkEventKey *event, dt_iop_module_t *module)
@@ -904,18 +912,18 @@ static void dt_iop_gui_rename_callback(GtkButton *button, dt_iop_module_t *modul
   _iop_gui_rename_module(module);
 }
 
-static void dt_iop_gui_multiinstance_callback(GtkButton *button, GdkEventButton *event, gpointer user_data)
+static gboolean dt_iop_gui_multiinstance_callback(GtkButton *button, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
 
   if(event && event->button == 3)
   {
     if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE)) dt_iop_gui_copy_callback(button, user_data);
-    return;
+    return TRUE;
   }
   else if(event && event->button == 2)
   {
-    return;
+    return FALSE;
   }
 
   GtkMenuShell *menu = GTK_MENU_SHELL(gtk_menu_new());
@@ -962,6 +970,7 @@ static void dt_iop_gui_multiinstance_callback(GtkButton *button, GdkEventButton 
 
   // make sure the button is deactivated now that the menu is opened
   if(button) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
+  return TRUE;
 }
 
 static gboolean dt_iop_gui_off_button_press(GtkWidget *w, GdkEventButton *e, gpointer user_data)
@@ -1843,19 +1852,6 @@ static void dt_iop_gui_reset_callback(GtkButton *button, GdkEventButton *event, 
   dt_iop_connect_accels_multi(module->so);
 }
 
-#if !GTK_CHECK_VERSION(3, 22, 0)
-static void _preset_popup_position(GtkMenu *menu, gint *x, gint *y, gboolean *push_in, gpointer data)
-{
-  GtkRequisition requisition = { 0 };
-  gdk_window_get_origin(gtk_widget_get_window(GTK_WIDGET(data)), x, y);
-  gtk_widget_get_preferred_size(GTK_WIDGET(menu), &requisition, NULL);
-
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(GTK_WIDGET(data), &allocation);
-  (*y) += allocation.height;
-}
-#endif
-
 static void presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 {
   const gboolean disabled = !module->default_enabled && module->hide_enable_button;
@@ -1863,17 +1859,9 @@ static void presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 
   dt_gui_presets_popup_menu_show_for_module(module);
 
-#if GTK_CHECK_VERSION(3, 22, 0)
   g_signal_connect(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate", G_CALLBACK(_header_menu_deactivate_callback), module);
 
   dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
-#else
-  gtk_widget_show_all(GTK_WIDGET(darktable.gui->presets_popup_menu));
-
-  gtk_menu_popup(darktable.gui->presets_popup_menu, NULL, NULL, _preset_popup_position, button, 0,
-                 gtk_get_current_event_time());
-  gtk_menu_reposition(GTK_MENU(darktable.gui->presets_popup_menu));
-#endif
 }
 
 
@@ -3223,12 +3211,12 @@ static float _action_process(gpointer target, dt_action_element_t element, dt_ac
       if(module->presets_button) presets_popup_callback(NULL, module);
       break;
     }
-  }
 
-  gchar *text = g_strdup_printf("%s, %s", dt_action_def_iop.elements[element].name,
-                                dt_action_def_iop.elements[element].effects[effect]);
-  dt_action_widget_toast(target, NULL, text);
-  g_free(text);
+    gchar *text = g_strdup_printf("%s, %s", dt_action_def_iop.elements[element].name,
+                                  dt_action_def_iop.elements[element].effects[effect]);
+    dt_action_widget_toast(target, NULL, text);
+    g_free(text);
+  }
 
   return 0;
 }

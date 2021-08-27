@@ -39,7 +39,6 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
-#include "gui/guides.h"
 #include "gui/presets.h"
 #include "views/view.h"
 
@@ -204,30 +203,6 @@ static inline void update_focus_peaking_button()
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(darktable.gui->focus_peaking_button), state);
 }
 
-
-static gboolean focuspeaking_switch_key_accel_callback(GtkAccelGroup *accel_group, GObject *acceleratable,
-                                               guint keyval, GdkModifierType modifier, gpointer data)
-{
-  // keyboard method
-  dt_pthread_mutex_lock(&darktable.gui->mutex);
-  const gboolean state = !(darktable.gui->show_focus_peaking);
-  dt_pthread_mutex_unlock(&darktable.gui->mutex);
-
-  // this will trigger focuspeaking_switch_button_callback() below, through the toggle_button callback,
-  // which will do the state toggling internally according to the button state we set here.
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(darktable.gui->focus_peaking_button), state);
-
-  return TRUE;
-}
-
-static gboolean _toggle_guides_accel_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,
-                                              GdkModifierType modifier, gpointer data)
-{
-  dt_guides_button_toggled();
-  dt_guides_update_button_state();
-  return TRUE;
-}
-
 static void focuspeaking_switch_button_callback(GtkWidget *button, gpointer user_data)
 {
   // button method
@@ -242,6 +217,8 @@ static void focuspeaking_switch_button_callback(GtkWidget *button, gpointer user
   dt_pthread_mutex_lock(&darktable.gui->mutex);
   darktable.gui->show_focus_peaking = state_new;
   dt_pthread_mutex_unlock(&darktable.gui->mutex);
+
+  gtk_widget_queue_draw(button);
 
   // we inform that all thumbnails need to be redraw
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, -1);
@@ -565,14 +542,12 @@ gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x
       break;
     // is trackpad (or touch) scroll
     case GDK_SCROLL_SMOOTH:
-#if GTK_CHECK_VERSION(3, 20, 0)
       // stop events reset accumulated delta
       if(event->is_stop)
       {
         acc_x = acc_y = 0.0;
         break;
       }
-#endif
       // accumulate trackpad/touch scrolls until they make a unit
       // scroll, and only then tell caller that there is a scroll to
       // handle
@@ -1324,15 +1299,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_accel_connect_global("toggle all bottom panels",
                           g_cclosure_new(G_CALLBACK(_toggle_bottom_all_accel_callback), NULL, NULL));
 
-  // toggle focus peaking everywhere
-  dt_accel_register_global(NC_("accel", "toggle focus peaking"), GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-  dt_accel_connect_global("toggle focus peaking",
-                          g_cclosure_new(G_CALLBACK(focuspeaking_switch_key_accel_callback), NULL, NULL));
-
-  // toggle focus peaking everywhere
-  dt_accel_register_global(NC_("accel", "toggle guides"), GDK_KEY_g, 0);
-  dt_accel_connect_global("toggle guides", g_cclosure_new(G_CALLBACK(_toggle_guides_accel_callback), NULL, NULL));
-
   // View-switch
   dt_accel_register_global(NC_("accel", "switch view"), GDK_KEY_period, 0);
 
@@ -1362,13 +1328,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // let's try to support pressure sensitive input devices like tablets for mask drawing
   dt_print(DT_DEBUG_INPUT, "[input device] Input devices found:\n\n");
 
-#if GTK_CHECK_VERSION(3, 20, 0)
   GList *input_devices
       = gdk_seat_get_slaves(gdk_display_get_default_seat(gdk_display_get_default()), GDK_SEAT_CAPABILITY_ALL);
-#else
-  GList *input_devices = gdk_device_manager_list_devices(gdk_display_get_device_manager(gdk_display_get_default()),
-                                                         GDK_DEVICE_TYPE_MASTER);
-#endif
   for(GList *l = input_devices; l != NULL; l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
@@ -1397,6 +1358,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gtk_widget_set_tooltip_text(darktable.gui->focus_peaking_button, _("toggle focus-peaking mode"));
   g_signal_connect(G_OBJECT(darktable.gui->focus_peaking_button), "clicked", G_CALLBACK(focuspeaking_switch_button_callback), NULL);
   update_focus_peaking_button();
+
+  // toggle focus peaking everywhere
+  dt_accel_register_global(NC_("accel", "toggle focus peaking"), GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+  dt_accel_connect_button_lib_as_global(NULL, "toggle focus peaking", darktable.gui->focus_peaking_button);
 
   return 0;
 }
@@ -1551,6 +1516,7 @@ static void init_widgets(dt_gui_gtk_t *gui)
   // Initializing the top border
   widget = gtk_drawing_area_new();
   gui->widgets.top_border = widget;
+  dt_action_define(&darktable.control->actions_global, NULL, "toggle top panel", widget, NULL);
   gtk_box_pack_start(GTK_BOX(container), widget, FALSE, TRUE, 0);
   gtk_widget_set_size_request(widget, -1, DT_PIXEL_APPLY_DPI(10));
   gtk_widget_set_app_paintable(widget, TRUE);
@@ -1566,6 +1532,7 @@ static void init_widgets(dt_gui_gtk_t *gui)
   // Initializing the bottom border
   widget = gtk_drawing_area_new();
   gui->widgets.bottom_border = widget;
+  dt_action_define(&darktable.control->actions_global, NULL, "toggle bottom panel", widget, NULL);
   gtk_box_pack_start(GTK_BOX(container), widget, FALSE, TRUE, 0);
   gtk_widget_set_size_request(widget, -1, DT_PIXEL_APPLY_DPI(10));
   gtk_widget_set_app_paintable(widget, TRUE);
@@ -1599,6 +1566,7 @@ static void init_main_table(GtkWidget *container)
   // Adding the left border
   widget = gtk_drawing_area_new();
   darktable.gui->widgets.left_border = widget;
+  dt_action_define(&darktable.control->actions_global, NULL, "toggle left panel", widget, NULL);
 
   gtk_widget_set_size_request(widget, DT_PIXEL_APPLY_DPI(10), -1);
   gtk_widget_set_app_paintable(widget, TRUE);
@@ -1612,6 +1580,7 @@ static void init_main_table(GtkWidget *container)
   // Adding the right border
   widget = gtk_drawing_area_new();
   darktable.gui->widgets.right_border = widget;
+  dt_action_define(&darktable.control->actions_global, NULL, "toggle right panel", widget, NULL);
 
   gtk_widget_set_size_request(widget, DT_PIXEL_APPLY_DPI(10), -1);
   gtk_widget_set_app_paintable(widget, TRUE);
@@ -2194,19 +2163,11 @@ static gboolean _panel_handle_button_callback(GtkWidget *w, GdkEventButton *e, g
     if(e->type == GDK_BUTTON_PRESS)
     {
       /* store current  mousepointer position */
-#if GTK_CHECK_VERSION(3, 20, 0)
       gdk_window_get_device_position(e->window,
                                      gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(
                                          gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui))))),
                                      &darktable.gui->widgets.panel_handle_x,
                                      &darktable.gui->widgets.panel_handle_y, 0);
-#else
-      gdk_window_get_device_position(
-          gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)),
-          gdk_device_manager_get_client_pointer(gdk_display_get_device_manager(
-              gdk_window_get_display(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui))))),
-          &darktable.gui->widgets.panel_handle_x, &darktable.gui->widgets.panel_handle_y, NULL);
-#endif
 
       darktable.gui->widgets.panel_handle_dragging = TRUE;
     }
@@ -2243,19 +2204,10 @@ static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, g
   {
     gint x, y, sx, sy;
     // FIXME: can work with the event x,y to skip the gdk_window_get_device_position() call?
-#if GTK_CHECK_VERSION(3, 20, 0)
     gdk_window_get_device_position(e->window,
                                    gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(
                                        gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui))))),
                                    &x, &y, 0);
-#else
-    gdk_window_get_device_position(
-        gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)),
-        gdk_device_manager_get_client_pointer(gdk_display_get_device_manager(
-            gdk_window_get_display(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui))))),
-        &x, &y, NULL);
-#endif
-
     gtk_widget_get_size_request(widget, &sx, &sy);
 
     // conf entry to store the new size
@@ -2997,8 +2949,9 @@ static float _action_process_tabs(gpointer target, dt_action_element_t element, 
 
   const int c = gtk_notebook_get_current_page(notebook);
 
-  dt_action_widget_toast(NULL, GTK_WIDGET(notebook),
-                         gtk_notebook_get_tab_label_text(notebook, gtk_notebook_get_nth_page(notebook, c)));
+  if(move_size)
+    dt_action_widget_toast(NULL, GTK_WIDGET(notebook),
+                           gtk_notebook_get_tab_label_text(notebook, gtk_notebook_get_nth_page(notebook, c)));
 
   return -1 - c + (c == element ? DT_VALUE_PATTERN_ACTIVE : 0);
 }
@@ -3281,7 +3234,6 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
 {
   gtk_widget_show_all(GTK_WIDGET(menu));
 
-#if GTK_CHECK_VERSION(3, 22, 0)
   GdkEvent *event = gtk_get_current_event();
   if(button && event)
   {
@@ -3300,9 +3252,6 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
     gtk_menu_popup_at_pointer(menu, event);
   }
   gdk_event_free(event);
-#else
-  gtk_menu_popup(menu, NULL, NULL, NULL, NULL, 0, gtk_get_current_event_time());
-#endif
 }
 
 // draw rounded rectangle

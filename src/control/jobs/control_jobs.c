@@ -944,7 +944,7 @@ static enum _dt_delete_status delete_file_from_disk(const char *filename, gboole
           send_to_trash,
           filename_display == NULL ? filename : filename_display,
           gerror == NULL ? NULL : gerror->message);
-
+      g_object_unref(gfileinfo);
       if (send_to_trash && res == _DT_DELETE_DIALOG_CHOICE_DELETE)
       {
         // Loop again, this time delete instead of trashing
@@ -2084,9 +2084,9 @@ static int _control_import_image_copy(const char *filename,
 
   if(have_exif_time)
     dt_import_session_set_exif_time(session, exif_time);
+  dt_import_session_set_filename(session, basename);
   const char *output_path = dt_import_session_path(session, FALSE);
   const gboolean use_filename = dt_conf_get_bool("session/use_filename");
-  dt_import_session_set_filename(session, basename);
   const char *fname = dt_import_session_filename(session, use_filename);
 
   char *output = g_build_filename(output_path, fname, NULL);

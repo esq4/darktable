@@ -694,9 +694,9 @@ spinbutton>button
   margin-right: 0.5em;
 }
 
-#search-box image.left
+.search image.left
 {
-  padding-right: 0.5em;
+  padding: 0 0.35em 0 0.21em;
 }
 
 /*-------------------
@@ -1265,22 +1265,36 @@ dialog scrollbar
   padding: 0 0.14em;
 }
 
-/* Set buttons and search field on presets and shortcuts control buttons */
+/* Set buttons and search field on presets and shortcuts control buttons ; first on shortcuts options to be sure things remains consistent between shortcuts views in preferences window and in standalone shortcuts one */
+#shortcut_controls
+{
+  margin: 0.35em 0 1.05em 0;
+}
+
+#shortcut_controls .search
+{
+  margin-right: 0.35em;
+}
+
+#shortcut_controls entry
+{
+  min-width: 15em;
+}
+
+#shortcut_controls button
+{
+  margin-left: 0.21em;
+}
+
 #preferences_box #shortcut_controls,
 #preferences_box #preset_controls
 {
   margin: 0.35em 1.05em 1.05em 1.05em;
 }
 
-#preferences_box #shortcut_controls
-{
-  margin-left: 0.35em;
-}
-
-#preferences_box #shortcut_controls button,
 #preferences_box #preset_controls button
 {
-margin: 0 0.14em;
+  margin-right: 0.21em;
 }
 
 /*--------------------------------

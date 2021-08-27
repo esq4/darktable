@@ -1216,14 +1216,7 @@ static void _pop_menu_attached(GtkWidget *treeview, GdkEventButton *event, dt_li
 
   gtk_widget_show_all(GTK_WIDGET(menu));
 
-#if GTK_CHECK_VERSION(3, 22, 0)
   gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
-#else
-  /* Note: event can be NULL here when called from view_onPopupMenu;
-   *  gdk_event_get_time() accepts a NULL argument */
-  gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, (event != NULL) ? event->button : 0,
-                 gdk_event_get_time((GdkEvent *)event));
-#endif
 }
 
 static gboolean _click_on_view_attached(GtkWidget *view, GdkEventButton *event, dt_lib_module_t *self)
@@ -2153,8 +2146,11 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
       g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_set_as_tag, self);
     }
 
-    menuitem = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
+    if (!d->suggestion_flag)
+    {
+      menuitem = gtk_separator_menu_item_new();
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
+    }
 
     menuitem = gtk_menu_item_new_with_label(_("copy to entry"));
     g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_copy_tag, self);
@@ -2186,14 +2182,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
     }
     gtk_widget_show_all(GTK_WIDGET(menu));
 
-#if GTK_CHECK_VERSION(3, 22, 0)
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
-#else
-    /* Note: event can be NULL here when called from view_onPopupMenu;
-     *  gdk_event_get_time() accepts a NULL argument */
-    gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, (event != NULL) ? event->button : 0,
-                   gdk_event_get_time((GdkEvent *)event));
-#endif
   }
 }
 

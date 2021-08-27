@@ -129,7 +129,7 @@ void dt_control_init(dt_control_t *s)
   dt_action_t *ac = dt_action_define(&s->actions_global, NULL, N_("show accels window"), NULL, &dt_action_def_accels_show);
   dt_accel_register_shortcut(ac, NULL, 0, DT_ACTION_EFFECT_HOLD, GDK_KEY_h, 0);
 
-  dt_action_define(&s->actions_global, NULL, N_("modifiers"), NULL, &dt_action_def_modifiers);
+  s->actions_modifiers = dt_action_define(&s->actions_global, NULL, N_("modifiers"), NULL, &dt_action_def_modifiers);
 
   memset(s->vimkey, 0, sizeof(s->vimkey));
   s->vimkey_cnt = 0;
@@ -330,15 +330,9 @@ void *dt_control_expose(void *voidptr)
   const int width = dt_cairo_image_surface_get_width(darktable.gui->surface);
   const int height = dt_cairo_image_surface_get_height(darktable.gui->surface);
   GtkWidget *widget = dt_ui_center(darktable.gui->ui);
-#if GTK_CHECK_VERSION(3, 20, 0)
   gdk_window_get_device_position(gtk_widget_get_window(widget),
       gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(widget))),
       &pointerx, &pointery, NULL);
-#else
-  GdkDevice *device
-      = gdk_device_manager_get_client_pointer(gdk_display_get_device_manager(gtk_widget_get_display(widget)));
-  gdk_window_get_device_position(gtk_widget_get_window(widget), device, &pointerx, &pointery, NULL);
-#endif
 
   // create a gtk-independent surface to draw on
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
