@@ -3690,13 +3690,14 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_bu
   const gboolean low_ppd = (darktable.gui->ppd == 1);
   const float stepup = 0.1f * fabsf(1.0f - fitscale) / ppd;
 
+  if(m_button &= 1 << 3)
+  {
+    dt_dev_jump_image(dev, up ? -1 :  1, TRUE);
+    return;
+  }
+
   if(up)
   {
-    if(m_button == 3)
-    {
-      dt_dev_jump_image(dev, -1, TRUE);
-      return;
-    }
     if(fitscale <= 1.0f && (scale == (1.0f / ppd) || scale == (2.0f / ppd)) && constrained) return; // for large image size
     else if(fitscale > 1.0f && fitscale <= 2.0f && scale == (2.0f / ppd) && constrained) return; // for medium image size
 
@@ -3720,12 +3721,6 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_bu
   }
   else
   {
-    if(m_button == 3)
-    {
-      dt_dev_jump_image(dev, 1, TRUE);
-      return;
-    }
-
     if(fitscale <= 2.0f && ((scale == fitscale && constrained) || scale < 0.5 * fitscale)) return; // for large and medium image size
     else if(fitscale > 2.0f && scale < 1.0f / ppd) return; // for small image size
 

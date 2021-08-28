@@ -1014,7 +1014,7 @@ static gboolean button_pressed(GtkWidget *w, GdkEventButton *event, gpointer use
   dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state & 0xf);
   gtk_widget_grab_focus(w);
   gtk_widget_queue_draw(w);
-  _button_pressed = event->button;
+  _button_pressed  |= (1 << event->button);
   return FALSE;
 }
 
@@ -1022,7 +1022,7 @@ static gboolean button_released(GtkWidget *w, GdkEventButton *event, gpointer us
 {
   dt_control_button_released(event->x, event->y, event->button, event->state & 0xf);
   gtk_widget_queue_draw(w);
-  _button_pressed = 0;
+  _button_pressed  &= ~(1 << event->button);
   return TRUE;
 }
 
