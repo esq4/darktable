@@ -3422,7 +3422,6 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   return 1;
 }
 
-
 int button_pressed(dt_view_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -3646,7 +3645,7 @@ void scrollbar_changed(dt_view_t *self, double x, double y)
   dt_control_navigation_redraw();
 }
 
-void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_button)
+void scrolled(dt_view_t *self, double x, double y, int up, int state)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t tb = dev->border_size;
@@ -3690,10 +3689,13 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state, guint m_bu
   const gboolean low_ppd = (darktable.gui->ppd == 1);
   const float stepup = 0.1f * fabsf(1.0f - fitscale) / ppd;
 
-  if(m_button &= 1 << 3)
+  if(!dt_iop_color_picker_is_visible(dev))
   {
-    dt_dev_jump_image(dev, up ? -1 :  1, TRUE);
-    return;
+    if(dt_key_modifier_state() & GDK_BUTTON3_MASK)
+    {
+      dt_dev_jump_image(dev, up ? -1 :  1, TRUE);
+      return;
+    }
   }
 
   if(up)
@@ -3826,7 +3828,7 @@ static gboolean zoom_in_callback(GtkAccelGroup *accel_group, GObject *accelerata
   dt_view_t *self = (dt_view_t *)data;
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  scrolled(self, dev->width / 2, dev->height / 2, 1, modifier, 0);
+  scrolled(self, dev->width / 2, dev->height / 2, 1, modifier);
   return TRUE;
 }
 
@@ -3836,7 +3838,7 @@ static gboolean zoom_out_callback(GtkAccelGroup *accel_group, GObject *accelerat
   dt_view_t *self = (dt_view_t *)data;
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  scrolled(self, dev->width / 2, dev->height / 2, 0, modifier, 0);
+  scrolled(self, dev->width / 2, dev->height / 2, 0, modifier);
   return TRUE;
 }
 
