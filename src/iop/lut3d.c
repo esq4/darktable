@@ -1547,7 +1547,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
   if (strlen(lutfolder) == 0)
   {
     fprintf(stderr, "[lut3d] Lut root folder not defined\n");
-    dt_control_log(_("Lut root folder not defined"));
+    dt_control_log(_("lut root folder not defined"));
     g_free(lutfolder);
     return;
   }
@@ -1599,8 +1599,8 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     }
     else if (!filepath[0])// file chosen outside of root folder
     {
-      fprintf(stderr, "[lut3d] Select file outside Lut root folder is not allowed\n");
-      dt_control_log(_("Select file outside Lut root folder is not allowed"));
+      fprintf(stderr, "[lut3d] select file outside Lut root folder is not allowed\n");
+      dt_control_log(_("select file outside Lut root folder is not allowed"));
     }
     g_free(filepath);
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
@@ -1675,7 +1675,7 @@ void gui_init(dt_iop_module_t *self)
 #ifdef HAVE_GMIC
   gtk_widget_set_tooltip_text(button, _("select a png (haldclut)"
       ", a cube, a 3dl or a gmz (compressed lut) file "
-      "CAUTION: 3D lut folder must be set in preferences/core options/miscellaneous before choosing the lut file"));
+      "CAUTION: 3D lut folder must be set in preferences/processing before choosing the lut file"));
 #else
   gtk_widget_set_tooltip_text(button, _("select a png (haldclut)"
       ", a cube or a 3dl file "
