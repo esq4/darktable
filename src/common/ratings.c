@@ -38,6 +38,52 @@ typedef struct dt_undo_ratings_t
   int after;
 } dt_undo_ratings_t;
 
+//ab
+#include "dtgtk/thumbnail.h"
+#include "dtgtk/thumbtable.h"
+#include "dtgtk/dr_next_img.c"
+
+gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
+{
+  int new_offset = 1;
+  int new_id = -1;
+  int diff = 1;
+  new_offset = 1;
+
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+
+  // we new offset and imgid after the jump
+  sqlite3_stmt *stmt;
+  gchar *query = dt_util_dstrcat(NULL, "SELECT rowid, imgid "
+                                          "FROM memory.collected_images "
+                                          "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
+                                 imgid, diff);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    new_offset = sqlite3_column_int(stmt, 0);
+    new_id = sqlite3_column_int(stmt, 1);
+  }
+  else
+  {
+    // if we are here, that means that the current is not anymore in the list
+    // in this case, let's use the current offset image
+    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
+    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+  }
+  g_free(query);
+  sqlite3_finalize(stmt);
+
+  if(new_id < 0 || new_id == imgid) return FALSE;
+  dt_next_img_dev_change_image(dev, new_id);
+  //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+  dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
+  // if it's a change by key_press, we set mouse_over to the active image
+  dt_control_set_mouse_over_id(new_id);
+  return TRUE;
+}
+//ba
+
 int dt_ratings_get(const int imgid)
 {
   int stars = 0;
@@ -88,6 +134,7 @@ static void _ratings_apply_to_image(const int imgid, const int rating)
   {
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
   }
+  _ratings_event_rating_release(darktable.develop, imgid); //ab
 }
 
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)

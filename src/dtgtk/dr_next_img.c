@@ -6,11 +6,8 @@
 #include "develop/blend.h"
 #include "common/collection.h"
 
-//#include "dtgtk/thumbtable.h"
-//#include "common/darktable.h"
-
-// из src/views/darkroom.c
-static void dr_dev_change_image(dt_develop_t *dev, const int32_t imgid)
+// dt_dev_change_image из src/views/darkroom.c
+static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
 {
   // stop crazy users from sleeping on key-repeat spacebar:
   if(dev->image_loading) return;
