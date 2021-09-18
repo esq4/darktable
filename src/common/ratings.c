@@ -48,7 +48,6 @@ gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
   int new_offset = 1;
   int new_id = -1;
   int diff = 1;
-  new_offset = 1;
 
   dt_develop_t *dev = (dt_develop_t *)user_data;
 
@@ -75,11 +74,14 @@ gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
   sqlite3_finalize(stmt);
 
   if(new_id < 0 || new_id == imgid) return FALSE;
-  dt_next_img_dev_change_image(dev, new_id);
-  //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
-  dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
-  // if it's a change by key_press, we set mouse_over to the active image
-  dt_control_set_mouse_over_id(new_id);
+  if(!dt_collection_image_offset(imgid))
+  {
+    dt_next_img_dev_change_image(dev, new_id);
+    //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+    dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
+    // if it's a change by key_press, we set mouse_over to the active image
+    dt_control_set_mouse_over_id(new_id);
+  }
   return TRUE;
 }
 //ba
@@ -128,13 +130,11 @@ static void _ratings_apply_to_image(const int imgid, const int rating)
     }
     // synch through:
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
-
   }
   else
   {
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
   }
-  _ratings_event_rating_release(darktable.develop, imgid); //ab
 }
 
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
@@ -181,6 +181,10 @@ static void _ratings_apply(const GList *imgs, const int rating, GList **undo, co
       new_rating = MAX(DT_VIEW_DESERT, old_rating - 1);
 
     _ratings_apply_to_image(image_id, new_rating);
+    if(rating != DT_VIEW_DESERT) //ab
+    {
+      _ratings_event_rating_release(darktable.develop, image_id);
+    } //ba
   }
 }
 
