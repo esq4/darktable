@@ -475,7 +475,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
       active_preset = cnt;
       selected_writeprotect = writeprotect;
       mi = gtk_check_menu_item_new_with_label(name);
-    gtk_style_context_add_class(gtk_widget_get_style_context(mi), "check-menu-item");
+      gtk_style_context_add_class(gtk_widget_get_style_context(mi), "check-menu-item");
       gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
       gtk_style_context_add_class(gtk_widget_get_style_context(mi), "active-menu-item");
     }
@@ -779,7 +779,7 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
 
 void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 {
-  if(!module->expander) return;
+  if(!module->expander || !module->arrow) return;
 
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);
 

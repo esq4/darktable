@@ -1355,6 +1355,29 @@ void dtgtk_cairo_paint_structure(cairo_t *cr, gint x, gint y, gint w, gint h, gi
   FINISH
 }
 
+void dtgtk_cairo_paint_draw_structure(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 0, 0)
+
+  cairo_move_to(cr, 0.1, 0.1);
+  cairo_line_to(cr, 0.1, 0.9);
+  cairo_line_to(cr, 0.9, 0.9);
+  cairo_line_to(cr, 0.9, 0.1);
+  cairo_line_to(cr, 0.1, 0.1);
+  cairo_stroke(cr);
+
+  cairo_arc(cr, 0.1, 0.1, 0.1, 0.0, 2 * M_PI);
+  cairo_stroke(cr);
+  cairo_arc(cr, 0.1, 0.9, 0.1, 0.0, 2 * M_PI);
+  cairo_stroke(cr);
+  cairo_arc(cr, 0.9, 0.9, 0.1, 0.0, 2 * M_PI);
+  cairo_stroke(cr);
+  cairo_arc(cr, 0.9, 0.1, 0.1, 0.0, 2 * M_PI);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_cancel(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1.05, 0, 0)
@@ -2693,6 +2716,57 @@ void dtgtk_cairo_paint_auto_levels(cairo_t *cr, gint x, gint y, gint w, gint h, 
   cairo_move_to(cr, 0., 1.0);
   cairo_line_to(cr, 1.0, 1.0);
   cairo_stroke(cr);
+
+  FINISH
+}
+
+void _compass_star(cairo_t *cr, double cx, double cy, double size)
+{
+  const double a = size / 2.0;
+  const double b = size / 10.0;
+
+  cairo_move_to(cr, cx, cy - a);
+  cairo_line_to(cr, cx + b, cy - b);
+  cairo_line_to(cr, cx + a, cy);
+  cairo_line_to(cr, cx + b, cy + b);
+  cairo_line_to(cr, cx, cy + a);
+  cairo_line_to(cr, cx - b, cy + b);
+  cairo_line_to(cr, cx - a, cy);
+  cairo_line_to(cr, cx - b, cy - b);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+}
+
+void dtgtk_cairo_paint_compass_star(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 0 , 0)
+
+  _compass_star(cr, .5, .5, 1.);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_wand(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 0, 0)
+
+  // the wand
+  cairo_move_to(cr, 1., .85);
+  cairo_line_to(cr, .85, 1.);
+  cairo_line_to(cr, .2, .35);
+  cairo_line_to(cr, .35, .2);
+  cairo_close_path(cr);
+  //cairo_stroke_preserve(cr);
+  cairo_fill_preserve(cr);
+  cairo_line_to(cr, .15, 0);
+  cairo_line_to(cr, 0, .15);
+  cairo_line_to(cr, .2, .35);
+  cairo_stroke(cr);
+
+  // the magic
+  _compass_star(cr, .5, .1, .25);
+  _compass_star(cr, .2, .65, .4);
+  _compass_star(cr, .75, .25, .5);
 
   FINISH
 }

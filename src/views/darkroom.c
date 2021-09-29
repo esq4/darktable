@@ -738,6 +738,10 @@ void expose(
     const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1 << closeup, 1);
 
     cairo_save(cri);
+    // don't draw guides on image margins
+    cairo_rectangle(cri, tb, tb, width - 2 * tb, height - 2 * tb);
+    cairo_clip(cri);
+    // switch to the preview reference
     cairo_translate(cri, width / 2.0, height / 2.0);
     cairo_scale(cri, zoom_scale, zoom_scale);
     cairo_translate(cri, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
@@ -1014,7 +1018,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const int32_t imgid)
       dev->iop = g_list_remove_link(dev->iop, g_list_nth(dev->iop, i));
 
       // we cleanup the module
-      dt_accel_cleanup_closures_iop(module);
+      dt_action_cleanup_instance_iop(module);
 
       free(module);
     }
@@ -3185,7 +3189,7 @@ void leave(dt_view_t *self)
     // force refresh if module has mask visualized
     if (module->request_mask_display || module->suppress_mask) dt_iop_refresh_center(module);
 
-    dt_accel_cleanup_closures_iop(module);
+    dt_action_cleanup_instance_iop(module);
     dt_iop_cleanup_module(module);
     free(module);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
