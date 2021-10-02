@@ -47,6 +47,13 @@
     <shortdescription>keyboard shortcut slider precision</shortdescription>
   </dtconfig>
   <dtconfig>
+    <name>accel/enable_fallbacks</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>enable shortcut fallbacks</shortdescription>
+    <longdescription>enables default meanings for additional buttons, modifiers or moves when used in combination with a base shortcut</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>bauhaus/scale</name>
     <type>float</type>
     <default>1.4</default>
@@ -3136,6 +3143,13 @@
     <default>false</default>
     <shortdescription>whether to show values</shortdescription>
     <longdescription>this is just for remembering whether to show values or not</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/ashift/autocrop_value</name>
+    <type>int</type>
+    <default>1</default>
+    <shortdescription>auto-crop mode</shortdescription>
+    <longdescription>0=off ; 1= largest area ; 2= original image</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/colorzones/bg_sat_factor</name>
