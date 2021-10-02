@@ -18,6 +18,16 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   dev->proxy.wb_is_D65 = TRUE;
   dev->proxy.wb_coeffs[0] = 0.f;
 
+#ifdef USE_LUA
+
+  dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
+      0, NULL, NULL,
+      LUA_ASYNC_TYPENAME, "const char*", "darkroom-image-loaded",
+      LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(imgid),
+      LUA_ASYNC_DONE);
+
+#endif
+
   // change active image
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = g_slist_prepend(NULL, GINT_TO_POINTER(imgid));
@@ -48,10 +58,8 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   }
 
   // disable color picker when changing image
-  if(dev->gui_module)
-  {
-    dev->gui_module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-  }
+  if(darktable.lib->proxy.colorpicker.picker_proxy)
+    dt_iop_color_picker_reset(darktable.lib->proxy.colorpicker.picker_proxy->module, FALSE);
 
   // update aspect ratio
   if(dev->preview_pipe->backbuf && dev->preview_status == DT_DEV_PIXELPIPE_VALID)
@@ -109,11 +117,16 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   dt_dev_write_history(dev);
 
   // be sure light table will update the thumbnail
-  if (!dt_history_hash_is_mipmap_synced(dev->image_storage.id))
+  if(!dt_history_hash_is_mipmap_synced(dev->image_storage.id))
   {
+    const dt_history_hash_t hash_status = dt_history_hash_get_status(dev->image_storage.id);
+
     dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id);
     dt_image_update_final_size(dev->image_storage.id);
-    dt_image_synch_xmp(dev->image_storage.id);
+    const gboolean fresh = (hash_status == DT_HISTORY_HASH_BASIC) || (hash_status == DT_HISTORY_HASH_AUTO);
+    const dt_imageio_write_xmp_t xmp_mode = dt_image_get_xmp_mode();
+    if((xmp_mode == DT_WRITE_XMP_ALWAYS) || ((xmp_mode == DT_WRITE_XMP_LAZY) && !fresh))
+      dt_image_synch_xmp(dev->image_storage.id);
     dt_history_hash_set_mipmap(dev->image_storage.id);
   }
 
@@ -175,7 +188,7 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
       dev->iop = g_list_remove_link(dev->iop, g_list_nth(dev->iop, i));
 
       // we cleanup the module
-      dt_accel_cleanup_closures_iop(module);
+      dt_action_cleanup_instance_iop(module);
 
       free(module);
     }
