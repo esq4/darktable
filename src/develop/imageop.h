@@ -276,6 +276,7 @@ typedef struct dt_iop_module_t
   GSList *widget_list;
   /** show/hide guide button */
   GtkWidget *guides_toggle;
+  GtkWidget *guides_combo;
   /** list of closures: show, enable/disable */
   GSList *accel_closures;
   GSList *accel_closures_local;

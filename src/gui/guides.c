@@ -670,6 +670,15 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
   gw->g_widgets = gtk_event_box_new();
   gtk_box_pack_start(GTK_BOX(vbox), gw->g_widgets, TRUE, TRUE, 0);
 
+//  int _flip = 0;
+//  dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
+//  if(guide)
+//  {
+//    gchar *key = _conf_get_path("global", guide->name, "flip");
+//    _flip = dt_conf_get_int(key);
+//    g_free(key);
+//  }
+
   DT_BAUHAUS_COMBOBOX_NEW_FULL(gw->g_flip, self, N_("guide lines"), N_("flip"), _("flip guides"),
                                0, (GtkCallback)_settings_flip_changed, gw,
                                N_("none"),
@@ -679,10 +688,20 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
   gtk_box_pack_start(GTK_BOX(vbox), gw->g_flip, TRUE, TRUE, 0);
   gtk_widget_set_no_show_all(gw->g_flip, TRUE);
 
+  int _key = 0;
+  gchar *key = _conf_get_path("global", "guide", NULL);
+  key = dt_conf_get_string(key);
+  for(_key = 0; _key < 100; ++_key)
+  {
+    if(_guide_names[_key] == key) break;
+  }
+  g_free(key);
+
   darktable.view_manager->guides = dt_bauhaus_combobox_new_full(DT_ACTION(self), N_("guide lines"), N_("type"),
                                                                 _("setup guide lines"),
-                                                                0, (GtkCallback)_settings_guides_changed, gw, _guide_names);
+                                                                _key, (GtkCallback)_settings_guides_changed, gw, _guide_names);
   gtk_box_pack_start(GTK_BOX(vbox), darktable.view_manager->guides, TRUE, TRUE, 0);
+
 
   // color section
   gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), TRUE, TRUE, 0);
@@ -787,6 +806,9 @@ static void _settings_autoshow_change(GtkWidget *mi, dt_iop_module_t *module)
   // we inverse the autoshow value for the module
   gchar *key = _conf_get_path(module->op, "autoshow", NULL);
   dt_conf_set_bool(key, !dt_conf_get_bool(key));
+  darktable.gui->reset++;
+  dt_bauhaus_combobox_set(module->guides_combo, !dt_conf_get_bool(key));
+  darktable.gui->reset--;
   g_free(key);
   dt_control_queue_redraw_center();
 }
@@ -813,6 +835,50 @@ void dt_guides_cleanup(GList *guides)
   g_list_free_full(guides, free_guide);
 }
 
+
+static void _settings_autoshow_change2(GtkWidget *combo, struct dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
+  dt_conf_set_bool(key, !dt_bauhaus_combobox_get(combo));
+  g_free(key);
+  dt_control_queue_redraw_center();
+}
+
+void dt_guides_init_module_widget(GtkWidget *iopw, struct dt_iop_module_t *module)
+{
+  if(!(module->flags() & IOP_FLAGS_GUIDES_WIDGET)) return;
+
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *cb = module->guides_combo = dt_bauhaus_combobox_new(module);
+  gtk_widget_set_name(box, "guides_module_combobox");
+  dt_bauhaus_widget_set_label(cb, NULL, _("always show guides"));
+  dt_bauhaus_combobox_add(cb, _("yes"));
+  dt_bauhaus_combobox_add(cb, _("no"));
+
+  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
+  dt_bauhaus_combobox_set(cb, !dt_conf_get_bool(key));
+  g_free(key);
+
+  g_signal_connect(G_OBJECT(cb), "value-changed", G_CALLBACK(_settings_autoshow_change2), module);
+  gtk_widget_set_tooltip_text(cb,
+                              _("set if the guides should appear automatically when this module get the focus"));
+
+  // we hide it if the preference is set to "off"
+  gtk_widget_set_no_show_all(box, TRUE);
+  gtk_widget_show(cb);
+
+  gtk_box_pack_start(GTK_BOX(box), cb, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(iopw), box, TRUE, TRUE, 0);
+}
+
+void dt_guides_update_module_widget(struct dt_iop_module_t *module)
+{
+  if(!module->guides_combo) return;
+
+  GtkWidget *box = gtk_widget_get_parent(module->guides_combo);
+  gtk_widget_set_visible(box, dt_conf_get_bool("plugins/darkroom/show_guides_in_ui"));
+}
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
