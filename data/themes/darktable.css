@@ -516,12 +516,6 @@ spinbutton>button
   font-size: 1.2em;
 }
 
-#guides_menu_warning
-{
-  font-weight: bold;
-  background-color: @really_dark_bg_color;
-}
-
 /* icon buttons in modules main body */
 #iop-plugin-ui-main #dt-button,
 #iop-plugin-ui-main #dt-toggle-button,
@@ -2337,7 +2331,7 @@ Details :
 }
 
 /*----------------------------------------
-  - Popover overlays menu from star icon -
+  - Popover overlays menu from star icon and grid lines -
   ----------------------------------------*/
 
 #overlays_label,  /* set title of the popover menu */

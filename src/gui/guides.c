@@ -686,24 +686,10 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
   gtk_box_pack_start(GTK_BOX(vbox), gw->g_flip, TRUE, TRUE, 0);
   gtk_widget_set_no_show_all(gw->g_flip, TRUE);
 
-  int _key = 0;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv)
-  {
-    gchar *key = _conf_get_path("global", "guide", NULL);
-    key = dt_conf_get_string(key);
-    for(_key = 0; _key < 100; ++_key)
-    {
-      if(_guide_names[_key] == key) break;
-    }
-    g_free(key);
-  }
-
   darktable.view_manager->guides = dt_bauhaus_combobox_new_full(DT_ACTION(self), N_("guide lines"), N_("type"),
                                                                 _("setup guide lines"),
-                                                                _key, (GtkCallback)_settings_guides_changed, gw, _guide_names);
+                                                                0, (GtkCallback)_settings_guides_changed, gw, _guide_names);
   gtk_box_pack_start(GTK_BOX(vbox), darktable.view_manager->guides, TRUE, TRUE, 0);
-
 
   // color section
   gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), TRUE, TRUE, 0);
@@ -836,7 +822,6 @@ void dt_guides_cleanup(GList *guides)
 {
   g_list_free_full(guides, free_guide);
 }
-
 
 static void _settings_autoshow_change2(GtkWidget *combo, struct dt_iop_module_t *module)
 {
