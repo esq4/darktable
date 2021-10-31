@@ -107,15 +107,19 @@ GList *dt_control_crawler_run()
 
       // on Windows the encoding might not be UTF8
       gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
+      int stat_res = -1;
 #ifdef _WIN32
       // UTF8 paths fail in this context, but converting to UTF16 works
       struct _stati64 statbuf;
-      wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
-      const int stat_res = _wstati64(wfilename, &statbuf);
-      g_free(wfilename);
+      if(xmp_path_locale) // in Windows dt_util_normalize_path returns NULL if file does not exist
+      {
+        wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
+        stat_res = _wstati64(wfilename, &statbuf);
+        g_free(wfilename);
+      }
  #else
       struct stat statbuf;
-      const int stat_res = stat(xmp_path_locale, &statbuf);
+      stat_res = stat(xmp_path_locale, &statbuf);
 #endif
       g_free(xmp_path_locale);
       if(stat_res) continue; // TODO: shall we report these?
@@ -587,7 +591,7 @@ void dt_control_crawler_show_image_list(GList *images)
     strftime(timestamp_db, sizeof(timestamp_db), "%c", localtime_r(&item->timestamp_db, &tm_stamp));
     strftime(timestamp_xmp, sizeof(timestamp_xmp), "%c", localtime_r(&item->timestamp_xmp, &tm_stamp));
 
-    const time_t time_delta = labs(item->timestamp_db - item->timestamp_xmp);
+    const time_t time_delta = llabs(item->timestamp_db - item->timestamp_xmp);
     gchar *timestamp_delta = str_time_delta(time_delta);
 
     gtk_list_store_append(store, &iter);

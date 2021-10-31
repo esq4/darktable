@@ -368,6 +368,13 @@ void _lib_import_ui_devices_update(dt_lib_module_t *self)
   gtk_widget_show_all(GTK_WIDGET(d->devices));
 }
 
+static void _free_camera_files(gpointer data)
+{
+  dt_camera_files_t *file = (dt_camera_files_t *)data;
+  g_free(file->filename);
+  g_free(file);
+}
+
 static guint _import_from_camera_set_file_list(dt_lib_module_t *self)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)self->data;
@@ -377,22 +384,28 @@ static guint _import_from_camera_set_file_list(dt_lib_module_t *self)
   const gboolean include_jpegs = !dt_conf_get_bool("ui_last/import_ignore_jpegs");
   for(GList *img = imgs; img; img = g_list_next(img))
   {
-    const char *ext = g_strrstr((char *)img->data, ".");
+    dt_camera_files_t *file = (dt_camera_files_t *)img->data;
+    const char *ext = g_strrstr(file->filename, ".");
     if(include_jpegs || (ext && g_ascii_strncasecmp(ext, ".jpg", sizeof(".jpg"))
                              && g_ascii_strncasecmp(ext, ".jpeg", sizeof(".jpeg"))))
     {
+      const guint64 datetime = file->timestamp;
+      GDateTime *dt_datetime = g_date_time_new_from_unix_local(datetime);
+      gchar *dt_txt = g_date_time_format(dt_datetime, "%x %X");
       GtkTreeIter iter;
       gtk_list_store_append(d->from.store, &iter);
       gtk_list_store_set(d->from.store, &iter,
-                         DT_IMPORT_UI_FILENAME, img->data,
-                         DT_IMPORT_FILENAME, img->data,
-                         DT_IMPORT_UI_DATETIME, "-",
-                         DT_IMPORT_DATETIME, "-",
+                         DT_IMPORT_UI_FILENAME, file->filename,
+                         DT_IMPORT_FILENAME, file->filename,
+                         DT_IMPORT_UI_DATETIME, dt_txt,
+                         DT_IMPORT_DATETIME, datetime,
                          DT_IMPORT_THUMB, d->from.eye, -1);
       nb++;
+      g_free(dt_txt);
+      g_date_time_unref(dt_datetime);
     }
   }
-  g_list_free_full(imgs, g_free);
+  g_list_free_full(imgs, _free_camera_files);
   return nb;
 }
 
@@ -1152,7 +1165,7 @@ static gboolean _folders_button_press(GtkWidget *view, GdkEventButton *event, dt
   if(event->type == GDK_DOUBLE_BUTTON_PRESS)
   {
     GtkTreePath *path = NULL;
-    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view), event->x, event->y, &path, NULL, NULL, NULL); 
+    gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view), event->x, event->y, &path, NULL, NULL, NULL);
     if(gtk_tree_view_row_expanded(d->from.folderview, path))
       gtk_tree_view_collapse_row (d->from.folderview, path);
     else
@@ -1609,25 +1622,15 @@ static void _set_files_list(GtkWidget *rbox, dt_lib_module_t* self)
   g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
   gtk_tree_view_column_set_sort_column_id(column, DT_IMPORT_FILENAME);
 
-#ifdef HAVE_GPHOTO2
-  if(d->import_case == DT_IMPORT_CAMERA)
-  {
-    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d->from.store),
-                                         DT_IMPORT_FILENAME, GTK_SORT_ASCENDING);
-  }
-  else
-#endif
-  {
-    renderer = gtk_cell_renderer_text_new();
-    column = gtk_tree_view_column_new_with_attributes(_("modified"), renderer, "text",
-                                                      DT_IMPORT_UI_DATETIME, NULL);
-    gtk_tree_view_append_column(d->from.treeview, column);
-    gtk_tree_view_column_set_sort_column_id(column, DT_IMPORT_DATETIME);
-    GtkWidget *header = gtk_tree_view_column_get_button(column);
-    gtk_widget_set_tooltip_text(header, _("file 'modified date/time', may be different from 'Exif date/time'"));
-    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d->from.store),
-                                         DT_IMPORT_DATETIME, GTK_SORT_ASCENDING);
-  }
+  renderer = gtk_cell_renderer_text_new();
+  column = gtk_tree_view_column_new_with_attributes(_("modified"), renderer, "text",
+                                                    DT_IMPORT_UI_DATETIME, NULL);
+  gtk_tree_view_append_column(d->from.treeview, column);
+  gtk_tree_view_column_set_sort_column_id(column, DT_IMPORT_DATETIME);
+  GtkWidget *header = gtk_tree_view_column_get_button(column);
+  gtk_widget_set_tooltip_text(header, _("file 'modified date/time', may be different from 'Exif date/time'"));
+  gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d->from.store),
+                                       DT_IMPORT_DATETIME, GTK_SORT_ASCENDING);
 
   renderer = gtk_cell_renderer_pixbuf_new();
   column = gtk_tree_view_column_new_with_attributes("", renderer, "pixbuf",
@@ -1635,7 +1638,7 @@ static void _set_files_list(GtkWidget *rbox, dt_lib_module_t* self)
   gtk_tree_view_append_column(d->from.treeview, column);
   GtkWidget *button = dtgtk_togglebutton_new(dtgtk_cairo_paint_eye, CPF_STYLE_FLAT, NULL);
   gtk_widget_show(button);
-  GtkWidget *header = gtk_tree_view_column_get_button(column);
+  header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header, _("show/hide thumbnails"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), FALSE);
   gtk_tree_view_column_set_widget(column, button);
@@ -2060,7 +2063,7 @@ void gui_init(dt_lib_module_t *self)
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   GtkWidget *widget = dt_ui_button_new(_("add to library..."),
                                        _("add existing images to the library"),
-                                       "lighttable_panels.html#import_from_fs");
+                                       "module-reference/utility-modules/lighttable/import");
   d->import_inplace = GTK_BUTTON(widget);
   gtk_widget_set_can_focus(widget, TRUE);
   gtk_widget_set_receives_default(widget, TRUE);
@@ -2069,7 +2072,7 @@ void gui_init(dt_lib_module_t *self)
   widget = dt_ui_button_new(_("copy & import..."),
                             _("copy and optionally rename images before adding them to the library"
                               "\npatterns can be defined to rename the images and specify the destination folders"),
-                            "lighttable_panels.html#import_from_fs");
+                            "module-reference/utility-modules/lighttable/import");
   d->import_copy = GTK_BUTTON(widget);
   gtk_widget_set_can_focus(widget, TRUE);
   gtk_widget_set_receives_default(widget, TRUE);
