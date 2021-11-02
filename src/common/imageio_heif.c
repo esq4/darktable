@@ -203,11 +203,15 @@ int dt_imageio_heif_read_profile(const char *filename,
   /* set default return values */
   int size = 0;
   *out = NULL;
-  cicp->color_primaries = heif_color_primaries_unspecified;
-  cicp->transfer_characteristics = heif_transfer_characteristic_unspecified;
-  cicp->matrix_coefficients = heif_matrix_coefficients_unspecified;
+  cicp->color_primaries = (uint16_t)heif_color_primaries_unspecified;
+  cicp->transfer_characteristics = (uint16_t)heif_transfer_characteristic_unspecified;
+  cicp->matrix_coefficients = (uint16_t)heif_matrix_coefficients_unspecified;
 
   struct heif_image_handle* handle = NULL;
+  struct heif_error err;
+  struct heif_color_profile_nclx *profile_info_nclx = NULL;
+  size_t icc_size = 0;
+  uint8_t *icc_data = NULL;
 
   struct heif_context* ctx = heif_context_alloc();
   if(!ctx)
@@ -216,12 +220,6 @@ int dt_imageio_heif_read_profile(const char *filename,
              "Unable to allocate HEIF context\n");
     goto out;
   }
-
-  struct heif_error err;
-  struct heif_color_profile_nclx *profile_info_nclx = NULL;
-  size_t icc_size = 0;
-  uint8_t *icc_data = NULL;
-
 
   err = heif_context_read_from_file(ctx, filename, NULL);
   if(err.code != 0)
@@ -269,9 +267,9 @@ int dt_imageio_heif_read_profile(const char *filename,
                 filename);
         goto out;
       }
-      cicp->color_primaries = profile_info_nclx->color_primaries;
-      cicp->transfer_characteristics = profile_info_nclx->transfer_characteristics;
-      cicp->matrix_coefficients = profile_info_nclx->matrix_coefficients;
+      cicp->color_primaries = (uint16_t)profile_info_nclx->color_primaries;
+      cicp->transfer_characteristics = (uint16_t)profile_info_nclx->transfer_characteristics;
+      cicp->matrix_coefficients = (uint16_t)profile_info_nclx->matrix_coefficients;
       break; /* heif_color_profile_type_nclx */
 
     case heif_color_profile_type_rICC:
