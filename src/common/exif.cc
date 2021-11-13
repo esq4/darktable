@@ -4037,7 +4037,27 @@ int dt_exif_xmp_attach_export(const int imgid, const char *filename, void *metad
                 else iptcData[tagname] = result;
               }
               else if(g_str_has_prefix(tagname, "Exif."))
+              {
+                const char *type = _exif_get_exiv2_tag_type(tagname);
+                if(!g_strcmp0(type, "Rational"))
+                {
+                  float float_value = (float)std::atof(result);
+                  if(!std::isnan(float_value))
+                  {
+                    g_free(result);
+                    int int_value = (int)float_value;
+                    int divisor = 1;
+                    while(fabs(float_value - int_value) > 0.00001)
+                    {
+                      divisor *= 10;
+                      float_value *= 10.0;
+                      int_value = (int)float_value;
+                    }
+                    result = g_strdup_printf("%d/%d", (int)float_value, divisor);
+                  }
+                }
                 exifData[tagname] = result;
+              }
             }
             g_free(result);
           }
