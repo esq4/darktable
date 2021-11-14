@@ -282,6 +282,10 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(cv->view(cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
 
+#ifdef _WIN32
+  dt_conf_set_bool("opencl", dt_conf_get_bool("opencl"));
+#endif
+
   char style[128] = { 0 };
 
   // get the format_name and storage_name settings which are plug-ins name and not necessary what is displayed on the combobox.
@@ -372,6 +376,9 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
 
   _scale_optim();
   gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"));
+#ifdef _WIN32
+  dt_conf_set_bool("opencl", dt_conf_get_bool("opencl"));
+#endif
 }
 
 static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
