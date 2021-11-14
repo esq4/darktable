@@ -4039,7 +4039,7 @@ int dt_exif_xmp_attach_export(const int imgid, const char *filename, void *metad
               else if(g_str_has_prefix(tagname, "Exif."))
               {
                 const char *type = _exif_get_exiv2_tag_type(tagname);
-                if(!g_strcmp0(type, "Rational"))
+                if((!g_strcmp0(type, "Rational")) || (!g_strcmp0(type, "SRational")))
                 {
                   float float_value = (float)std::atof(result);
                   if(!std::isnan(float_value))
