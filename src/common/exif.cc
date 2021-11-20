@@ -4047,7 +4047,8 @@ int dt_exif_xmp_attach_export(const int imgid, const char *filename, void *metad
                     g_free(result);
                     int int_value = (int)float_value;
                     int divisor = 1;
-                    while(fabs(float_value - int_value) > 0.00001)
+                    // exiv2 shows 2 digits for rational
+                    while(fabs(float_value - int_value) > 0.001)
                     {
                       divisor *= 10;
                       float_value *= 10.0;
