@@ -177,6 +177,7 @@ void dt_thumbnail_image_refresh_position(dt_thumbnail_t *thumb);
 float dt_thumbnail_get_zoom100(dt_thumbnail_t *thumb);
 // get the zoom ratio from 0 ("image to fit") to 1 ("max zoom value")
 float dt_thumbnail_get_zoom_ratio(dt_thumbnail_t *thumb);
+void _thumb_jump_image(gpointer user_data, int diff, gboolean by_key);
 
 #endif
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
