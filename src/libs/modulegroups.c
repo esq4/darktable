@@ -1866,18 +1866,10 @@ void init_presets(dt_lib_module_t *self)
   // this modules are deprecated in 3.4 and should be removed from this group in 3.8 (1 year later)
   SNQA();
   SMG(C_("modulegroup", "deprecated"), "basic");
-  AM("zonesystem");
-  AM("invert");
-  AM("channelmixer");
-  AM("globaltonemap");
-  AM("relight");
-  AM("tonemap");
-  AM("vibrance");
-  AM("basicadj");
-  // these modules are deprecated in 3.6 and should be removed 1 year later
+  // these modules are deprecated in 3.6 and should be removed in 4.0 (1 year later)
   AM("spots");
   AM("defringe");
-  // these modules are deprecated in 3.8 and should be removed 1 year later
+  // these modules are deprecated in 3.8 and should be removed in 4.1 (1 year later)
   AM("clipping");
 
   dt_lib_presets_add(_(DEPRECATED_PRESET_NAME), self->plugin_name, self->version(), tx, strlen(tx), TRUE);
@@ -2772,7 +2764,7 @@ static void _dt_dev_image_changed_callback(gpointer instance, dt_lib_module_t *s
 
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    const char *preset = (char *)sqlite3_column_blob(stmt, 0);
+    const char *preset = (char *)sqlite3_column_text(stmt, 0);
     dt_lib_presets_apply(preset, self->plugin_name, self->version());
   }
   sqlite3_finalize(stmt);
@@ -3916,9 +3908,8 @@ static void _manage_show_window(dt_lib_module_t *self)
 
   // reset button
   hb2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  d->preset_reset_btn = gtk_button_new();
+  d->preset_reset_btn = gtk_button_new_with_label(_("reset"));
   gtk_widget_set_name(d->preset_reset_btn, "modulegroups-reset");
-  gtk_button_set_label(GTK_BUTTON(d->preset_reset_btn), _("reset"));
   g_signal_connect(G_OBJECT(d->preset_reset_btn), "button-press-event", G_CALLBACK(_manage_editor_reset), self);
   gtk_box_pack_end(GTK_BOX(hb2), d->preset_reset_btn, FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(vb_main), hb2, FALSE, TRUE, 0);

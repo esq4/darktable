@@ -98,6 +98,7 @@ const struct _modifier_name
       { 0, NULL } };
 
 static dt_shortcut_t _sc = { 0 };  //  shortcut under construction
+static guint _previous_move = DT_SHORTCUT_MOVE_NONE;
 
 const gchar *dt_action_effect_value[]
   = { N_("edit"),
@@ -441,7 +442,7 @@ static gchar *_shortcut_key_move_name(dt_input_device_t id, guint key_or_move, g
   else
   {
     GSList *driver = darktable.control->input_drivers;
-    while(driver && (id -= 10) > 10)
+    while(driver && (id -= 10) >= 10)
       driver = driver->next;
 
     if(!driver)
@@ -519,12 +520,12 @@ static gchar *_shortcut_description(dt_shortcut_t *s)
   if(s->button)
   {
     if(*key_name || *move_name) add_hint(",");
-    if(s->button & DT_SHORTCUT_LEFT  ) add_hint(" %s", _("left"));
-    if(s->button & DT_SHORTCUT_RIGHT ) add_hint(" %s", _("right"));
-    if(s->button & DT_SHORTCUT_MIDDLE) add_hint(" %s", _("middle"));
-    if(s->click  & DT_SHORTCUT_DOUBLE) add_hint(" %s", _("double"));
-    if(s->click  & DT_SHORTCUT_TRIPLE) add_hint(" %s", _("triple"));
-    if(s->click  & DT_SHORTCUT_LONG  ) add_hint(" %s", _("long"));
+    if(s->button & DT_SHORTCUT_LEFT  ) add_hint(" %s", C_("accel", "left"));
+    if(s->button & DT_SHORTCUT_RIGHT ) add_hint(" %s", C_("accel", "right"));
+    if(s->button & DT_SHORTCUT_MIDDLE) add_hint(" %s", C_("accel", "middle"));
+    if(s->click  & DT_SHORTCUT_DOUBLE) add_hint(" %s", C_("accel", "double"));
+    if(s->click  & DT_SHORTCUT_TRIPLE) add_hint(" %s", C_("accel", "triple"));
+    if(s->click  & DT_SHORTCUT_LONG  ) add_hint(" %s", C_("accel", "long"));
     add_hint(" %s", _("click"));
   }
 
@@ -2743,7 +2744,7 @@ static gboolean _shortcut_match(dt_shortcut_t *f, gchar **fb_log)
 
     dt_input_device_t id = f->key_device;
     GSList *driver = darktable.control->input_drivers;
-    while(driver && (id -= 10) > 10)
+    while(driver && (id -= 10) >= 10)
       driver = driver->next;
 
     if(!driver)
@@ -2805,13 +2806,13 @@ static gboolean _shortcut_match(dt_shortcut_t *f, gchar **fb_log)
         *fb_log = dt_util_dstrcat(*fb_log, "\n%s \u2192 %s", _shortcut_description(f), _("fallback to move"));
 
       f->effect = DT_ACTION_EFFECT_DEFAULT_MOVE;
-      matched = TRUE;
+      f->move = 0;
     }
 
     f->action = matched_action;
   }
 
-  return f->action != NULL;
+  return f->action != NULL && !f->move;
 }
 
 
@@ -2974,7 +2975,7 @@ static float _process_shortcut(float move_size)
 
     return_value =  _process_action(fsc.action, fsc.instance, fsc.element, fsc.effect, move_size);
   }
-  else if(!isnan(move_size))
+  else if(!isnan(move_size) && !fsc.action)
   {
     dt_toast_log(_("%s not assigned"), _shortcut_description(&_sc));
 
@@ -3099,6 +3100,7 @@ float dt_shortcut_move(dt_input_device_t id, guint time, guint move, double size
   {
     _cancel_delayed_release();
     _last_time = 0;
+    _previous_move = move;
 
     if(_grab_widget)
       _ungrab_grab_widget();
@@ -3388,11 +3390,6 @@ void dt_shortcut_key_release(dt_input_device_t id, guint time, guint key)
       }
     }
   }
-  else
-  {
-    if(key != GDK_KEY_Left && key != GDK_KEY_Right && key != GDK_KEY_Up && key != GDK_KEY_Down)
-      fprintf(stderr, "[dt_shortcut_key_release] released key wasn't stored\n");
-  }
 }
 
 gboolean dt_shortcut_key_active(dt_input_device_t id, guint key)
@@ -3494,6 +3491,9 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
     {
       if(_sc.action)
       {
+        // we may interrupt a delayed release, so do the ungrab here if needed
+        if(!_pressed_keys) _ungrab_grab_widget();
+
         _sc.mods = _key_modifiers_clean(event->key.state);
         dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, 0, DT_SHORTCUT_MOVE_NONE, 1);
       }
@@ -3555,31 +3555,36 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
 
     const gdouble angle = x_move / (0.001 + y_move);
     gdouble size = trunc(x_move / step_size);
+    gdouble y_size = - trunc(y_move / step_size);
 
-    if(size != 0 && fabs(angle) >= 2)
+    if(size != 0 || y_size != 0)
     {
-      move_start_x += size * step_size;
-      move_start_y = event->motion.y;
-      dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->motion.time, DT_SHORTCUT_MOVE_HORIZONTAL, size);
-    }
-    else
-    {
-      size = - trunc(y_move / step_size);
-      if(size != 0)
+      guint move = DT_SHORTCUT_MOVE_HORIZONTAL;
+      if(fabs(angle) >= 2)
       {
+        move_start_x += size * step_size;
+        move_start_y = event->motion.y;
+      }
+      else
+      {
+        size = y_size;
         move_start_y -= size * step_size;
         if(fabs(angle) < .5)
         {
           move_start_x = event->motion.x;
-          dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->motion.time, DT_SHORTCUT_MOVE_VERTICAL, size);
+          move = DT_SHORTCUT_MOVE_VERTICAL;
         }
         else
         {
           move_start_x -= size * step_size * angle;
-          dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->motion.time,
-                           angle < 0 ? DT_SHORTCUT_MOVE_SKEW : DT_SHORTCUT_MOVE_DIAGONAL, size);
+          move = angle < 0 ? DT_SHORTCUT_MOVE_SKEW : DT_SHORTCUT_MOVE_DIAGONAL;
         }
       }
+
+      if(_previous_move == move || _previous_move == DT_SHORTCUT_MOVE_NONE)
+        dt_shortcut_move(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->motion.time, move, size);
+      else
+        _previous_move = move;
     }
     break;
   case GDK_BUTTON_PRESS:

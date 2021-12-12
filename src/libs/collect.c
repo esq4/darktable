@@ -826,6 +826,7 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   }
   else if(_combo_get_active_collection(dr->combo) == DT_COLLECTION_PROP_FOLDERS)
   {
+    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0';
     if(g_str_has_suffix(needle, "/")) needle[strlen(needle) - 1] = '\0';
     if(g_str_has_suffix(haystack, "/")) haystack[strlen(haystack) - 1] = '\0';
   }
@@ -860,7 +861,8 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
     gtk_tree_view_expand_to_path(d->view, path);
     expanded = TRUE;
   }
-  else if(g_str_has_prefix(haystack, needle))
+  else if((dr->typing || _combo_get_active_collection(dr->combo) != DT_COLLECTION_PROP_FOLDERS)
+          && g_str_has_prefix(haystack, needle))
   {
     gtk_tree_view_expand_to_path(d->view, path);
     expanded = TRUE;
@@ -2448,6 +2450,7 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
+  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
   dt_control_queue_redraw_center();
 }
 

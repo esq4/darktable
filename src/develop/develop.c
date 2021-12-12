@@ -814,7 +814,23 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
     GList *next = g_list_next(history);
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     // printf("removing obsoleted history item: %s\n", hist->module->op);
-    if(!hist->module->hide_enable_button && !hist->module->default_enabled)
+
+    //check if an earlier instance of the module exists
+    gboolean earlier_entry = FALSE;
+    GList *prior_history = g_list_nth(dev->history, dev->history_end - 1);
+    while(prior_history)
+    {
+      dt_dev_history_item_t *prior_hist = (dt_dev_history_item_t *)(prior_history->data);
+      if(prior_hist->module->so == hist->module->so)
+      {
+        earlier_entry = TRUE;
+        break;
+      }
+      prior_history = g_list_previous(prior_history);
+    }
+
+    if((!hist->module->hide_enable_button && !hist->module->default_enabled)
+        || earlier_entry)
     {
       dt_dev_free_history_item(hist);
       dev->history = g_list_delete_link(dev->history, history);
@@ -2369,10 +2385,11 @@ void dt_dev_masks_list_remove(dt_develop_t *dev, int formid, int parentid)
   if(dev->proxy.masks.module && dev->proxy.masks.list_remove)
     dev->proxy.masks.list_remove(dev->proxy.masks.module, formid, parentid);
 }
-void dt_dev_masks_selection_change(dt_develop_t *dev, int selectid, int throw_event)
+void dt_dev_masks_selection_change(dt_develop_t *dev, struct dt_iop_module_t *module,
+                                   const int selectid, const int throw_event)
 {
   if(dev->proxy.masks.module && dev->proxy.masks.selection_change)
-    dev->proxy.masks.selection_change(dev->proxy.masks.module, selectid, throw_event);
+    dev->proxy.masks.selection_change(dev->proxy.masks.module, module, selectid, throw_event);
 }
 
 void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename)
