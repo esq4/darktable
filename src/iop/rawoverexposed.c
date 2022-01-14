@@ -111,17 +111,20 @@ static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
    * but we do want to see those magenta highlights marked...
    */
 
-  if(piece->pipe->dsc.temperature.enabled)
-  {
-    threshold = FLT_MAX;
+//ab мне интересно недо/переэкспонирование на сенсоре (в raw); учёт ББ мне не нужен.
+//  if(piece->pipe->dsc.temperature.enabled)
+//  {
+//    threshold = FLT_MAX;
 
-    // so to detect the color clipping, we need to take white balance into account.
-    for(int k = 0; k < ch; k++) threshold = fminf(threshold, piece->pipe->dsc.temperature.coeffs[k]);
-  }
-  else
-  {
-    threshold = 1.0f;
-  }
+//    // so to detect the color clipping, we need to take white balance into account.
+//    for(int k = 0; k < ch; k++) threshold = fminf(threshold, piece->pipe->dsc.temperature.coeffs[k]);
+//  }
+//  else
+//  {
+//    threshold = 1.0f;
+//  }
+  threshold = 1.0f;
+  //ba
 
   threshold *= dev->rawoverexposed.threshold;
 
@@ -133,7 +136,8 @@ static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
     // but we check it on the raw input buffer, so we need backtransform threshold
 
     // "undo" temperature iop
-    if(piece->pipe->dsc.temperature.enabled) chthr /= piece->pipe->dsc.temperature.coeffs[k];
+//ab мне интересно недо/переэкспонирование на сенсоре (в raw); учёт ББ мне не нужен.
+//ab    if(piece->pipe->dsc.temperature.enabled) chthr /= piece->pipe->dsc.temperature.coeffs[k];
 
     // "undo" rawprepare iop
     chthr *= piece->pipe->dsc.rawprepare.raw_white_point - piece->pipe->dsc.rawprepare.raw_black_level;
