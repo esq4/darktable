@@ -20,8 +20,10 @@
 #include "config.h"
 #endif
 
+#include "common/atomic.h"
 #include "common/database.h"
 #include "common/darktable.h"
+#include "common/datetime.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/iop_order.h"
@@ -47,8 +49,13 @@
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
-#define CURRENT_DATABASE_VERSION_LIBRARY 34
+#define CURRENT_DATABASE_VERSION_LIBRARY 35
 #define CURRENT_DATABASE_VERSION_DATA     9
+
+// #define USE_NESTED_TRANSACTIONS
+#define MAX_NESTED_TRANSACTIONS 0
+/* transaction id */
+static dt_atomic_int _trxid;
 
 typedef struct dt_database_t
 {
@@ -1968,6 +1975,105 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
     sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
     new_version = 34;
   }
+  else if(version == 34)
+  {
+    sqlite3_exec(db->handle, "PRAGMA foreign_keys = OFF", NULL, NULL, NULL);
+    sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
+
+    TRY_EXEC("CREATE TABLE main.images_new (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, film_id INTEGER, "
+        "width INTEGER, height INTEGER, filename VARCHAR, maker VARCHAR, model VARCHAR, "
+        "lens VARCHAR, exposure REAL, aperture REAL, iso REAL, focal_length REAL, "
+        "focus_distance REAL, datetime_taken INTEGER, flags INTEGER, "
+        "output_width INTEGER, output_height INTEGER, crop REAL, "
+        "raw_parameters INTEGER, raw_denoise_threshold REAL, "
+        "raw_auto_bright_threshold REAL, raw_black INTEGER, raw_maximum INTEGER, "
+        "license VARCHAR, sha1sum CHAR(40), "
+        "orientation INTEGER, histogram BLOB, lightmap BLOB, longitude REAL, "
+        "latitude REAL, altitude REAL, color_matrix BLOB, colorspace INTEGER, version INTEGER, "
+        "max_version INTEGER, write_timestamp INTEGER, history_end INTEGER, position INTEGER, "
+        "aspect_ratio REAL, exposure_bias REAL, "
+        "import_timestamp INTEGER, change_timestamp INTEGER, "
+        "export_timestamp INTEGER, print_timestamp INTEGER, "
+        "FOREIGN KEY(film_id) REFERENCES film_rolls(id) ON DELETE CASCADE ON UPDATE CASCADE, "
+        "FOREIGN KEY(group_id) REFERENCES images(id) ON DELETE RESTRICT ON UPDATE CASCADE)",
+        "[init] can't create new images table\n");
+
+    TRY_EXEC("INSERT INTO `images_new` SELECT "
+        "id, group_id, film_id, width, height, filename, maker, model, "
+        "lens, exposure, aperture, iso, focal_length, focus_distance, NULL AS datetime_taken, flags, "
+        "output_width, output_height, crop, raw_parameters, raw_denoise_threshold, raw_auto_bright_threshold, raw_black, raw_maximum, "
+        "license, sha1sum, orientation, histogram, lightmap, longitude, latitude, altitude, color_matrix, colorspace, version, "
+        "max_version, write_timestamp, history_end, position, aspect_ratio, exposure_bias, "
+        "NULL AS import_timestamp, NULL AS change_timestamp, NULL AS export_timestamp, NULL AS print_timestamp "
+        "FROM `images`",
+        "[init] can't copy back from images\n");
+
+    TRY_PREPARE(stmt, "SELECT id,"
+                      " CASE WHEN datetime_taken = '' THEN NULL ELSE datetime_taken END,"
+                      " CASE WHEN import_timestamp = -1 THEN NULL ELSE import_timestamp END,"
+                      " CASE WHEN change_timestamp = -1 THEN NULL ELSE change_timestamp END,"
+                      " CASE WHEN export_timestamp = -1 THEN NULL ELSE export_timestamp END,"
+                      " CASE WHEN print_timestamp = -1 THEN NULL ELSE print_timestamp END "
+                      "FROM `images`",
+                "[init] can't get datetime from images\n");
+    while(sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      sqlite3_stmt *stmt2;
+      sqlite3_prepare_v2(db->handle,
+                         "UPDATE `images_new` SET"
+                         " (datetime_taken, import_timestamp,"
+                         "  change_timestamp, export_timestamp, print_timestamp) = "
+                         " (?2, ?3, ?4, ?5, ?6) WHERE id = ?1",
+                         -1, &stmt2, NULL);
+      sqlite3_bind_int(stmt2, 1, sqlite3_column_int(stmt, 0));
+      if(sqlite3_column_type(stmt, 1) != SQLITE_NULL)
+      {
+        GDateTime *gdt = dt_datetime_exif_to_gdatetime((const char *)sqlite3_column_text(stmt, 1), darktable.utc_tz);
+        if(gdt)
+        {
+          sqlite3_bind_int64(stmt2, 2, dt_datetime_gdatetime_to_gtimespan(gdt));
+          g_date_time_unref(gdt);
+        }
+      }
+      for(int i = 0; i < 4; i++)
+      {
+        if(sqlite3_column_type(stmt, i + 2) != SQLITE_NULL)
+        {
+          GDateTime *gdt = g_date_time_new_from_unix_utc(sqlite3_column_int(stmt, i + 2));
+          if(gdt)
+          {
+            sqlite3_bind_int64(stmt2, i + 3, dt_datetime_gdatetime_to_gtimespan(gdt));
+            g_date_time_unref(gdt);
+          }
+        }
+      }
+      TRY_STEP(stmt2, SQLITE_DONE, "[init] can't update datetimes into images_new table\n");
+      sqlite3_finalize(stmt2);
+    }
+    sqlite3_finalize(stmt);
+
+    TRY_EXEC("DROP TABLE `images`", "[init] can't drop images table\n");
+    // that's the way to keep the other tables foreign keys references valid
+    TRY_EXEC("ALTER TABLE `images_new` RENAME TO `images`", "[init] can't rename images_new table to images");
+
+    // pita: need to recreate indexes
+    TRY_EXEC("CREATE INDEX `image_position_index` ON `images` (position)",
+        "[init] can't add image_position_index\n");
+    TRY_EXEC("CREATE INDEX `images_filename_index` ON `images` ( `filename`, `version` )",
+        "[init] can't recreate images_filename_index\n");
+    TRY_EXEC("CREATE INDEX `images_film_id_index` ON `images` ( `film_id`, `filename` )",
+        "[init] can't recreate images_film_id_index\n");
+    TRY_EXEC("CREATE INDEX `images_group_id_index` ON `images` ( `group_id`, `id` )",
+        "[init] can't recreate images_group_id_index\n");
+    TRY_EXEC("CREATE INDEX `images_latlong_index` ON `images` ( latitude DESC, longitude DESC )",
+        "[init] can't add images_latlong_index\n");
+    TRY_EXEC("CREATE INDEX `images_datetime_taken` ON images (datetime_taken)",
+        "[init] can't create images_datetime_taken\n");
+
+    sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
+    sqlite3_exec(db->handle, "PRAGMA foreign_keys = ON", NULL, NULL, NULL);
+    new_version = 35;
+  }
   else
     new_version = version; // should be the fallback so that calling code sees that we are in an infinite loop
 
@@ -2247,7 +2353,7 @@ static void _create_library_schema(dt_database_t *db)
       "CREATE TABLE main.images (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, film_id INTEGER, "
       "width INTEGER, height INTEGER, filename VARCHAR, maker VARCHAR, model VARCHAR, "
       "lens VARCHAR, exposure REAL, aperture REAL, iso REAL, focal_length REAL, "
-      "focus_distance REAL, datetime_taken CHAR(20), flags INTEGER, "
+      "focus_distance REAL, datetime_taken INTEGER, flags INTEGER, "
       "output_width INTEGER, output_height INTEGER, crop REAL, "
       "raw_parameters INTEGER, raw_denoise_threshold REAL, "
       "raw_auto_bright_threshold REAL, raw_black INTEGER, raw_maximum INTEGER, "
@@ -2265,6 +2371,7 @@ static void _create_library_schema(dt_database_t *db)
   sqlite3_exec(db->handle, "CREATE INDEX main.images_film_id_index ON images (film_id, filename)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE INDEX main.images_filename_index ON images (filename, version)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE INDEX main.image_position_index ON images (position)", NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE INDEX main.images_datetime_taken_nc ON images (datetime_taken)", NULL, NULL, NULL);
 
   ////////////////////////////// selected_images
   sqlite3_exec(db->handle, "CREATE TABLE main.selected_images (imgid INTEGER PRIMARY KEY)", NULL, NULL, NULL);
@@ -2306,6 +2413,7 @@ static void _create_library_schema(dt_database_t *db)
   sqlite3_exec(db->handle, "CREATE TABLE main.meta_data (id INTEGER, key INTEGER, value VARCHAR)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE UNIQUE INDEX main.metadata_index ON meta_data (id, key, value)", NULL, NULL, NULL);
 
+  sqlite3_exec(db->handle, "CREATE INDEX main.metadata_index_key ON meta_data (key)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE main.module_order (imgid INTEGER PRIMARY KEY, version INTEGER, iop_list VARCHAR)",
                NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE main.history_hash (imgid INTEGER PRIMARY KEY, "
@@ -2381,7 +2489,8 @@ static void _create_memory_schema(dt_database_t *db)
       NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE memory.tmp_selection (imgid INTEGER PRIMARY KEY)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE memory.taglist "
-                           "(tmpid INTEGER PRIMARY KEY, id INTEGER UNIQUE ON CONFLICT IGNORE, count INTEGER)",
+                           "(tmpid INTEGER PRIMARY KEY, id INTEGER UNIQUE ON CONFLICT IGNORE, "
+                           "count INTEGER DEFAULT 0, count2 INTEGER DEFAULT 0)",
                NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE memory.similar_tags (tagid INTEGER PRIMARY KEY)", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE memory.darktable_tags (tagid INTEGER PRIMARY KEY)", NULL, NULL, NULL);
@@ -2890,6 +2999,8 @@ start:
   dt_database_t *db = (dt_database_t *)g_malloc0(sizeof(dt_database_t));
   db->dbfilename_data = g_strdup(dbfilename_data);
   db->dbfilename_library = g_strdup(dbfilename_library);
+
+  dt_atomic_set_int(&_trxid, 0);
 
   /* make sure the folder exists. this might not be the case for new databases */
   /* also check if a database backup is needed */
@@ -4389,6 +4500,86 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   g_free(last_snap_name);
 
   return ret;
+}
+
+// Nested transactions support
+//
+// NOTE: the nested support is actually not activated (see || TRUE below). This current
+//       implementation is just a refactoring of the previous code using:
+//          - dt_database_start_transaction()
+//          - dt_database_release_transaction()
+//          - dt_database_rollback_transaction()
+//
+//       With this refactoring we can count and check for nested transaction and unmatched
+//       transaction routines. And it has been done to help further implementation for
+//       proper threading and nested transaction support.
+//
+void dt_database_start_transaction(const struct dt_database_t *db)
+{
+  const int trxid = dt_atomic_add_int(&_trxid, 1);
+
+  // if top level a simple unamed transaction is used BEGIN / COMMIT / ROLLBACK
+  // otherwise we use a savepoint (named transaction).
+
+  if(trxid == 0 || TRUE)
+  {
+    // In theads application it may be safer to use an IMMEDIATE transaction:
+    // "BEGIN IMMEDIATE TRANSACTION"
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "BEGIN TRANSACTION", NULL, NULL, NULL);
+  }
+#ifdef USE_NESTED_TRANSACTIONS
+  else
+  {
+    char SQLTRX[32] = { 0 };
+    g_snprintf(SQLTRX, sizeof(SQLTRX), "SAVEPOINT trx%d", trxid);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+  }
+#endif
+
+  if(trxid > MAX_NESTED_TRANSACTIONS)
+    fprintf(stderr, "[dt_database_start_transaction] more than %d nested transaction\n", MAX_NESTED_TRANSACTIONS);
+}
+
+void dt_database_release_transaction(const struct dt_database_t *db)
+{
+  const int trxid = dt_atomic_sub_int(&_trxid, 1);
+
+  if(trxid <= 0)
+    fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
+
+  if(trxid == 1 || TRUE)
+  {
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
+  }
+#ifdef USE_NESTED_TRANSACTIONS
+  else
+  {
+    char SQLTRX[64] = { 0 };
+    g_snprintf(SQLTRX, sizeof(SQLTRX), "RELEASE SAVEPOINT trx%d", trxid - 1);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+  }
+#endif
+}
+
+void dt_database_rollback_transaction(const struct dt_database_t *db)
+{
+  const int trxid = dt_atomic_sub_int(&_trxid, 1);
+
+  if(trxid <= 0)
+    fprintf(stderr, "[dt_database_rollback_transaction] ROLLBACK outside a transaction\n");
+
+  if(trxid == 1 || TRUE)
+  {
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+  }
+#ifdef USE_NESTED_TRANSACTIONS
+  else
+  {
+    char SQLTRX[64] = { 0 };
+    g_snprintf(SQLTRX, sizeof(SQLTRX), "ROLLBACK TRANSACTION TO SAVEPOINT trx%d", trxid - 1);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+  }
+#endif
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
