@@ -556,8 +556,7 @@ void gui_init(dt_lib_module_t *self)
 
   // Setting up the GUI
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkStyleContext *context = gtk_widget_get_style_context(self->widget);
-  gtk_style_context_add_class(context, "picker-module");
+  dt_gui_add_class(self->widget, "picker-module");
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
 
   // The color patch
@@ -585,7 +584,7 @@ void gui_init(dt_lib_module_t *self)
                                                           self, dt_lib_colorpicker_statistic_names);
   dt_bauhaus_combobox_set_entries_ellipsis(data->statistic_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(data->statistic_selector, NULL, NULL);
-  gtk_widget_set_valign(data->statistic_selector, GTK_ALIGN_END);
+  gtk_widget_set_valign(data->statistic_selector, GTK_ALIGN_CENTER);
   gtk_box_pack_start(GTK_BOX(picker_row), data->statistic_selector, TRUE, TRUE, 0);
 
   data->color_mode_selector = dt_bauhaus_combobox_new_full(DT_ACTION(self), NULL, N_("color mode"),
@@ -594,7 +593,7 @@ void gui_init(dt_lib_module_t *self)
                                                            dt_lib_colorpicker_model_names);
   dt_bauhaus_combobox_set_entries_ellipsis(data->color_mode_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(data->color_mode_selector, NULL, NULL);
-  gtk_widget_set_valign(data->color_mode_selector, GTK_ALIGN_END);
+  gtk_widget_set_valign(data->color_mode_selector, GTK_ALIGN_CENTER);
   gtk_box_pack_start(GTK_BOX(picker_row), data->color_mode_selector, TRUE, TRUE, 0);
 
   data->picker_button = dt_color_picker_new(NULL, DT_COLOR_PICKER_POINT_AREA, picker_row);
@@ -642,8 +641,7 @@ void gui_init(dt_lib_module_t *self)
 
   // Adding the live samples section
   label = dt_ui_section_label_new(_("live samples"));
-  context = gtk_widget_get_style_context(GTK_WIDGET(label));
-  gtk_style_context_add_class(context, "section_label_top");
+  dt_gui_add_class(GTK_WIDGET(label), "section_label_top");
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
 
 
@@ -731,6 +729,8 @@ void gui_reset(dt_lib_module_t *self)
   // redraw without a picker
   dt_control_queue_redraw_center();
 }
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

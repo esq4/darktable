@@ -118,8 +118,7 @@ GtkWidget *dtgtk_thumbnail_btn_new(DTGTKCairoPaintIconFunc paint, gint paintflag
 {
   GtkDarktableThumbnailBtn *button;
   button = g_object_new(dtgtk_thumbnail_btn_get_type(), NULL);
-  GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(button));
-  gtk_style_context_add_class(context, "dt_thumb_btn");
+  dt_gui_add_class(GTK_WIDGET(button), "dt_thumb_btn");
   button->icon = paint;
   button->icon_flags = paintflags;
   button->icon_data = paintdata;
@@ -160,6 +159,9 @@ gboolean dtgtk_thumbnail_btn_is_hidden(GtkWidget *widget)
 
   return DTGTK_THUMBNAIL_BTN(widget)->hidden;
 }
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
+

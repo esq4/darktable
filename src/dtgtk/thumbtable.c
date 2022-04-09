@@ -100,9 +100,8 @@ static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
   // we change the class that indicate the thumb size
   gchar *c0 = g_strdup_printf("dt_thumbnails_%d", table->prefs_size);
   gchar *c1 = g_strdup_printf("dt_thumbnails_%d", ns);
-  GtkStyleContext *context = gtk_widget_get_style_context(table->widget);
-  gtk_style_context_remove_class(context, c0);
-  gtk_style_context_add_class(context, c1);
+  dt_gui_remove_class(table->widget, c0);
+  dt_gui_add_class(table->widget, c1);
   g_free(c0);
   g_free(c1);
   table->prefs_size = ns;
@@ -140,9 +139,8 @@ void dt_thumbtable_set_overlays_mode(dt_thumbtable_t *table, dt_thumbnail_overla
   gchar *cl0 = _thumbs_get_overlays_class(table->overlays);
   gchar *cl1 = _thumbs_get_overlays_class(over);
 
-  GtkStyleContext *context = gtk_widget_get_style_context(table->widget);
-  gtk_style_context_remove_class(context, cl0);
-  gtk_style_context_add_class(context, cl1);
+  dt_gui_remove_class(table->widget, cl0);
+  dt_gui_add_class(table->widget, cl1);
 
   txt = g_strdup_printf("plugins/lighttable/overlays_block_timeout/%d/%d", table->mode, table->prefs_size);
   int timeout = 2;
@@ -519,12 +517,14 @@ static int _thumbs_load_needed(dt_thumbtable_t *table)
     int space = first->y;
     if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP) space = first->x;
     const int nb_to_load = space / table->thumb_size + (space % table->thumb_size != 0);
+    // clang-format off
     gchar *query = g_strdup_printf(
        "SELECT rowid, imgid"
        " FROM memory.collected_images"
        " WHERE rowid<%d"
        " ORDER BY rowid DESC LIMIT %d",
         first->rowid, nb_to_load * table->thumbs_per_row);
+    // clang-format on
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     int posx = first->x;
     int posy = first->y;
@@ -573,12 +573,14 @@ static int _thumbs_load_needed(dt_thumbtable_t *table)
     if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
       space = table->view_width - (last->x + table->thumb_size);
     const int nb_to_load = space / table->thumb_size + (space % table->thumb_size != 0);
+    // clang-format off
     gchar *query = g_strdup_printf(
        "SELECT rowid, imgid"
        " FROM memory.collected_images"
        " WHERE rowid>%d"
        " ORDER BY rowid LIMIT %d",
         last->rowid, nb_to_load * table->thumbs_per_row);
+    // clang-format on
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
 
     int posx = last->x;
@@ -1583,6 +1585,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
         if(table->navigate_inside_selection)
         {
           sqlite3_stmt *stmt;
+          // clang-format off
           gchar *query = g_strdup_printf(
               "SELECT m.imgid"
               " FROM memory.collected_images AS m, main.selected_images AS s"
@@ -1590,6 +1593,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
               "   AND m.rowid>=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)"
               " ORDER BY m.rowid LIMIT 1",
               next);
+          // clang-format on
           DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
           if(sqlite3_step(stmt) == SQLITE_ROW)
           {
@@ -1600,6 +1604,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
             // no select image after, search before
             g_free(query);
             sqlite3_finalize(stmt);
+            // clang-format off
             query = g_strdup_printf(
                 "SELECT m.imgid"
                 " FROM memory.collected_images AS m, main.selected_images AS s"
@@ -1607,6 +1612,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
                 "   AND m.rowid<(SELECT rowid FROM memory.collected_images WHERE imgid=%d)"
                 " ORDER BY m.rowid DESC LIMIT 1",
                 next);
+            // clang-format on
             DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
             if(sqlite3_step(stmt) == SQLITE_ROW)
             {
@@ -1852,8 +1858,7 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
   if(darktable.collection->params.sort == DT_COLLECTION_SORT_CUSTOM_ORDER && table->mode != DT_THUMBTABLE_MODE_ZOOM)
   {
     // we set the class correctly
-    GtkStyleContext *tablecontext = gtk_widget_get_style_context(table->widget);
-    gtk_style_context_add_class(tablecontext, "dt_thumbtable_reorder");
+    dt_gui_add_class(table->widget, "dt_thumbtable_reorder");
   }
 }
 
@@ -1918,8 +1923,7 @@ static void _event_dnd_end(GtkWidget *widget, GdkDragContext *context, gpointer 
     table->drag_list = NULL;
   }
   // in any case, with reset the reordering class if any
-  GtkStyleContext *tablecontext = gtk_widget_get_style_context(table->widget);
-  gtk_style_context_remove_class(tablecontext, "dt_thumbtable_reorder");
+  dt_gui_remove_class(table->widget, "dt_thumbtable_reorder");
 }
 
 dt_thumbtable_t *dt_thumbtable_new()
@@ -1936,14 +1940,13 @@ dt_thumbtable_t *dt_thumbtable_new()
 
   // set css name and class
   gtk_widget_set_name(table->widget, "thumbtable_filemanager");
-  GtkStyleContext *context = gtk_widget_get_style_context(table->widget);
-  gtk_style_context_add_class(context, "dt_thumbtable");
-  if(dt_conf_get_bool("lighttable/ui/expose_statuses")) gtk_style_context_add_class(context, "dt_show_overlays");
+  dt_gui_add_class(table->widget, "dt_thumbtable");
+  if(dt_conf_get_bool("lighttable/ui/expose_statuses")) dt_gui_add_class(table->widget, "dt_show_overlays");
 
   // overlays mode
   table->overlays = DT_THUMBNAIL_OVERLAYS_NONE;
   gchar *cl = _thumbs_get_overlays_class(table->overlays);
-  gtk_style_context_add_class(context, cl);
+  dt_gui_add_class(table->widget, cl);
   g_free(cl);
 
   table->offset = MAX(1, dt_conf_get_int("plugins/lighttable/recentcollect/pos0"));
@@ -2129,8 +2132,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
       if(tl)
       {
         dt_thumbnail_t *thumb = (dt_thumbnail_t *)tl->data;
-        GtkStyleContext *context = gtk_widget_get_style_context(thumb->w_main);
-        gtk_style_context_remove_class(context, "dt_last_active");
+        dt_gui_remove_class(thumb->w_main, "dt_last_active");
         thumb->rowid = nrow; // this may have changed
         // we set new position/size if needed
         if(thumb->x != posx || thumb->y != posy)
@@ -2191,8 +2193,7 @@ void dt_thumbtable_full_redraw(dt_thumbtable_t *table, gboolean force)
         dt_thumbnail_t *th = _thumbtable_get_thumb(table, GPOINTER_TO_INT(l->data));
         if(th)
         {
-          GtkStyleContext *context = gtk_widget_get_style_context(th->w_main);
-          gtk_style_context_add_class(context, "dt_last_active");
+          dt_gui_add_class(th->w_main, "dt_last_active");
           th->active = FALSE;
           dt_thumbnail_update_infos(th);
         }
@@ -2862,6 +2863,9 @@ gboolean dt_thumbtable_reset_first_offset(dt_thumbtable_t *table)
   return TRUE;
 }
 
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
+

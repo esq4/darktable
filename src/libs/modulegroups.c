@@ -474,7 +474,6 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
       // because it create too much pb to remove the button from the expander
       GtkWidget *btn
           = dtgtk_togglebutton_new(dtgtk_cairo_paint_switch, CPF_STYLE_FLAT | CPF_BG_TRANSPARENT, item->module);
-      gtk_widget_set_name(btn, "module-enable-button");
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn),
                                    gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(item->widget)));
       g_signal_connect(G_OBJECT(btn), "toggled", G_CALLBACK(_basics_on_off_callback), item);
@@ -642,7 +641,7 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
       // we add the on-off button
       GtkWidget *btn
           = dtgtk_togglebutton_new(dtgtk_cairo_paint_switch, CPF_STYLE_FLAT | CPF_BG_TRANSPARENT, item->module);
-      gtk_widget_set_name(btn, "module-enable-button");
+      dt_gui_add_class(btn, "dt_module_btn");
       gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn),
                                    gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(item->module->off)));
@@ -1329,11 +1328,13 @@ static void _preset_retrieve_old_presets(dt_lib_module_t *self)
 {
   // we retrieve old modulelist presets
   sqlite3_stmt *stmt;
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT name, op_params"
                               " FROM data.presets"
                               " WHERE operation = 'modulelist' AND op_version = 1 AND writeprotect = 0",
                               -1, &stmt, NULL);
+  // clang-format on
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -2042,7 +2043,7 @@ static void _manage_editor_basics_update_list(dt_lib_module_t *self)
           if(!d->edit_ro)
           {
             GtkWidget *btn = dtgtk_button_new(dtgtk_cairo_paint_cancel, CPF_STYLE_FLAT, NULL);
-            gtk_widget_set_name(btn, "module-reset-button");
+            dt_gui_add_class(btn, "dt_module_btn");
             gtk_widget_set_tooltip_text(btn, _("remove this widget"));
             g_object_set_data(G_OBJECT(btn), "widget_id", item->id);
             g_signal_connect(G_OBJECT(btn), "button-press-event", G_CALLBACK(_manage_editor_basics_remove), self);
@@ -2194,6 +2195,7 @@ static void _manage_editor_module_update_list(dt_lib_module_t *self, dt_lib_modu
         {
           GtkWidget *btn = dtgtk_button_new(dtgtk_cairo_paint_cancel, CPF_STYLE_FLAT, NULL);
           gtk_widget_set_name(btn, "module-reset-button");
+          dt_gui_add_class(btn, "dt_module_btn");
           gtk_widget_set_tooltip_text(btn, _("remove this module"));
           g_object_set_data(G_OBJECT(btn), "module_name", module->op);
           g_object_set_data(G_OBJECT(btn), "group", gr);
@@ -2720,6 +2722,7 @@ static void _dt_dev_image_changed_callback(gpointer instance, dt_lib_module_t *s
   if(!image) return;
 
   char query[1024];
+  // clang-format off
   snprintf(query, sizeof(query),
            "SELECT name"
            " FROM data.presets"
@@ -2734,6 +2737,7 @@ static void _dt_dev_image_changed_callback(gpointer instance, dt_lib_module_t *s
            "       AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0))"
            " ORDER BY writeprotect DESC, name DESC"
            " LIMIT 1");
+  // clang-format on
 
   int iformat = 0;
   if(dt_image_is_rawprepare_supported(image))
@@ -3413,11 +3417,13 @@ static void _preset_autoapply_changed(dt_gui_presets_edit_dialog_t *g)
 
   // we reread the presets autoapply values from the database
   sqlite3_stmt *stmt;
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT autoapply"
                               " FROM data.presets"
                               " WHERE operation = ?1 AND op_version = ?2 AND name = ?3",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, self->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, self->version());
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, d->edit_preset, -1, SQLITE_TRANSIENT);
@@ -3487,11 +3493,13 @@ static void _manage_editor_preset_action(GtkWidget *btn, dt_lib_module_t *self)
   // we first get the list of all the existing preset names
   GList *names = NULL;
   sqlite3_stmt *stmt;
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT name"
                               " FROM data.presets"
                               " WHERE operation = ?1 AND op_version = ?2",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, self->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, self->version());
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -3531,11 +3539,13 @@ static void _manage_editor_preset_action(GtkWidget *btn, dt_lib_module_t *self)
     if(btn == d->presets_btn_rename)
     {
       // we update the database
+      // clang-format off
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                   "UPDATE data.presets"
                                   " SET name=?1"
                                   " WHERE name=?2 AND operation = ?3 AND op_version = ?4",
                                   -1, &stmt, NULL);
+      // clang-format on
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, gtk_entry_get_text(GTK_ENTRY(tb)), -1, SQLITE_TRANSIENT);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, d->edit_preset, -1, SQLITE_TRANSIENT);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, self->plugin_name, -1, SQLITE_TRANSIENT);
@@ -3589,11 +3599,13 @@ static void _preset_autoapply_edit(GtkButton *button, dt_lib_module_t *self)
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   if(d->editor_reset) return;
   sqlite3_stmt *stmt;
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT rowid"
                               " FROM data.presets"
                               " WHERE operation = ?1 AND op_version = ?2 AND name = ?3",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, self->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, self->version());
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, d->edit_preset, -1, SQLITE_TRANSIENT);
@@ -3638,11 +3650,13 @@ static void _manage_editor_load(const char *preset, dt_lib_module_t *self)
   d->edit_groups = NULL;
   d->edit_preset = NULL;
   sqlite3_stmt *stmt;
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT writeprotect, op_params, autoapply"
                               " FROM data.presets"
                               " WHERE operation = ?1 AND op_version = ?2 AND name = ?3",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, self->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, self->version());
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, sel_preset, -1, SQLITE_TRANSIENT);
@@ -3781,12 +3795,14 @@ static void _manage_preset_update_list(dt_lib_module_t *self)
   // and we repopulate it
   sqlite3_stmt *stmt;
   // order: get shipped defaults first
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT name"
                               " FROM data.presets"
                               " WHERE operation=?1 AND op_version=?2"
                               " ORDER BY writeprotect DESC, name, rowid",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, self->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, self->version());
 
@@ -3991,6 +4007,9 @@ gboolean preset_autoapply(dt_lib_module_t *self)
   return TRUE;
 }
 #undef PADDING
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
+

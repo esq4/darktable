@@ -400,6 +400,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   int count = 0;
 
   // we get a summarize of all versions of the image
+  // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT i.version, i.id, m.value"
                               " FROM images AS i"
@@ -407,6 +408,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
                               " WHERE film_id = ?1 AND filename = ?2"
                               " ORDER BY i.version",
                               -1, &stmt, NULL);
+  // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.film_id);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, dev->image_storage.filename, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_METADATA_XMP_VERSION_NAME);
@@ -417,10 +419,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   {
     GtkWidget *hb = gtk_grid_new();
     const int imgid = sqlite3_column_int(stmt, 1);
-
-    GtkStyleContext *context = gtk_widget_get_style_context(hb);
-    gtk_style_context_add_class(context, "dt_overlays_always");
-
+    dt_gui_add_class(hb, "dt_overlays_always");
     dt_thumbnail_t *thumb = dt_thumbnail_new(100, 100, IMG_TO_FIT, imgid, -1, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL,
                                              DT_THUMBNAIL_CONTAINER_LIGHTTABLE, TRUE);
     thumb->sel_mode = DT_THUMBNAIL_SEL_MODE_DISABLED;
@@ -533,8 +532,7 @@ void gui_init(dt_lib_module_t *self)
   d->preview_height = 0;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkStyleContext *context = gtk_widget_get_style_context(self->widget);
-  gtk_style_context_add_class(context, "duplicate-ui");
+  dt_gui_add_class(self->widget, "duplicate-ui");
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
 
   d->duplicate_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -572,6 +570,9 @@ void gui_cleanup(dt_lib_module_t *self)
   self->data = NULL;
 }
 
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
-// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-space on;
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
+

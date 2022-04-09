@@ -873,10 +873,12 @@ static void _dev_change_image(dt_develop_t *dev, const int32_t imgid)
   if(dev->image_storage.id > 0)
   {
     sqlite3_stmt *stmt;
+    // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT m.imgid FROM memory.collected_images as m, main.selected_images as s "
                                 "WHERE m.imgid=s.imgid",
                                 -1, &stmt, NULL);
+    // clang-format on
     gboolean follow = FALSE;
     if(sqlite3_step(stmt) == SQLITE_ROW)
     {
@@ -1178,10 +1180,12 @@ static void dt_dev_jump_image(dt_develop_t *dev, int diff, gboolean by_key)
 
   // we new offset and imgid after the jump
   sqlite3_stmt *stmt;
+  // clang-format off
   gchar *query = g_strdup_printf("SELECT rowid, imgid "
                                  "FROM memory.collected_images "
                                  "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
                                  imgid, diff);
+  // clang-format on
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -2719,10 +2723,9 @@ static void _on_drag_begin(GtkWidget *widget, GdkDragContext *context, gpointer 
       cairo_t *cr = cairo_create(surface);
 
       // hack to render not transparent
-      GtkStyleContext *style_context = gtk_widget_get_style_context(module_src->header);
-      gtk_style_context_add_class(style_context, "iop_drag_icon");
+      dt_gui_add_class(module_src->header, "iop_drag_icon");
       gtk_widget_draw(module_src->header, cr);
-      gtk_style_context_remove_class(style_context, "iop_drag_icon");
+      dt_gui_remove_class(module_src->header, "iop_drag_icon");
 
       // FIXME: this centers the icon on the mouse -- instead translate such that the label doesn't jump when mouse down?
       cairo_surface_set_device_offset(surface, -allocation_w.width * darktable.gui->ppd / 2, -allocation_w.height * darktable.gui->ppd / 2);
@@ -2781,19 +2784,17 @@ static gboolean _on_drag_motion(GtkWidget *widget, GdkDragContext *dc, gint x, g
 
     if(module->expander)
     {
-      GtkStyleContext *context = gtk_widget_get_style_context(module->expander);
-      gtk_style_context_remove_class(context, "iop_drop_after");
-      gtk_style_context_remove_class(context, "iop_drop_before");
+      dt_gui_remove_class(module->expander, "iop_drop_after");
+      dt_gui_remove_class(module->expander, "iop_drop_before");
     }
   }
 
   if(can_moved)
   {
-    GtkStyleContext *context = gtk_widget_get_style_context(module_dest->expander);
     if(module_src->iop_order < module_dest->iop_order)
-      gtk_style_context_add_class(context, "iop_drop_after");
+      dt_gui_add_class(module_dest->expander, "iop_drop_after");
     else
-      gtk_style_context_add_class(context, "iop_drop_before");
+      dt_gui_add_class(module_dest->expander, "iop_drop_before");
 
     gdk_drag_status(dc, GDK_ACTION_COPY, time);
     GtkWidget *w = g_object_get_data(G_OBJECT(widget), "highlighted");
@@ -2855,9 +2856,8 @@ static void _on_drag_data_received(GtkWidget *widget, GdkDragContext *dc, gint x
 
     if(module->expander)
     {
-      GtkStyleContext *context = gtk_widget_get_style_context(module->expander);
-      gtk_style_context_remove_class(context, "iop_drop_after");
-      gtk_style_context_remove_class(context, "iop_drop_before");
+      dt_gui_remove_class(module->expander, "iop_drop_after");
+      dt_gui_remove_class(module->expander, "iop_drop_before");
     }
   }
 
@@ -2898,9 +2898,8 @@ static void _on_drag_leave(GtkWidget *widget, GdkDragContext *dc, guint time, gp
 
     if(module->expander)
     {
-      GtkStyleContext *context = gtk_widget_get_style_context(module->expander);
-      gtk_style_context_remove_class(context, "iop_drop_after");
-      gtk_style_context_remove_class(context, "iop_drop_before");
+      dt_gui_remove_class(module->expander, "iop_drop_after");
+      dt_gui_remove_class(module->expander, "iop_drop_before");
     }
   }
 
@@ -4723,6 +4722,9 @@ static void _darkroom_display_second_window(dt_develop_t *dev)
   gtk_widget_show_all(dev->second_window.second_wnd);
 }
 
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on
+
