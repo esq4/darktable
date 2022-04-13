@@ -133,7 +133,7 @@ const char *name()
   return _("highlight reconstruction");
 }
 
-const char *description(struct dt_iop_module_t *self)
+const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description(self, _("avoid magenta highlights and try to recover highlights colors"),
                                       _("corrective"),
@@ -2035,7 +2035,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     p->mode = DT_IOP_HIGHLIGHTS_CLIP;
     dt_bauhaus_combobox_set_from_value(g->mode, p->mode);
-    dt_control_log(_("highlights: guided laplacian mode not available for XTrans sensors. Falling back to clip."));
+    dt_control_log(_("highlights: guided laplacian mode not available for X-Trans sensors. Falling back to clip."));
   }
 }
 
