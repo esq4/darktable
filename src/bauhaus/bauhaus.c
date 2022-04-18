@@ -644,7 +644,7 @@ void dt_bauhaus_load_theme()
   GtkStyleContext *ctx = gtk_style_context_new();
   GtkWidgetPath *path = gtk_widget_path_new();
   const int pos = gtk_widget_path_append_type(path, GTK_TYPE_WIDGET);
-  gtk_widget_path_iter_set_name(path, pos, "iop-plugin-ui");
+  gtk_widget_path_iter_add_class(path, pos, "plugin-ui");
   gtk_style_context_set_path(ctx, path);
   gtk_style_context_set_screen (ctx, gtk_widget_get_screen(root_window));
 
@@ -1077,6 +1077,13 @@ void dt_bauhaus_widget_set_quad_active(GtkWidget *widget, int active)
     w->quad_paint_flags |= CPF_ACTIVE;
   else
     w->quad_paint_flags &= ~CPF_ACTIVE;
+  gtk_widget_queue_draw(GTK_WIDGET(w));
+}
+
+void dt_bauhaus_widget_set_quad_visibility(GtkWidget *widget, const gboolean visible)
+{
+  dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  w->show_quad = visible;
   gtk_widget_queue_draw(GTK_WIDGET(w));
 }
 
@@ -2447,6 +2454,10 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   GtkStyleContext *context = gtk_widget_get_style_context(darktable.bauhaus->popup_area);
   // let's update the css class depending on the source widget type
   // this allow to set different padding for example
+  if(w->show_quad)
+    gtk_style_context_remove_class(context, "bauhaus_popup_no_quad");
+  else
+    gtk_style_context_add_class(context, "bauhaus_popup_no_quad");
   switch(darktable.bauhaus->current->type)
   {
     case DT_BAUHAUS_SLIDER:
@@ -3484,4 +3495,3 @@ const dt_action_def_t dt_action_def_combo
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
