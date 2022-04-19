@@ -38,10 +38,12 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   if(dev->image_storage.id > 0)
   {
     sqlite3_stmt *stmt;
+    // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT m.imgid FROM memory.collected_images as m, main.selected_images as s "
                                 "WHERE m.imgid=s.imgid",
                                 -1, &stmt, NULL);
+    // clang-format on
     gboolean follow = FALSE;
     if(sqlite3_step(stmt) == SQLITE_ROW)
     {
@@ -64,7 +66,7 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
   // update aspect ratio
   if(dev->preview_pipe->backbuf && dev->preview_status == DT_DEV_PIXELPIPE_VALID)
   {
-    double aspect_ratio = (double)dev->preview_pipe->backbuf_width / (double)dev->preview_pipe->backbuf_height;
+    const double aspect_ratio = (double)dev->preview_pipe->backbuf_width / (double)dev->preview_pipe->backbuf_height;
     dt_image_set_aspect_ratio_to(dev->preview_pipe->image.id, aspect_ratio, TRUE);
   }
   else
@@ -128,6 +130,13 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
     if((xmp_mode == DT_WRITE_XMP_ALWAYS) || ((xmp_mode == DT_WRITE_XMP_LAZY) && !fresh))
       dt_image_synch_xmp(dev->image_storage.id);
     dt_history_hash_set_mipmap(dev->image_storage.id);
+#ifdef USE_LUA
+    dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
+        0, NULL, NULL,
+        LUA_ASYNC_TYPENAME, "const char*", "darkroom-image-history-changed",
+        LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(dev->image_storage.id),
+        LUA_ASYNC_DONE);
+#endif
   }
 
   // cleanup visible masks
@@ -223,7 +232,7 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
     {
       if(!dt_iop_is_hidden(module))
       {
-        module->gui_init(module);
+        dt_iop_gui_init(module);
 
         /* add module to right panel */
         dt_iop_gui_set_expander(module);
@@ -306,4 +315,6 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
 
   /* last set the group to update visibility of iop modules for new pipe */
   dt_dev_modulegroups_set(dev, dt_conf_get_int("plugins/darkroom/groups"));
+
+  dt_image_check_camera_missing_sample(&dev->image_storage);
 }
