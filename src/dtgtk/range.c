@@ -26,6 +26,9 @@
 #define SNAP_SIZE 5
 #define BAR_WIDTH 4
 
+// define GTypes
+G_DEFINE_TYPE(GtkDarktableRangeSelect, _range_select, GTK_TYPE_EVENT_BOX);
+
 static void _range_select_class_init(GtkDarktableRangeSelectClass *klass);
 static void _range_select_init(GtkDarktableRangeSelect *button);
 
@@ -115,12 +118,41 @@ typedef enum _range_signal
 } _range_signal;
 static guint _signals[LAST_SIGNAL] = { 0 };
 
+static void _dt_pref_changed(gpointer instance, gpointer user_data)
+{
+  if(!user_data) return;
+  GtkDarktableRangeSelect *range = (GtkDarktableRangeSelect *)user_data;
+
+  GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(range->band));
+  GtkStateFlags state = gtk_widget_get_state_flags(range->band);
+  int mh = -1;
+  int mw = -1;
+  gtk_style_context_get(context, state, "min-height", &mh, NULL);
+  gtk_style_context_get(context, state, "min-width", &mw, NULL);
+  GtkBorder margin, padding;
+  gtk_style_context_get_margin(context, state, &margin);
+  gtk_style_context_get_padding(context, state, &padding);
+  if(mw > 0)
+    mw += margin.left + margin.right + padding.right + padding.left;
+  else
+    mw = -1;
+  if(mh > 0)
+    mh += margin.top + margin.bottom + padding.top + padding.bottom;
+  else
+    mh = -1;
+  gtk_widget_set_size_request(range->band, mw, mh);
+
+  dtgtk_range_select_redraw(range);
+}
+
 // cleanup everything when the widget is destroyed
 static void _range_select_destroy(GtkWidget *widget)
 {
   g_return_if_fail(DTGTK_IS_RANGE_SELECT(widget));
 
   GtkDarktableRangeSelect *range = DTGTK_RANGE_SELECT(widget);
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_pref_changed), range);
 
   if(range->markers) g_list_free_full(range->markers, g_free);
   range->markers = NULL;
@@ -131,6 +163,8 @@ static void _range_select_destroy(GtkWidget *widget)
 
   if(range->surface) cairo_surface_destroy(range->surface);
   range->surface = NULL;
+
+  GTK_WIDGET_CLASS(_range_select_parent_class)->destroy(widget);
 }
 
 static void _range_select_class_init(GtkDarktableRangeSelectClass *klass)
@@ -547,7 +581,7 @@ static void _current_show_popup(GtkDarktableRangeSelect *range)
 {
   if(range->cur_window) return;
   range->cur_window = gtk_popover_new(range->band);
-  gtk_widget_set_name(range->cur_window, "range_current");
+  gtk_widget_set_name(range->cur_window, "range-current");
   // we try to guess what is the best position before we show the popup.
   // Anyway this is rechecked on popup resizing
   gint wx, wy;
@@ -623,12 +657,17 @@ static void _bound_change(GtkDarktableRangeSelect *range, const gchar *val, cons
     {
       if(bound == BOUND_MIN)
       {
-        if(range->bounds & DT_RANGE_BOUND_MAX) range->bounds = DT_RANGE_BOUND_MAX;
+        range->bounds &= ~DT_RANGE_BOUND_MIN;
+        range->bounds &= ~DT_RANGE_BOUND_MIN_RELATIVE;
+        range->bounds &= ~DT_RANGE_BOUND_FIXED;
         range->select_min_r = v;
       }
       else if(bound == BOUND_MAX)
       {
-        if(range->bounds & DT_RANGE_BOUND_MIN) range->bounds = DT_RANGE_BOUND_MIN;
+        range->bounds &= ~DT_RANGE_BOUND_MAX;
+        range->bounds &= ~DT_RANGE_BOUND_MAX_RELATIVE;
+        range->bounds &= ~DT_RANGE_BOUND_MAX_NOW;
+        range->bounds &= ~DT_RANGE_BOUND_FIXED;
         range->select_max_r = v;
       }
       else if(bound == BOUND_MIDDLE)
@@ -870,6 +909,7 @@ static void _popup_date_init(GtkDarktableRangeSelect *range)
   range->date_popup = pop;
   pop->popup = gtk_popover_new(range->band);
   GtkWidget *vbox0 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_name(vbox0, "dt-range-date-popup");
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_set_homogeneous(GTK_BOX(hbox), TRUE);
   gtk_box_pack_start(GTK_BOX(vbox0), hbox, FALSE, TRUE, 0);
@@ -894,7 +934,7 @@ static void _popup_date_init(GtkDarktableRangeSelect *range)
 
   // the date section
   GtkWidget *lb = gtk_label_new(_("date"));
-  gtk_widget_set_name(lb, "section_label");
+  dt_gui_add_class(lb, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(vbox), lb, FALSE, TRUE, 0);
 
   // the calendar
@@ -940,7 +980,7 @@ static void _popup_date_init(GtkDarktableRangeSelect *range)
 
   // the time section
   lb = gtk_label_new(_("time"));
-  gtk_widget_set_name(lb, "section_label");
+  dt_gui_add_class(lb, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(vbox), lb, FALSE, TRUE, 0);
 
   GtkWidget *hbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -967,7 +1007,7 @@ static void _popup_date_init(GtkDarktableRangeSelect *range)
                                                           G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_UINT));
   pop->treeview = gtk_tree_view_new_with_model(model);
   gtk_widget_set_tooltip_text(pop->calendar, _("simple click to select date\n"
-                                               "double click to use the date directly."));
+                                               "double click to use the date directly"));
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(pop->treeview), FALSE);
   g_signal_connect(G_OBJECT(pop->treeview), "row-activated", G_CALLBACK(_popup_date_tree_row_activated), range);
   g_signal_connect(G_OBJECT(gtk_tree_view_get_selection(GTK_TREE_VIEW(pop->treeview))), "changed",
@@ -986,7 +1026,6 @@ static void _popup_date_init(GtkDarktableRangeSelect *range)
 
   // the select line
   hbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_name(hbox2, "dt-range-date-last-line");
   gtk_box_pack_start(GTK_BOX(vbox0), hbox2, FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox2), gtk_label_new("current date : "), FALSE, TRUE, 0);
   pop->selection = gtk_entry_new();
@@ -1030,7 +1069,6 @@ static void _popup_item_activate(GtkWidget *w, gpointer user_data)
 static GtkWidget *_popup_get_numeric_menu(GtkDarktableRangeSelect *range, GtkWidget *w)
 {
   GtkMenuShell *pop = GTK_MENU_SHELL(gtk_menu_new());
-  gtk_widget_set_name(GTK_WIDGET(pop), "range-popup");
   gtk_widget_set_size_request(GTK_WIDGET(pop), 200, -1);
 
   // we first show all the predefined items
@@ -1435,33 +1473,6 @@ void dtgtk_range_select_redraw(GtkDarktableRangeSelect *range)
   gtk_widget_queue_draw(range->band);
 }
 
-static void _dt_pref_changed(gpointer instance, gpointer user_data)
-{
-  if(!user_data) return;
-  GtkDarktableRangeSelect *range = (GtkDarktableRangeSelect *)user_data;
-
-  GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(range->band));
-  GtkStateFlags state = gtk_widget_get_state_flags(range->band);
-  int mh = -1;
-  int mw = -1;
-  gtk_style_context_get(context, state, "min-height", &mh, NULL);
-  gtk_style_context_get(context, state, "min-width", &mw, NULL);
-  GtkBorder margin, padding;
-  gtk_style_context_get_margin(context, state, &margin);
-  gtk_style_context_get_padding(context, state, &padding);
-  if(mw > 0)
-    mw += margin.left + margin.right + padding.right + padding.left;
-  else
-    mw = -1;
-  if(mh > 0)
-    mh += margin.top + margin.bottom + padding.top + padding.bottom;
-  else
-    mh = -1;
-  gtk_widget_set_size_request(range->band, mw, mh);
-
-  dtgtk_range_select_redraw(range);
-}
-
 static gboolean _event_band_motion(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   GtkDarktableRangeSelect *range = (GtkDarktableRangeSelect *)user_data;
@@ -1539,14 +1550,20 @@ static gboolean _event_band_press(GtkWidget *w, GdkEventButton *e, gpointer user
     if(range->mouse_inside == HOVER_MAX)
     {
       range->bounds &= ~DT_RANGE_BOUND_MAX;
-      range->select_min_r += 0.0001;
       range->select_max_r = pos_r;
     }
     else if(range->mouse_inside == HOVER_MIN)
     {
       range->bounds &= ~DT_RANGE_BOUND_MIN;
-      range->select_min_r = range->select_max_r + 0.0001;
+      range->select_min_r = range->select_max_r;
       range->select_max_r = pos_r;
+    }
+    else if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
+    {
+      // if we have shift pressed, we only want to set the second bound which is done in release
+      range->bounds &= ~DT_RANGE_BOUND_FIXED;
+      range->bounds &= ~DT_RANGE_BOUND_MAX;
+      range->bounds |= DT_RANGE_BOUND_RANGE;
     }
     else
     {
@@ -1635,8 +1652,7 @@ GtkWidget *dtgtk_range_select_new(const gchar *property, const gboolean show_ent
   // the graph band
   range->band = gtk_drawing_area_new();
   gtk_widget_set_events(range->band, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_STRUCTURE_MASK
-                                         | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                                         | GDK_POINTER_MOTION_MASK);
+                                         | GDK_LEAVE_NOTIFY_MASK | GDK_POINTER_MOTION_MASK);
   g_signal_connect(G_OBJECT(range->band), "draw", G_CALLBACK(_event_band_draw), range);
   g_signal_connect(G_OBJECT(range->band), "button-press-event", G_CALLBACK(_event_band_press), range);
   g_signal_connect(G_OBJECT(range->band), "button-release-event", G_CALLBACK(_event_band_release), range);
@@ -1674,7 +1690,7 @@ GtkWidget *dtgtk_range_select_new(const gchar *property, const gboolean show_ent
   }
 
   gtk_container_add(GTK_CONTAINER(range), vbox);
-  gtk_widget_set_name(vbox, "range_select");
+  gtk_widget_set_name(vbox, "range-select");
 
   if(type == DT_RANGE_TYPE_DATETIME) _popup_date_init(range);
 
@@ -1686,24 +1702,7 @@ GtkWidget *dtgtk_range_select_new(const gchar *property, const gboolean show_ent
 
 GType dtgtk_range_select_get_type()
 {
-  static GType dtgtk_range_select_type = 0;
-  if(!dtgtk_range_select_type)
-  {
-    static const GTypeInfo dtgtk_range_select_info = {
-      sizeof(GtkDarktableRangeSelectClass),
-      (GBaseInitFunc)NULL,
-      (GBaseFinalizeFunc)NULL,
-      (GClassInitFunc)_range_select_class_init,
-      NULL, /* class_finalize */
-      NULL, /* class_data */
-      sizeof(GtkDarktableRangeSelect),
-      0, /* n_preallocs */
-      (GInstanceInitFunc)_range_select_init,
-    };
-    dtgtk_range_select_type
-        = g_type_register_static(GTK_TYPE_BIN, "GtkDarktableRangeSelect", &dtgtk_range_select_info, 0);
-  }
-  return dtgtk_range_select_type;
+  return _range_select_get_type();
 }
 
 gchar *dtgtk_range_select_get_bounds_pretty(GtkDarktableRangeSelect *range)

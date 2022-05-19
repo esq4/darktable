@@ -57,8 +57,8 @@ DT_MODULE_INTROSPECTION(3, dt_iop_colorbalance_params_t)
 
 typedef enum dt_iop_colorbalance_mode_t
 {
-  LIFT_GAMMA_GAIN = 0,    // $DESCRIPTION: "lift, gamma, gain (ProPhotoRGB)"
-  SLOPE_OFFSET_POWER = 1, // $DESCRIPTION: "slope, offset, power (ProPhotoRGB)"
+  LIFT_GAMMA_GAIN = 0,    // $DESCRIPTION: "lift, gamma, gain (ProPhoto RGB)"
+  SLOPE_OFFSET_POWER = 1, // $DESCRIPTION: "slope, offset, power (ProPhoto RGB)"
   LEGACY = 2              // $DESCRIPTION: "lift, gamma, gain (sRGB)"
 } dt_iop_colorbalance_mode_t;
 
@@ -1778,8 +1778,7 @@ static void _configure_slider_blocks(gpointer instance, dt_iop_module_t *self)
 
       for(int i=0; i<3; i++)
       {
-        gtk_widget_set_name(label[i], "section_label");
-        dt_gui_add_class(label[i], "section_label_top");
+        dt_gui_add_class(label[i], "dt_section_label");
 
         gtk_container_add(GTK_CONTAINER(new_container), label[i]);
         if(old_container) gtk_widget_show(label[i]);

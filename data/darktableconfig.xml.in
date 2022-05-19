@@ -370,7 +370,7 @@
     <type>bool</type>
     <default>true</default>
     <shortdescription>ask before removing images from the library</shortdescription>
-    <longdescription>always ask the user before any image is removed from the library</longdescription>
+    <longdescription>always ask the user before removing image information from the library</longdescription>
   </dtconfig>
   <dtconfig prefs="security" section="general">
     <name>ask_before_delete</name>
@@ -414,12 +414,33 @@
     <shortdescription>ask before removing empty folders</shortdescription>
     <longdescription>always ask the user before removing any empty folder. this can happen after moving or deleting images.</longdescription>
   </dtconfig>
+  <dtconfig dialog="recentcollect">
+    <name>plugins/lighttable/recentcollect/max_items</name>
+    <type min="1" max="50">int</type>
+    <default>10</default>
+    <shortdescription>number of collections to be stored</shortdescription>
+    <longdescription>the number of recent collections to store and show in this list</longdescription>
+  </dtconfig>
+  <dtconfig dialog="recentcollect">
+    <name>plugins/lighttable/recentcollect/hide</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>prefer an history button in the collect module</shortdescription>
+    <longdescription>prefer to hide this module and access history with a button in the collect module</longdescription>
+  </dtconfig>
   <dtconfig dialog="collect">
     <name>plugins/lighttable/collect/history_max</name>
     <type min="1" max="50">int</type>
     <default>10</default>
     <shortdescription>number of collections to be stored</shortdescription>
     <longdescription>the number of recent collections to store and show in this list</longdescription>
+  </dtconfig>
+  <dtconfig dialog="collect">
+    <name>plugins/lighttable/collect/history_hide</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>hide the history button and show a specific module instead</shortdescription>
+    <longdescription>hide the history button and show the recent collections module instead</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/filtering/history_max</name>
@@ -683,7 +704,7 @@
     <type>bool</type>
     <default>true</default>
     <shortdescription>sort collection descending</shortdescription>
-    <longdescription>sort the following collections in descending order: 'film roll' by folder, 'folder', 'times' (e.g. 'date taken')</longdescription>
+    <longdescription>sort the following collections in descending order: 'film roll' by folder, 'folder', 'times' (e.g. 'capture date')</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/colorpicker_model</name>
@@ -1019,8 +1040,8 @@
     <name>ui_last/ignore_exif_rating</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>ignore exif rating</shortdescription>
-    <longdescription>ignore exif rating. if not set and exif rating is found, it overrides 'initial rating'</longdescription>
+    <shortdescription>ignore EXIF rating</shortdescription>
+    <longdescription>ignore EXIF rating. if not set and EXIF rating is found, it overrides 'initial rating'</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>ui_last/import_jobcode</name>
@@ -1318,7 +1339,7 @@
     <type>
       <enum>
         <option>false color</option>
-        <option>gray scale</option>
+        <option>grayscale</option>
       </enum>
     </type>
     <default>false color</default>
@@ -2053,7 +2074,7 @@
     <name>lighttable/ui/scroll_to_module</name>
     <type>bool</type>
     <default>false</default>
-    <shortdescription>scroll to utility modules when expanded/collapsed</shortdescription>
+    <shortdescription>scroll utility modules to the top when expanded</shortdescription>
     <longdescription>when this option is enabled then darktable will try to scroll the module to the top of the visible list</longdescription>
   </dtconfig>
   <dtconfig>
@@ -2130,7 +2151,7 @@
     <name>darkroom/ui/scroll_to_module</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>scroll to processing modules when expanded/collapsed</shortdescription>
+    <shortdescription>scroll processing modules to the top when expanded</shortdescription>
     <longdescription>when this option is enabled then darktable will try to scroll the module to the top of the visible list</longdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
@@ -3244,7 +3265,7 @@
     <type>bool</type>
     <default>false</default>
     <shortdescription>detect monochrome previews</shortdescription>
-    <longdescription>many monochrome images can be identified via exif and preview data. beware: this slows down imports and reading exif data</longdescription>
+    <longdescription>many monochrome images can be identified via EXIF and preview data. beware: this slows down imports and reading of EXIF data</longdescription>
  </dtconfig>
  <dtconfig prefs="processing" section="general">
     <name>plugins/darkroom/show_warnings</name>

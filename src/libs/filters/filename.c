@@ -272,6 +272,7 @@ static gboolean _filename_update(dt_lib_filtering_rule_t *rule)
     if(name) gtk_entry_set_text(GTK_ENTRY(filename->name), name);
     if(ext) gtk_entry_set_text(GTK_ENTRY(filename->ext), ext);
   }
+  _filename_synchronise(filename);
   rule->manual_widget_set--;
 
   g_free(name);
@@ -368,9 +369,6 @@ static void _filename_widget_init(dt_lib_filtering_rule_t *rule, const dt_collec
   g_signal_connect(G_OBJECT(filename->name), "activate", G_CALLBACK(_filename_changed), filename);
   g_signal_connect(G_OBJECT(filename->name), "focus-out-event", G_CALLBACK(_filename_focus_out), filename);
   g_signal_connect(G_OBJECT(filename->name), "button-press-event", G_CALLBACK(_filename_press), filename);
-  GtkStyleContext *context = gtk_widget_get_style_context(filename->name);
-  gtk_style_context_add_class(context, "dt_transparent_background");
-  gtk_style_context_add_class(context, "search");
 
   filename->ext = gtk_entry_new();
   gtk_entry_set_width_chars(GTK_ENTRY(filename->ext), (top) ? 5 : 0);
@@ -384,13 +382,9 @@ static void _filename_widget_init(dt_lib_filtering_rule_t *rule, const dt_collec
   g_signal_connect(G_OBJECT(filename->ext), "activate", G_CALLBACK(_filename_changed), filename);
   g_signal_connect(G_OBJECT(filename->ext), "focus-out-event", G_CALLBACK(_filename_focus_out), filename);
   g_signal_connect(G_OBJECT(filename->ext), "button-press-event", G_CALLBACK(_filename_press), filename);
-  context = gtk_widget_get_style_context(filename->ext);
-  gtk_style_context_add_class(context, "dt_transparent_background");
-  gtk_style_context_add_class(context, "search");
   if(top)
   {
-    context = gtk_widget_get_style_context(hb);
-    gtk_style_context_add_class(context, "quick_filter_box");
+    dt_gui_add_class(hb, "dt_quick_filter");
   }
 
   // the popup
