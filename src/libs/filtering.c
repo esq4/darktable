@@ -207,7 +207,7 @@ static _filter_t filters[]
     = { { DT_COLLECTION_PROP_COLORLABEL, _colors_widget_init, _colors_update },
         { DT_COLLECTION_PROP_FILENAME, _filename_widget_init, _filename_update },
         { DT_COLLECTION_PROP_TEXTSEARCH, _search_widget_init, _search_update },
-        { DT_COLLECTION_PROP_TIME, _date_widget_init, _date_update },
+        { DT_COLLECTION_PROP_DAY, _date_widget_init, _date_update },
         { DT_COLLECTION_PROP_CHANGE_TIMESTAMP, _date_widget_init, _date_update },
         { DT_COLLECTION_PROP_EXPORT_TIMESTAMP, _date_widget_init, _date_update },
         { DT_COLLECTION_PROP_IMPORT_TIMESTAMP, _date_widget_init, _date_update },
@@ -647,12 +647,13 @@ static void _range_set_tooltip(_widgets_range_t *special)
 {
   // we recreate the tooltip
   gchar *val = dtgtk_range_select_get_bounds_pretty(DTGTK_RANGE_SELECT(special->range_select));
-  gchar *txt = g_strdup_printf("<b>%s</b>\n%s\n%s\n%s%s",
+  gchar *txt = g_strdup_printf("<b>%s</b>\n%s\n%s",
                                dt_collection_name(special->rule->prop),
                                _("click or click&#38;drag to select one or multiple values"),
-                               _("right-click opens a menu to select the available values"),
-                               _("<b><i>actual selection: </i></b>"),
-                               val);
+                               _("right-click opens a menu to select the available values"));
+
+  if(special->rule->prop != DT_COLLECTION_PROP_RATING)
+    txt = g_strdup_printf("%s\n<b><i>%s:</i></b> %s", txt, _("actual selection"), val);
   gtk_widget_set_tooltip_markup(special->range_select, txt);
   g_free(txt);
   g_free(val);
