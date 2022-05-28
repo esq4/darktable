@@ -850,7 +850,7 @@ static void _selection_collect(dt_lib_timeline_t *strip, dt_lib_timeline_mode_t 
     gchar *string = dt_conf_get_string(confname);
     string = g_strstrip(string);
     if(((prop == DT_COLLECTION_PROP_TIME || prop == DT_COLLECTION_PROP_DAY) && rmode == 0)
-       || !string || strlen(string) == 0 || g_strcmp0(string, "%") == 0)
+       || !string) //ab || strlen(string) == 0 || g_strcmp0(string, "%") == 0)
       new_rule = nb_rules - 1;
     else
       new_rule = nb_rules;
