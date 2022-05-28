@@ -2991,9 +2991,9 @@ void enter(dt_view_t *self)
   // prevent accels_window to refresh
   darktable.view_manager->accels_window.prevent_refresh = TRUE;
 
-#ifdef _WIN32
+/* #ifdef _WIN32
   dt_conf_set_bool("opencl", !dt_conf_get_bool("opencl"));
-#endif
+#endif */
 
   // clean the undo list
   dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);
@@ -3300,9 +3300,9 @@ void leave(dt_view_t *self)
 
   darktable.develop->image_storage.id = -1;
 
-#ifdef _WIN32
+/* #ifdef _WIN32
   dt_conf_set_bool("opencl", !dt_conf_get_bool("opencl"));
-#endif
+#endif */
 
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());
 }
