@@ -24,9 +24,9 @@ You are strongly advised to take a backup first.
 
 Since darktable 3.8:
 
-- Almost 3915 commits to darktable+rawspeed
-- 571 pull requests handled
-- 265 issues closed
+- Almost 1600 commits to darktable+rawspeed
+- 540 pull requests handled
+- 112 issues closed
 
 ## The Big Ones
 
@@ -82,6 +82,17 @@ are described more fully in the user manual and accompanying blog post.
 
   This method is only available for Bayer sensors and cannot be adapted
   to X-Trans sensors.
+  
+- Introducing the darktable Uniform Color Space 2022
+
+  The darktable UCS 22 is a perceptually uniform color space designed 
+  from psychoperceptual experimental data specifically for the purpose
+  of artistic saturation changes, as performed in the *color balance RGB* module.
+  It uses a brightness-saturation scheme that compensates for the Helmholtz-Kohlraush effect 
+  (accounting for the contribution of colorfulness in perceived brighntess)
+  and allows an efficient gamut-mapping against pipeline RGB at constant 
+  brightness. It will make the saturation control in *color balance RGB* 
+  better behaved.
 
 - UI Rewrite
 
@@ -105,6 +116,10 @@ are described more fully in the user manual and accompanying blog post.
   Support has been added for a new IPAPGothic font.
 
   The module-description tooltips have been reworked to ensure better layout.
+
+  Finally the default theme has been changed to Elegant Grey. The
+  darktable default is now in line with the theme recommended by the
+  team.
 
 - Performance and OpenCL support changes
 
