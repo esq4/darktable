@@ -149,15 +149,16 @@ Building
 ### Dependencies
 
 Compatible compilers:
-* Clang: 8, 9, 10
-* GCC: 8, 9, 10
-* Mingw64: 6, 7
+* Clang: 8 and later
+* GCC: 8 and later
+* MinGW-w64: 6 and later
 
 Required dependencies (minimum version):
 * CMake 3.10
 * Gtk 3.22
 * Glib 2.40
 * SQLite 3.15 (but 3.24 strongly recommended)
+* Exiv2, will require at least 0.27.4 built with ISOBMFF support for Canon CR3 files to be supported.
 
 Optional dependencies (minimum version):
 * OpenMP 4.5 *(for CPU multi-threading and SIMD vectorization)*
