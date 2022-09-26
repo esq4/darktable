@@ -63,36 +63,36 @@ typedef enum dt_iop_colorbalancrgb_saturation_t
 typedef struct dt_iop_colorbalancergb_params_t
 {
   /* params of v1 */
-  float shadows_Y;             // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "lift luminance"
-  float shadows_C;             // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "lift chroma"
-  float shadows_H;             // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "lift hue"
-  float midtones_Y;            // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "power luminance"
-  float midtones_C;            // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "power chroma"
-  float midtones_H;            // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "power hue"
-  float highlights_Y;          // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "gain luminance"
-  float highlights_C;          // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "gain chroma"
-  float highlights_H;          // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "gain hue"
-  float global_Y;              // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "offset luminance"
-  float global_C;              // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "offset chroma"
-  float global_H;              // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "offset hue"
+  float shadows_Y;             // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "luminance"
+  float shadows_C;             // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma"
+  float shadows_H;             // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
+  float midtones_Y;            // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "luminance"
+  float midtones_C;            // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma"
+  float midtones_H;            // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
+  float highlights_Y;          // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "luminance"
+  float highlights_C;          // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma"
+  float highlights_H;          // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
+  float global_Y;              // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "luminance"
+  float global_C;              // $MIN:  0.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma"
+  float global_H;              // $MIN:  0.0 $MAX: 360.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
   float shadows_weight;        // $MIN:  0.0 $MAX:   3.0 $DEFAULT: 1.0 $DESCRIPTION: "shadows fall-off"
   float white_fulcrum;         // $MIN: -16.0 $MAX: 16.0 $DEFAULT: 0.0 $DESCRIPTION: "white fulcrum"
   float highlights_weight;     // $MIN:  0.0 $MAX:   3.0 $DEFAULT: 1.0 $DESCRIPTION: "highlights fall-off"
-  float chroma_shadows;        // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma shadows"
-  float chroma_highlights;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma highlights"
-  float chroma_global;         // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma global"
-  float chroma_midtones;       // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "chroma mid-tones"
-  float saturation_global;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation global"
-  float saturation_highlights; // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation highlights"
-  float saturation_midtones;   // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation mid-tones"
-  float saturation_shadows;    // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation shadows"
+  float chroma_shadows;        // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "shadows"
+  float chroma_highlights;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlights"
+  float chroma_global;         // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "global chroma"
+  float chroma_midtones;       // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "mid-tones"
+  float saturation_global;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "global saturation"
+  float saturation_highlights; // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlights"
+  float saturation_midtones;   // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "mid-tones"
+  float saturation_shadows;    // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "shadows"
   float hue_angle;             // $MIN: -180. $MAX: 180. $DEFAULT: 0.0 $DESCRIPTION: "hue shift"
 
   /* params of v2 */
-  float brilliance_global;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "brilliance global"
-  float brilliance_highlights; // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "brilliance highlights"
-  float brilliance_midtones;   // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "brilliance mid-tones"
-  float brilliance_shadows;    // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "brilliance shadows"
+  float brilliance_global;     // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "global brilliance"
+  float brilliance_highlights; // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlights"
+  float brilliance_midtones;   // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "mid-tones"
+  float brilliance_shadows;    // $MIN: -1.0 $MAX:   1.0 $DEFAULT: 0.0 $DESCRIPTION: "shadows"
 
   /* params of v3 */
   float mask_grey_fulcrum;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.1845 $DESCRIPTION: "mask middle-gray fulcrum"
@@ -552,6 +552,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
   if(work_profile == NULL) return; // no point
 
+  self->cache_next_important = TRUE; // The cpu code is pretty heavy stuff so an importance hint
+
   // work profile can't be fetched in commit_params since it is not yet initialised
   // work_profile->matrix_in === RGB_to_XYZ
   // work_profile->matrix_out === XYZ_to_RGB
@@ -600,7 +602,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const float *const restrict brilliance = __builtin_assume_aligned((const float *const restrict)d->brilliance, 16);
 
   const gint mask_display
-      = ((piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
+      = ((piece->pipe->type & DT_DEV_PIXELPIPE_FULL) && self->dev->gui_attached
          && g && g->mask_display);
 
   // pixel size of the checker background
@@ -609,10 +611,16 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
 
+  const float DT_ALIGNED_ARRAY hue_rotation_matrix[2][2] = {
+    { cosf(d->hue_angle), -sinf(d->hue_angle) },
+    { sinf(d->hue_angle),  cosf(d->hue_angle) },
+  };
+
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(in, out, roi_in, roi_out, d, g, mask_display, input_matrix, output_matrix, gamut_LUT, \
-    global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white) \
+    global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white, \
+    hue_rotation_matrix) \
     schedule(static) collapse(2)
 #endif
   for(size_t i = 0; i < roi_out->height; i++)
@@ -661,11 +669,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                   d->shadows_weight, d->highlights_weight, d->midtones_weight, d->mask_grey_fulcrum, opacities, opacities_comp);
 
     // Hue shift - do it now because we need the gamut limit at output hue right after
-    Ych[2] += d->hue_angle;
-
-    // Ensure hue ± correction is in [-PI; PI]
-    if(Ych[2] > M_PI_F) Ych[2] -= 2.f * M_PI_F;
-    else if(Ych[2] < -M_PI_F) Ych[2] += 2.f * M_PI_F;
+    // The hue rotation is implemented as a matrix multiplication.
+    const float cos_h = Ych[2];
+    const float sin_h = Ych[3];
+    Ych[2] = hue_rotation_matrix[0][0] * cos_h + hue_rotation_matrix[0][1] * sin_h;
+    Ych[3] = hue_rotation_matrix[1][0] * cos_h + hue_rotation_matrix[1][1] * sin_h;
 
     // Linear chroma : distance to achromatic at constant luminance in scene-referred
     const float chroma_boost = d->chroma_global + scalar_product(opacities, chroma);
@@ -917,6 +925,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   cl_mem input_matrix_cl = NULL;
   cl_mem output_matrix_cl = NULL;
   cl_mem gamut_LUT = NULL;
+  cl_mem hue_rotation_matrix_cl = NULL;
 
   err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
                                             &dev_profile_info, &dev_profile_lut);
@@ -965,13 +974,17 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   // Size of the checker
   const gint mask_display
-      = ((piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
+      = ((piece->pipe->type & DT_DEV_PIXELPIPE_FULL) && self->dev->gui_attached
          && g && g->mask_display);
   const int checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
   const int checker_2 = 2 * checker_1;
   const int mask_type = (mask_display) ? g->mask_type : 0;
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
+
+  float hue_rotation_matrix[4]
+    = { cosf(d->hue_angle), -sinf(d->hue_angle), sinf(d->hue_angle), cosf(d->hue_angle) };
+  hue_rotation_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), hue_rotation_matrix);
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -1009,6 +1022,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 33, 4 * sizeof(float), (void *)&d->checker_color_2);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 34, sizeof(float), (void *)&L_white);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 35, sizeof(dt_iop_colorbalancrgb_saturation_t), (void *)&d->saturation_formula);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_colorbalance_rgb, 36, sizeof(cl_mem), (void *)&hue_rotation_matrix_cl);
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_colorbalance_rgb, sizes);
   if(err != CL_SUCCESS) goto error;
@@ -1018,6 +1032,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_release_mem_object(input_matrix_cl);
   dt_opencl_release_mem_object(output_matrix_cl);
   dt_opencl_release_mem_object(gamut_LUT);
+  dt_opencl_release_mem_object(hue_rotation_matrix_cl);
   return TRUE;
 
 error:
@@ -1025,7 +1040,8 @@ error:
   if(input_matrix_cl) dt_opencl_release_mem_object(input_matrix_cl);
   if(output_matrix_cl) dt_opencl_release_mem_object(output_matrix_cl);
   if(gamut_LUT) dt_opencl_release_mem_object(gamut_LUT);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_colorbalancergb] couldn't enqueue kernel! %d\n", err);
+  if(hue_rotation_matrix_cl) dt_opencl_release_mem_object(hue_rotation_matrix_cl);
+  dt_print(DT_DEBUG_OPENCL, "[opencl_colorbalancergb] couldn't enqueue kernel! %s\n", cl_errstr(err));
   return FALSE;
 }
 
@@ -1104,20 +1120,21 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->hue_angle = M_PI * p->hue_angle / 180.f;
 
   // measure the grading RGB of a pure white
-  const dt_aligned_pixel_t Ych_norm = { 1.f, 0.f, 0.f, 0.f };
+  const dt_aligned_pixel_t Ych_norm = { 1.f, 0.f, 1.f, 0.f };
   dt_aligned_pixel_t RGB_norm = { 0.f };
   Ych_to_gradingRGB(Ych_norm, RGB_norm);
+  dt_aligned_pixel_t Ych;
 
   // global
   {
-    dt_aligned_pixel_t Ych = { 1.f, p->global_C, DEG_TO_RAD(p->global_H), 0.f };
+    make_Ych(1.f, p->global_C, DEG_TO_RAD(p->global_H), Ych);
     Ych_to_gradingRGB(Ych, d->global);
     for(size_t c = 0; c < 4; c++) d->global[c] = (d->global[c] - RGB_norm[c]) + RGB_norm[c] * p->global_Y;
   }
 
   // shadows
   {
-    dt_aligned_pixel_t Ych = { 1.f, p->shadows_C, DEG_TO_RAD(p->shadows_H), 0.f };
+    make_Ych(1.f, p->shadows_C, DEG_TO_RAD(p->shadows_H), Ych);
     Ych_to_gradingRGB(Ych, d->shadows);
     for(size_t c = 0; c < 4; c++) d->shadows[c] = 1.f + (d->shadows[c] - RGB_norm[c]) + p->shadows_Y;
     d->shadows_weight = 2.f + p->shadows_weight * 2.f;
@@ -1125,7 +1142,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   // highlights
   {
-    dt_aligned_pixel_t Ych = { 1.f, p->highlights_C, DEG_TO_RAD(p->highlights_H), 0.f };
+    make_Ych(1.f, p->highlights_C, DEG_TO_RAD(p->highlights_H), Ych);
     Ych_to_gradingRGB(Ych, d->highlights);
     for(size_t c = 0; c < 4; c++) d->highlights[c] = 1.f + (d->highlights[c] - RGB_norm[c]) + p->highlights_Y;
     d->highlights_weight = 2.f + p->highlights_weight * 2.f;
@@ -1133,7 +1150,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   // midtones
   {
-    dt_aligned_pixel_t Ych = { 1.f, p->midtones_C, DEG_TO_RAD(p->midtones_H), 0.f };
+    make_Ych(1.f, p->midtones_C, DEG_TO_RAD(p->midtones_H), Ych);
     Ych_to_gradingRGB(Ych, d->midtones);
     for(size_t c = 0; c < 4; c++) d->midtones[c] = 1.f / (1.f + (d->midtones[c] - RGB_norm[c]));
     d->midtones_Y = 1.f / (1.f + p->midtones_Y);
@@ -1336,9 +1353,6 @@ void pipe_RGB_to_Ych(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
                              work_profile->nonlinearlut);
   XYZ_D50_to_D65(XYZ_D50, XYZ_D65);
   XYZ_to_Ych(XYZ_D65, Ych);
-
-  if(Ych[2] < 0.f)
-    Ych[2] = 2.f * M_PI + Ych[2];
 }
 
 
@@ -1351,8 +1365,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_aligned_pixel_t max_Ych = { 0.f };
   pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color, Ych);
   pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color_max, max_Ych);
-  float hue = RAD_TO_DEG(Ych[2]) + 180.f;   // take the opponent color
-  hue = (hue > 360.f) ? hue - 360.f : hue;  // normalize in [0 ; 360]°
+  const float picked_hue = get_hue_angle_from_Ych(Ych);
+  const float hue = RAD_TO_DEG(picked_hue) + 180.f;   // take the opponent color
 
   ++darktable.gui->reset;
   if(picker == g->global_H)
@@ -1402,6 +1416,29 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 }
 
 
+static void _YchToRGB(dt_aligned_pixel_t *RGB_out, float chroma, float hue,
+                      const dt_iop_order_iccprofile_info_t *output_profile,
+                      const dt_colormatrix_t output_matrix_LMS_to_RGB)
+{
+  dt_aligned_pixel_t RGB_linear = { 0.f };
+  dt_aligned_pixel_t Ych;
+  make_Ych(0.75f, chroma, hue, Ych);
+  dt_aligned_pixel_t XYZ_D65 = { 0.f };
+  dt_aligned_pixel_t XYZ_D50 = { 0.f };
+  Ych_to_XYZ(Ych, XYZ_D65);
+  XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
+  dt_apply_transposed_color_matrix(XYZ_D50, output_profile->matrix_out_transposed, RGB_linear);
+  // normalize to the brightest value available at this hue and chroma
+  const float max_RGB = fmaxf(fmaxf(RGB_linear[0], RGB_linear[1]), RGB_linear[2]);
+  for_each_channel(c) RGB_linear[c] = MAX(RGB_linear[c] / max_RGB, 0.f);
+  // Apply nonlinear LUT if necessary
+  if(output_profile->nonlinearlut)
+    dt_ioppr_apply_trc(RGB_linear, *RGB_out, output_profile->lut_out, output_profile->unbounded_coeffs_out,
+                       output_profile->lutsize);
+  else
+    memcpy(*RGB_out, RGB_linear, sizeof(RGB_linear));
+}
+
 static void paint_chroma_slider(const dt_iop_order_iccprofile_info_t *output_profile,
                                 const dt_colormatrix_t output_matrix_LMS_to_RGB,
                                 GtkWidget *w, const float hue)
@@ -1422,21 +1459,8 @@ static void paint_chroma_slider(const dt_iop_order_iccprofile_info_t *output_pro
     const float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
     const float x = MIN(x_min + stop * x_range, max_chroma);
 
-    dt_aligned_pixel_t RGB = { 0.f };
-    dt_aligned_pixel_t RGB_linear = { 0.f };
-    dt_aligned_pixel_t Ych = { 0.75f, x, h, 0.f };
-    dt_aligned_pixel_t XYZ_D65 = { 0.f };
-    dt_aligned_pixel_t XYZ_D50 = { 0.f };
-    Ych_to_XYZ(Ych, XYZ_D65);
-    XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
-    dt_apply_transposed_color_matrix(XYZ_D50, output_profile->matrix_out_transposed, RGB_linear);
-    // normalize to the brightest value available at this hue and chroma
-    const float max_RGB = fmaxf(fmaxf(RGB_linear[0], RGB_linear[1]), RGB_linear[2]);
-    for_each_channel(c) RGB_linear[c] = MAX(RGB_linear[c] / max_RGB, 0.f);
-    // Apply nonlinear LUT if necessary
-    if(output_profile->nonlinearlut)
-      dt_ioppr_apply_trc(RGB_linear, RGB, output_profile->lut_out,
-                         output_profile->unbounded_coeffs_out, output_profile->lutsize);
+    dt_aligned_pixel_t RGB;
+    _YchToRGB(&RGB, x, h, output_profile, output_matrix_LMS_to_RGB);
     dt_bauhaus_slider_set_stop(w, stop, RGB[0], RGB[1], RGB[2]);
   }
 
@@ -1453,21 +1477,8 @@ static void paint_hue_sliders(const dt_iop_order_iccprofile_info_t *output_profi
     const float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
     const float h = DEG_TO_RAD(stop * (360.f));
     const float max_chroma = Ych_max_chroma_without_negatives(output_matrix_LMS_to_RGB, cosf(h), sinf(h));
-    dt_aligned_pixel_t RGB_linear = { 0.f };
-    dt_aligned_pixel_t RGB = { 0.f };
-    dt_aligned_pixel_t Ych = { 0.75f, MIN(0.2f, max_chroma), h, 0.f };
-    dt_aligned_pixel_t XYZ_D65 = { 0.f };
-    dt_aligned_pixel_t XYZ_D50 = { 0.f };
-    Ych_to_XYZ(Ych, XYZ_D65);
-    XYZ_D65_to_D50(XYZ_D65, XYZ_D50);
-    dt_apply_transposed_color_matrix(XYZ_D50, output_profile->matrix_out_transposed, RGB_linear);
-    // normalize to the brightest value available at this hue and chroma
-    const float max_RGB = fmaxf(fmaxf(RGB_linear[0], RGB_linear[1]), RGB_linear[2]);
-    for_each_channel(c) RGB_linear[c] = MAX(RGB_linear[c] / max_RGB, 0.f);
-    // Apply nonlinear LUT if necessary
-    if(output_profile->nonlinearlut)
-      dt_ioppr_apply_trc(RGB_linear, RGB, output_profile->lut_out,
-                         output_profile->unbounded_coeffs_out, output_profile->lutsize);
+    dt_aligned_pixel_t RGB;
+    _YchToRGB(&RGB, MIN(0.2f, max_chroma), h, output_profile, output_matrix_LMS_to_RGB);
     dt_bauhaus_slider_set_stop(g->global_H, stop, RGB[0], RGB[1], RGB[2]);
     dt_bauhaus_slider_set_stop(g->shadows_H, stop, RGB[0], RGB[1], RGB[2]);
     dt_bauhaus_slider_set_stop(g->highlights_H, stop, RGB[0], RGB[1], RGB[2]);
@@ -1872,6 +1883,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_colorbalancergb_gui_data_t *g = IOP_GUI_ALLOC(colorbalancergb);
   g->mask_display = FALSE;
+  dt_iop_module_t *sect = NULL;
 
   // start building top level widget
   static dt_action_def_t notebook_def = { };
@@ -1897,9 +1909,8 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->contrast, "%");
   gtk_widget_set_tooltip_text(g->contrast, _("increase the contrast at constant chromaticity"));
 
-  ++darktable.bauhaus->skip_accel;
-
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("linear chroma grading")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("chroma"));
 
   g->chroma_global = dt_bauhaus_slider_from_params(self, "chroma_global");
   dt_bauhaus_slider_set_soft_range(g->chroma_global, -0.5, 0.5);
@@ -1907,61 +1918,63 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->chroma_global, "%");
   gtk_widget_set_tooltip_text(g->chroma_global, _("increase colorfulness at same luminance globally"));
 
-  g->chroma_shadows = dt_bauhaus_slider_from_params(self, "chroma_shadows");
+  g->chroma_shadows = dt_bauhaus_slider_from_params(sect, "chroma_shadows");
   dt_bauhaus_slider_set_digits(g->chroma_shadows, 4);
   dt_bauhaus_slider_set_format(g->chroma_shadows, "%");
   gtk_widget_set_tooltip_text(g->chroma_shadows, _("increase colorfulness at same luminance mostly in shadows"));
 
-  g->chroma_midtones = dt_bauhaus_slider_from_params(self, "chroma_midtones");
+  g->chroma_midtones = dt_bauhaus_slider_from_params(sect, "chroma_midtones");
   dt_bauhaus_slider_set_digits(g->chroma_midtones, 4);
   dt_bauhaus_slider_set_format(g->chroma_midtones, "%");
   gtk_widget_set_tooltip_text(g->chroma_midtones, _("increase colorfulness at same luminance mostly in mid-tones"));
 
-  g->chroma_highlights = dt_bauhaus_slider_from_params(self, "chroma_highlights");
+  g->chroma_highlights = dt_bauhaus_slider_from_params(sect, "chroma_highlights");
   dt_bauhaus_slider_set_digits(g->chroma_highlights, 4);
   dt_bauhaus_slider_set_format(g->chroma_highlights, "%");
   gtk_widget_set_tooltip_text(g->chroma_highlights, _("increase colorfulness at same luminance mostly in highlights"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("perceptual saturation grading")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("saturation"));
 
   g->saturation_global = dt_bauhaus_slider_from_params(self, "saturation_global");
   dt_bauhaus_slider_set_digits(g->saturation_global, 4);
   dt_bauhaus_slider_set_format(g->saturation_global, "%");
   gtk_widget_set_tooltip_text(g->saturation_global, _("add or remove saturation by an absolute amount"));
 
-  g->saturation_shadows = dt_bauhaus_slider_from_params(self, "saturation_shadows");
+  g->saturation_shadows = dt_bauhaus_slider_from_params(sect, "saturation_shadows");
   dt_bauhaus_slider_set_digits(g->saturation_shadows, 4);
   dt_bauhaus_slider_set_format(g->saturation_shadows, "%");
   gtk_widget_set_tooltip_text(g->saturation_shadows, _("increase or decrease saturation proportionally to the original pixel saturation"));
 
-  g->saturation_midtones= dt_bauhaus_slider_from_params(self, "saturation_midtones");
+  g->saturation_midtones= dt_bauhaus_slider_from_params(sect, "saturation_midtones");
   dt_bauhaus_slider_set_digits(g->saturation_midtones, 4);
   dt_bauhaus_slider_set_format(g->saturation_midtones, "%");
   gtk_widget_set_tooltip_text(g->saturation_midtones, _("increase or decrease saturation proportionally to the original pixel saturation"));
 
-  g->saturation_highlights = dt_bauhaus_slider_from_params(self, "saturation_highlights");
+  g->saturation_highlights = dt_bauhaus_slider_from_params(sect, "saturation_highlights");
   dt_bauhaus_slider_set_digits(g->saturation_highlights, 4);
   dt_bauhaus_slider_set_format(g->saturation_highlights, "%");
   gtk_widget_set_tooltip_text(g->saturation_highlights, _("increase or decrease saturation proportionally to the original pixel saturation"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("perceptual brilliance grading")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("brilliance"));
 
   g->brilliance_global = dt_bauhaus_slider_from_params(self, "brilliance_global");
   dt_bauhaus_slider_set_digits(g->brilliance_global, 4);
   dt_bauhaus_slider_set_format(g->brilliance_global, "%");
   gtk_widget_set_tooltip_text(g->brilliance_global, _("add or remove brilliance by an absolute amount"));
 
-  g->brilliance_shadows = dt_bauhaus_slider_from_params(self, "brilliance_shadows");
+  g->brilliance_shadows = dt_bauhaus_slider_from_params(sect, "brilliance_shadows");
   dt_bauhaus_slider_set_digits(g->brilliance_shadows, 4);
   dt_bauhaus_slider_set_format(g->brilliance_shadows, "%");
   gtk_widget_set_tooltip_text(g->brilliance_shadows, _("increase or decrease brilliance proportionally to the original pixel brilliance"));
 
-  g->brilliance_midtones= dt_bauhaus_slider_from_params(self, "brilliance_midtones");
+  g->brilliance_midtones= dt_bauhaus_slider_from_params(sect, "brilliance_midtones");
   dt_bauhaus_slider_set_digits(g->brilliance_midtones, 4);
   dt_bauhaus_slider_set_format(g->brilliance_midtones, "%");
   gtk_widget_set_tooltip_text(g->brilliance_midtones, _("increase or decrease brilliance proportionally to the original pixel brilliance"));
 
-  g->brilliance_highlights = dt_bauhaus_slider_from_params(self, "brilliance_highlights");
+  g->brilliance_highlights = dt_bauhaus_slider_from_params(sect, "brilliance_highlights");
   dt_bauhaus_slider_set_digits(g->brilliance_highlights, 4);
   dt_bauhaus_slider_set_format(g->brilliance_highlights, "%");
   gtk_widget_set_tooltip_text(g->brilliance_highlights, _("increase or decrease brilliance proportionally to the original pixel brilliance"));
@@ -1970,82 +1983,84 @@ void gui_init(dt_iop_module_t *self)
   self->widget = dt_ui_notebook_page(g->notebook, N_("4 ways"), _("selective color grading"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("global offset")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("offset"));
 
-  g->global_Y = dt_bauhaus_slider_from_params(self, "global_Y");
+  g->global_Y = dt_bauhaus_slider_from_params(sect, "global_Y");
   dt_bauhaus_slider_set_soft_range(g->global_Y, -0.05, 0.05);
   dt_bauhaus_slider_set_digits(g->global_Y, 4);
   dt_bauhaus_slider_set_format(g->global_Y, "%");
   gtk_widget_set_tooltip_text(g->global_Y, _("global luminance offset"));
 
-  g->global_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "global_H"));
+  g->global_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(sect, "global_H"));
   dt_bauhaus_slider_set_feedback(g->global_H, 0);
   dt_bauhaus_slider_set_format(g->global_H, "°");
   gtk_widget_set_tooltip_text(g->global_H, _("hue of the global color offset"));
 
-  g->global_C = dt_bauhaus_slider_from_params(self, "global_C");
+  g->global_C = dt_bauhaus_slider_from_params(sect, "global_C");
   dt_bauhaus_slider_set_soft_range(g->global_C, 0., 0.01);
   dt_bauhaus_slider_set_digits(g->global_C, 4);
   dt_bauhaus_slider_set_format(g->global_C, "%");
   gtk_widget_set_tooltip_text(g->global_C, _("chroma of the global color offset"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("shadows lift")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("lift"));
 
-  g->shadows_Y = dt_bauhaus_slider_from_params(self, "shadows_Y");
+  g->shadows_Y = dt_bauhaus_slider_from_params(sect, "shadows_Y");
   dt_bauhaus_slider_set_soft_range(g->shadows_Y, -1.0, 1.0);
   dt_bauhaus_slider_set_digits(g->shadows_Y, 4);
   dt_bauhaus_slider_set_format(g->shadows_Y, "%");
   gtk_widget_set_tooltip_text(g->shadows_Y, _("luminance gain in shadows"));
 
-  g->shadows_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "shadows_H"));
+  g->shadows_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(sect, "shadows_H"));
   dt_bauhaus_slider_set_feedback(g->shadows_H, 0);
   dt_bauhaus_slider_set_format(g->shadows_H, "°");
   gtk_widget_set_tooltip_text(g->shadows_H, _("hue of the color gain in shadows"));
 
-  g->shadows_C = dt_bauhaus_slider_from_params(self, "shadows_C");
+  g->shadows_C = dt_bauhaus_slider_from_params(sect, "shadows_C");
   dt_bauhaus_slider_set_soft_range(g->shadows_C, 0., 0.5);
   dt_bauhaus_slider_set_digits(g->shadows_C, 4);
   dt_bauhaus_slider_set_format(g->shadows_C, "%");
   gtk_widget_set_tooltip_text(g->shadows_C, _("chroma of the color gain in shadows"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("highlights gain")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("gain"));
 
-  g->highlights_Y = dt_bauhaus_slider_from_params(self, "highlights_Y");
+  g->highlights_Y = dt_bauhaus_slider_from_params(sect, "highlights_Y");
   dt_bauhaus_slider_set_soft_range(g->highlights_Y, -0.5, 0.5);
   dt_bauhaus_slider_set_digits(g->highlights_Y, 4);
   dt_bauhaus_slider_set_format(g->highlights_Y, "%");
   gtk_widget_set_tooltip_text(g->highlights_Y, _("luminance gain in highlights"));
 
-  g->highlights_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "highlights_H"));
+  g->highlights_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(sect, "highlights_H"));
   dt_bauhaus_slider_set_feedback(g->highlights_H, 0);
   dt_bauhaus_slider_set_format(g->highlights_H, "°");
   gtk_widget_set_tooltip_text(g->highlights_H, _("hue of the color gain in highlights"));
 
-  g->highlights_C = dt_bauhaus_slider_from_params(self, "highlights_C");
+  g->highlights_C = dt_bauhaus_slider_from_params(sect, "highlights_C");
   dt_bauhaus_slider_set_soft_range(g->highlights_C, 0., 0.2);
   dt_bauhaus_slider_set_digits(g->highlights_C, 4);
   dt_bauhaus_slider_set_format(g->highlights_C, "%");
   gtk_widget_set_tooltip_text(g->highlights_C, _("chroma of the color gain in highlights"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("power")), FALSE, FALSE, 0);
+  sect = DT_IOP_SECTION_FOR_PARAMS(self, N_("power"));
 
-  g->midtones_Y = dt_bauhaus_slider_from_params(self, "midtones_Y");
+  g->midtones_Y = dt_bauhaus_slider_from_params(sect, "midtones_Y");
   dt_bauhaus_slider_set_soft_range(g->midtones_Y, -0.25, 0.25);
   dt_bauhaus_slider_set_digits(g->midtones_Y, 4);
   dt_bauhaus_slider_set_format(g->midtones_Y, "%");
   gtk_widget_set_tooltip_text(g->midtones_Y, _("luminance exponent in mid-tones"));
 
-  g->midtones_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "midtones_H"));
+  g->midtones_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(sect, "midtones_H"));
   dt_bauhaus_slider_set_feedback(g->midtones_H, 0);
   dt_bauhaus_slider_set_format(g->midtones_H, "°");
   gtk_widget_set_tooltip_text(g->midtones_H, _("hue of the color exponent in mid-tones"));
 
-  g->midtones_C = dt_bauhaus_slider_from_params(self, "midtones_C");
+  g->midtones_C = dt_bauhaus_slider_from_params(sect, "midtones_C");
   dt_bauhaus_slider_set_soft_range(g->midtones_C, 0., 0.1);
   dt_bauhaus_slider_set_digits(g->midtones_C, 4);
   dt_bauhaus_slider_set_format(g->midtones_C, "%");
   gtk_widget_set_tooltip_text(g->midtones_C, _("chroma of the color exponent in mid-tones"));
-
-  --darktable.bauhaus->skip_accel;
 
   // Page masks
   self->widget = dt_ui_notebook_page(g->notebook, N_("masks"), _("isolate luminances"));
@@ -2127,32 +2142,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->checker_size,  NULL, _("checkerboard size"));
   g_signal_connect(G_OBJECT(g->checker_size), "value-changed", G_CALLBACK(checker_size_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->checker_size), FALSE, FALSE, 0);
-
-  dt_bauhaus_widget_set_label(g->shadows_H, N_("lift"), N_("hue"));
-  dt_bauhaus_widget_set_label(g->midtones_H, N_("power"), N_("hue"));
-  dt_bauhaus_widget_set_label(g->highlights_H, N_("gain"), N_("hue"));
-  dt_bauhaus_widget_set_label(g->global_H, N_("offset"), N_("hue"));
-  dt_bauhaus_widget_set_label(g->shadows_C, N_("lift"), N_("chroma"));
-  dt_bauhaus_widget_set_label(g->midtones_C, N_("power"), N_("chroma"));
-  dt_bauhaus_widget_set_label(g->highlights_C, N_("gain"), N_("chroma"));
-  dt_bauhaus_widget_set_label(g->global_C, N_("offset"), N_("chroma"));
-  dt_bauhaus_widget_set_label(g->shadows_Y, N_("lift"), N_("luminance"));
-  dt_bauhaus_widget_set_label(g->midtones_Y, N_("power"), N_("luminance"));
-  dt_bauhaus_widget_set_label(g->highlights_Y, N_("gain"), N_("luminance"));
-  dt_bauhaus_widget_set_label(g->global_Y, N_("offset"), N_("luminance"));
-
-  dt_bauhaus_widget_set_label(g->chroma_global, NULL, N_("global chroma"));
-  dt_bauhaus_widget_set_label(g->chroma_highlights, N_("chroma"), N_("highlights"));
-  dt_bauhaus_widget_set_label(g->chroma_midtones, N_("chroma"), N_("mid-tones"));
-  dt_bauhaus_widget_set_label(g->chroma_shadows, N_("chroma"), N_("shadows"));
-  dt_bauhaus_widget_set_label(g->saturation_global, NULL, N_("global saturation"));
-  dt_bauhaus_widget_set_label(g->saturation_highlights, N_("saturation"), N_("highlights"));
-  dt_bauhaus_widget_set_label(g->saturation_midtones, N_("saturation"), N_("mid-tones"));
-  dt_bauhaus_widget_set_label(g->saturation_shadows, N_("saturation"), N_("shadows"));
-  dt_bauhaus_widget_set_label(g->brilliance_global, NULL, N_("global brilliance"));
-  dt_bauhaus_widget_set_label(g->brilliance_highlights, N_("brilliance"), N_("highlights"));
-  dt_bauhaus_widget_set_label(g->brilliance_midtones, N_("brilliance"), N_("mid-tones"));
-  dt_bauhaus_widget_set_label(g->brilliance_shadows, N_("brilliance"), N_("shadows"));
 
   // Init the conf keys if they don't exist
   if(!dt_conf_key_exists("plugins/darkroom/colorbalancergb/checker1/red"))

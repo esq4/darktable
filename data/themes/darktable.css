@@ -130,7 +130,7 @@ Why that? Just because it's a developer choice and most classes use underscore i
 
 /* Scroll bars (sliders) */
 @define-color scroll_bar_inactive @grey_40;
-@define-color scroll_bar_active @grey_50;
+@define-color scroll_bar_active @grey_60;
 @define-color scroll_bar_bg @grey_10;
 
 /* Modules box (plugins) */
@@ -348,7 +348,7 @@ entry,
 textview,
 #non-flat
 {
-  padding: 2px; /* this need to be kept as pixels for constant sizing and correct display with all font sizes */
+  padding: 1px; /* this need to be kept as pixels for constant sizing and correct display with all font sizes */
   border: 1px solid @button_border; /* this too */
   border-radius: 0.21em;
   background-color: @button_bg;
@@ -393,8 +393,8 @@ header button,
 .text-button radio, /* this line and following one are needed to set good margin inside some buttons, especially in header buttons in about dialog window and on radio button and label inside star icon overlay menu */
 .text-button label
 {
-  min-height: 1.2em;
-  min-width: 1.2em;
+  min-height: 1.15em;
+  min-width: 1.15em;
   margin: 0.07em;
 }
 
@@ -947,25 +947,25 @@ notebook header /* add space between notebook tabs and options below */
 scrollbar slider
 {
   background-color: @scroll_bar_inactive;
-  border: 0.14em solid transparent;
+  border: 0.1em solid transparent;
 }
 
 scrollbar.horizontal slider
 {
   min-width: 1em;
-  min-height: 0.42em;
+  min-height: 0.45em;
 }
 
 scrollbar.vertical slider
 {
-  min-width: 0.42em;
+  min-width: 0.45em;
   min-height: 1em;
 }
 
 scale contents trough
 {
   background-color: @scroll_bar_bg;
-  border-radius: 0.14em;
+  border-radius: 0.21em;
   min-width: 0.5em;
   min-height: 0.5em;
 }
@@ -980,7 +980,7 @@ scale contents trough highlight
 scale contents trough slider
 {
   background-color: @scroll_bar_inactive;
-  border: 0.035em solid @border_color;
+  border: 0.1em solid @border_color;
   font-size: 1em;
   min-height: 0.5em;
   min-width: 0.5em;
@@ -990,9 +990,9 @@ scrollbar
 {
   border-color: @scroll_bar_bg;
   background: @scroll_bar_bg;
-  border-radius: 0.35em;
-  min-height: 0.42em;
-  min-width: 0.42em;
+  border-radius: 0.42em;
+  min-height: 0.5em;
+  min-width: 0.5em;
   margin: 0.07em;
 }
 
@@ -1450,7 +1450,7 @@ border-bottom: 0.07em solid alpha(@selected_bg_color, 0.75);
 
 progressbar trough
 {
-  background-color: @darkroom_preview_bg_color;
+  background-color: @scroll_bar_inactive;
 }
 
 progressbar progress
