@@ -60,7 +60,14 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 }
 #endif
 
+
 DT_MODULE_INTROSPECTION(4, dt_iop_highlights_params_t)
+
+/* As some of the internal algorithms use a smaller value for clipping than given by the UI
+   the visualizing is wrong for those algos. It seems to be a a minor issue but sometimes significant.
+   Please note, every mode defined in dt_iop_highlights_mode_t requires a value.
+*/
+static float highlights_clip_magics[6] = { 1.0f, 1.0f, 0.987f, 0.995f, 0.987f, 0.987f };  
 
 typedef enum dt_iop_highlights_mode_t
 {
@@ -281,11 +288,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   // this works for bayer and X-Trans sensors
   if(visualizing)
   {
+    const float mclip = d->clip * highlights_clip_magics[d->mode];
     const float *c = piece->pipe->dsc.temperature.coeffs;
-    float clips[4] = { d->clip * (c[RED]   <= 0.0f ? 1.0f : c[RED]),
-                       d->clip * (c[GREEN] <= 0.0f ? 1.0f : c[GREEN]),
-                       d->clip * (c[BLUE]  <= 0.0f ? 1.0f : c[BLUE]),
-                       d->clip * (c[GREEN] <= 0.0f ? 1.0f : c[GREEN]) };
+    float clips[4] = { mclip * (c[RED]   <= 0.0f ? 1.0f : c[RED]),
+                       mclip * (c[GREEN] <= 0.0f ? 1.0f : c[GREEN]),
+                       mclip * (c[BLUE]  <= 0.0f ? 1.0f : c[BLUE]),
+                       mclip * (c[GREEN] <= 0.0f ? 1.0f : c[GREEN]) };
 
     dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), clips);
     if(dev_clips == NULL) goto error;
@@ -1916,12 +1924,13 @@ static void process_visualize(dt_dev_pixelpipe_iop_t *piece, const void *const i
 
   const float *const in = (const float *const)ivoid;
   float *const out = (float *const)ovoid;
-  const float clip = data->clip;
+
+  const float mclip = data->clip * highlights_clip_magics[data->mode];
   const float *cf = piece->pipe->dsc.temperature.coeffs;
-  const float clips[4] = { clip * (cf[RED]   <= 0.0f ? 1.0f : cf[RED]),
-                           clip * (cf[GREEN] <= 0.0f ? 1.0f : cf[GREEN]),
-                           clip * (cf[BLUE]  <= 0.0f ? 1.0f : cf[BLUE]),
-                           clip * (cf[GREEN] <= 0.0f ? 1.0f : cf[GREEN]) };
+  const float clips[4] = { mclip * (cf[RED]   <= 0.0f ? 1.0f : cf[RED]),
+                           mclip * (cf[GREEN] <= 0.0f ? 1.0f : cf[GREEN]),
+                           mclip * (cf[BLUE]  <= 0.0f ? 1.0f : cf[BLUE]),
+                           mclip * (cf[GREEN] <= 0.0f ? 1.0f : cf[GREEN]) };
 
 #ifdef _OPENMP
   #pragma omp parallel for default(none) \
