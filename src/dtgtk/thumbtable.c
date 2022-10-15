@@ -2563,7 +2563,6 @@ static gboolean _zoomable_check_rowid_visibility(dt_thumbtable_t *table, const i
 
   // is the needed rowid inside the list
   // in this case, is it fully visible ?
-  int i = 0;
   int y_move = 0;
   int x_move = 0;
   for(const GList *l = table->list; l; l = g_list_next(l))
@@ -2585,7 +2584,6 @@ static gboolean _zoomable_check_rowid_visibility(dt_thumbtable_t *table, const i
       if(x_move == 0 && y_move == 0) return TRUE;
       break;
     }
-    i++;
   }
   return FALSE;
 }

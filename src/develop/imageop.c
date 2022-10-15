@@ -1737,7 +1737,8 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   {
     /* construct module params data for hash calc */
     int length = module->params_size;
-    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) length += sizeof(dt_develop_blend_params_t);
+    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+      length += sizeof(dt_develop_blend_params_t);
     dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, blendop_params->mask_id);
     length += dt_masks_group_get_hash_buffer_length(grp);
 
@@ -2479,8 +2480,9 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   /* add multi instances menu button */
   hw[IOP_MODULE_INSTANCE] = dtgtk_button_new(dtgtk_cairo_paint_multiinstance, 0, NULL);
   module->multimenu_button = GTK_WIDGET(hw[IOP_MODULE_INSTANCE]);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_INSTANCE]),
-                              _("multiple instance actions\nright-click creates new instance"));
+  if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE))
+    gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_INSTANCE]),
+                                _("multiple instance actions\nright-click creates new instance"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event", G_CALLBACK(_gui_multiinstance_callback),
                    module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "enter-notify-event", G_CALLBACK(_header_enter_notify_callback),

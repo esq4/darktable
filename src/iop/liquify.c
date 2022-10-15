@@ -1606,7 +1606,7 @@ int process_cl(struct dt_iop_module_t *module,
                 const dt_iop_roi_t *roi_in,
                 const dt_iop_roi_t *roi_out)
 {
-  cl_int_t err = -999;
+  cl_int_t err = DT_OPENCL_DEFAULT_ERROR;
   const int devid = piece->pipe->devid;
   const int height = MIN(roi_in->height, roi_out->height);
   const int width = MIN(roi_in->width, roi_out->width);
@@ -1735,7 +1735,7 @@ static gboolean detect_drag(const dt_iop_liquify_gui_data_t *g, const double sca
 static void update_warp_count(struct dt_iop_module_t *module)
 {
   const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)module->gui_data;
-  dt_iop_liquify_params_t *p = (dt_iop_liquify_params_t *)module->params;
+  const dt_iop_liquify_params_t *p = (dt_iop_liquify_params_t *)module->params;
 
   guint warp = 0, node = 0;
   for(int k=0; k<MAX_NODES; k++)
@@ -1775,7 +1775,7 @@ static GList *interpolate_paths(dt_iop_liquify_params_t *p)
       continue;
     }
 
-    const dt_liquify_path_data_t *prev = node_prev(p, data);
+    dt_liquify_path_data_t *prev = node_prev(p, data);
     const dt_liquify_warp_t *warp1 = &prev->warp;
     const float complex *p1 = &prev->warp.point;
     if(data->header.type == DT_LIQUIFY_PATH_LINE_TO_V1)
@@ -2771,8 +2771,11 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 {
   if(history)
   {
+    dt_iop_liquify_params_t *p = (dt_iop_liquify_params_t *)module->params;
+
     // something definitive has happened like button release ... so
     // redraw pipe
+    smooth_paths_linsys(p);
     dt_dev_add_history_item(darktable.develop, module, TRUE);
   }
   else
@@ -3416,10 +3419,10 @@ int button_released(struct dt_iop_module_t *module,
 
           mix_warps(warp2, warp1, warp3, midpoint, t);
           node_insert_before(p, e, tmp);
-
         }
       }
-      else if(g->last_hit.layer == DT_LIQUIFY_LAYER_CENTERPOINT)
+      else if(g->last_hit.elem->header.type == DT_LIQUIFY_PATH_CURVE_TO_V1
+              && g->last_hit.layer == DT_LIQUIFY_LAYER_CENTERPOINT)
       {
         // cycle node type: smooth -> cusp etc.
         dt_liquify_path_data_t *e = g->last_hit.elem;
