@@ -2448,7 +2448,7 @@ void dt_collection_hint_message(const dt_collection_t *collection)
       selected++;
     }
     g_list_free(selected_imgids);
-    message = g_strdup_printf(_("<b>%d</b> image (#<b>%d</b>) selected of <b>%d</b>"), cs, selected, c);
+    message = g_strdup_printf(_("<b>%d</b> img (#<b>%d</b>) of <b>%d</b>"), cs, selected, c);
   }
   else
   {
