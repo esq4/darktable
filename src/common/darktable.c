@@ -571,6 +571,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  gPhoto2 support disabled\n"
 #endif
 
+#ifdef HAVE_LENSFUN
+               "  Lensfun support enabled\n"
+#else
+               "  Lensfun support disabled\n"
+#endif
+
 #ifdef HAVE_GRAPHICSMAGICK
                "  GraphicsMagick support enabled\n"
 #else
@@ -583,10 +589,34 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  ImageMagick support disabled\n"
 #endif
 
+#ifdef HAVE_LIBAVIF
+               "  libavif support enabled\n"
+#else
+               "  libavif support disabled\n"
+#endif
+
+#ifdef HAVE_LIBHEIF
+               "  libheif support enabled\n"
+#else
+               "  libheif support disabled\n"
+#endif
+
+#ifdef HAVE_OPENJPEG
+               "  OpenJPEG support enabled\n"
+#else
+               "  OpenJPEG support disabled\n"
+#endif
+
 #ifdef HAVE_OPENEXR
                "  OpenEXR support enabled\n"
 #else
                "  OpenEXR support disabled\n"
+#endif
+
+#ifdef HAVE_WEBP
+               "  WebP support enabled\n"
+#else
+               "  WebP support disabled\n"
 #endif
                ,
                darktable_package_string,
