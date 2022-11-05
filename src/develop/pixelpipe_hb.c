@@ -228,6 +228,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   // so now it's safe to clean up cache:
   dt_dev_pixelpipe_cache_cleanup(&(pipe->cache));
   dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+
   dt_pthread_mutex_destroy(&(pipe->backbuf_mutex));
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
@@ -1327,7 +1328,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   /*
     As the iop cache holds modules input data we check for an important hint in the current module and
-    keep that infor for the next processed module
+    keep that info for the next processed module
   */
   gboolean input_important = pipe->next_important_module;
   if(module)

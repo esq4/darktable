@@ -1440,7 +1440,7 @@ static void _commit_params_lf(struct dt_iop_module_t *self, dt_iop_params_t *p1,
 
 /* embedded metadata processing start */
 
-/* This code is based on the alghoritm developed by Freddie Witherden <freddie@witherden.org>
+/* This code is based on the algorithm developed by Freddie Witherden <freddie@witherden.org>
  * in pull request
  * https://github.com/darktable-org/darktable/pull/7092 */
 
@@ -2102,6 +2102,8 @@ void reload_defaults(dt_iop_module_t *module)
   d->crop = img->exif_crop;
   d->aperture = img->exif_aperture;
   d->focal = img->exif_focal_length;
+  d->scale = 1.0;
+  d->modify_flags = DT_IOP_LENS_MODFLAG_ALL;
 
   // if we did not find focus_distance in EXIF, lets default to 1000
   d->distance = img->exif_focus_distance == 0.0f ? 1000.0f : img->exif_focus_distance;
@@ -2195,15 +2197,6 @@ void reload_defaults(dt_iop_module_t *module)
   {
     // prefer embedded metadata if available
     d->method = DT_IOP_LENS_METHOD_EMBEDDED_METADATA;
-  }
-
-  if(!_have_lensfun(module) && !_have_embedded_metadata(module))
-  {
-    module->default_enabled = 0;
-  }
-  else
-  {
-    module->default_enabled = 1;
   }
 
   dt_iop_lens_gui_data_t *g = (dt_iop_lens_gui_data_t *)module->gui_data;
