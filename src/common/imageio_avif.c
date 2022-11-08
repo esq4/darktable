@@ -40,7 +40,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
 {
   dt_imageio_retval_t ret;
   avifImage avif_image = {0};
-  avifImage *avif = NULL;
   avifRGBImage rgb = {
       .format = AVIF_RGB_FORMAT_RGB,
   };
@@ -62,16 +61,15 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     ret = DT_IMAGEIO_FILE_CORRUPTED;
     goto out;
   }
-  avif = &avif_image;
 
   /* This will set the depth from the avif */
-  avifRGBImageSetDefaults(&rgb, avif);
+  avifRGBImageSetDefaults(&rgb, &avif_image);
 
   rgb.format = AVIF_RGB_FORMAT_RGB;
 
   avifRGBImageAllocatePixels(&rgb);
 
-  result = avifImageYUVToRGB(avif, &rgb);
+  result = avifImageYUVToRGB(&avif_image, &rgb);
   if(result != AVIF_RESULT_OK)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to convert `%s' from YUV to RGB: %s\n", filename,
@@ -105,7 +103,6 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   img->buf_dsc.filters = 0u;
   img->flags &= ~DT_IMAGE_RAW;
   img->flags &= ~DT_IMAGE_S_RAW;
-  img->flags |= DT_IMAGE_HDR;
 
   const float max_channel_f = (float)((1 << bit_depth) - 1);
 
@@ -116,6 +113,8 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
   switch(bit_depth) {
   case 12:
   case 10: {
+    img->flags |= DT_IMAGE_HDR;
+    img->flags &= ~DT_IMAGE_LDR;
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
@@ -139,6 +138,8 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     break;
   }
   case 8: {
+    img->flags |= DT_IMAGE_LDR;
+    img->flags &= ~DT_IMAGE_HDR;
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mipbuf, width, height, in, rowbytes, max_channel_f) \
@@ -165,6 +166,15 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     dt_print(DT_DEBUG_IMAGEIO, "[avif_open] invalid bit depth for `%s'\n", filename);
     ret = DT_IMAGEIO_CACHE_FULL;
     goto out;
+  }
+
+  /* Get the ICC profile if available */
+  avifRWData *icc = &avif_image.icc;
+  if(icc->size && icc->data)
+  {
+    img->profile = (uint8_t *)g_malloc0(icc->size);
+    memcpy(img->profile, icc->data, icc->size);
+    img->profile_size = icc->size;
   }
 
   img->loader = LOADER_AVIF;
