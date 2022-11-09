@@ -2454,8 +2454,8 @@ void dt_collection_hint_message(const dt_collection_t *collection)
   {
     message = g_strdup_printf(
       ngettext(
-        "<b>%d</b> image selected of <b>%d</b>",
-        "<b>%d</b> images selected of <b>%d</b>",
+        "<b>%d</b> img sel. of <b>%d</b>",
+        "<b>%d</b> imgs sel. of <b>%d</b>",
         cs),
       cs, c);
   }
