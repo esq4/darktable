@@ -1982,13 +1982,13 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
      lower quality like we do in demosaic and can tune the reconstruction code. So far only used by
      opposed and segmentations algos as they make use of the full image data instead of ROI 
   */
-  gboolean quality_thumb = TRUE;
+  gboolean high_quality = TRUE;
   if(piece->pipe->type & DT_DEV_PIXELPIPE_THUMBNAIL)
   {
     const int level = dt_mipmap_cache_get_matching_size(darktable.mipmap_cache, piece->pipe->final_width, piece->pipe->final_height);
     const char *min = dt_conf_get_string_const("plugins/lighttable/thumbnail_hq_min_level");
     const dt_mipmap_size_t min_s = dt_mipmap_cache_get_min_mip_from_pref(min);
-    quality_thumb = (level >= min_s);
+    high_quality = (level >= min_s);
   }
 
   const float clip
@@ -2007,7 +2007,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
     else
     {
-      _process_linear_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, quality_thumb);
+      _process_linear_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, high_quality);
     }
     return;
   }
@@ -2085,10 +2085,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     case DT_IOP_HIGHLIGHTS_SEGMENTS:
     {
       const dt_segments_mask_t vmode = ((g != NULL) && fullpipe) ? g->segmentation_mask_mode : DT_SEGMENTS_MASK_OFF;
-      const gboolean complete = (piece->pipe->type & (DT_DEV_PIXELPIPE_PREVIEW | DT_DEV_PIXELPIPE_PREVIEW2)) == 0;
 
-      float *tmp = _process_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, complete, quality_thumb);
-      if(tmp && complete && quality_thumb)
+      float *tmp = _process_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, TRUE, TRUE);
+      if(tmp)
         _process_segmentation(piece, ivoid, ovoid, roi_in, roi_out, data, vmode, tmp);
       dt_free_align(tmp);
 
@@ -2118,7 +2117,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     default:
     case DT_IOP_HIGHLIGHTS_OPPOSED:
     {
-      float *tmp = _process_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, FALSE, quality_thumb);
+      float *tmp = _process_opposed(self, piece, ivoid, ovoid, roi_in, roi_out, data, FALSE, high_quality);
       dt_free_align(tmp);
       break;
     }
@@ -2147,7 +2146,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT or DT_IOP_HIGHLIGHTS_SEGMENTS and DT_IOP_HIGHLIGHTS_OPPOSED
   piece->process_cl_ready = ((d->mode == DT_IOP_HIGHLIGHTS_INPAINT) || (d->mode == DT_IOP_HIGHLIGHTS_SEGMENTS) || (d->mode == DT_IOP_HIGHLIGHTS_OPPOSED)) ? 0 : 1;
-  if(d->mode == DT_IOP_HIGHLIGHTS_SEGMENTS) piece->process_tiling_ready = 0;
+
+  if((d->mode == DT_IOP_HIGHLIGHTS_SEGMENTS) || (d->mode == DT_IOP_HIGHLIGHTS_OPPOSED))
+    piece->process_tiling_ready = 0;
 
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
   if(g)
@@ -2159,8 +2160,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
   // check for heavy computing here to give an iop cache hint
   const gboolean heavy = (((d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN) && ((d->iterations * 1<<(2+d->scales)) >= 256))
-                          || (d->mode == DT_IOP_HIGHLIGHTS_SEGMENTS)
-                          || (d->mode == DT_IOP_HIGHLIGHTS_OPPOSED));
+                        || (d->mode == DT_IOP_HIGHLIGHTS_SEGMENTS));
   self->cache_next_important = heavy;
 }
 
@@ -2456,7 +2456,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->candidating = dt_bauhaus_slider_from_params(self, "candidating");
   gtk_widget_set_tooltip_text(g->candidating, _("select inpainting after segmentation analysis.\n"
                                                 "increase to favour candidates found in segmentation analysis, decrease for opposed means inpainting.\n"
-                                                "the mask button shows segments that are concidered to have a good candidate."));
+                                                "the mask button shows segments that are considered to have a good candidate."));
   dt_bauhaus_slider_set_format(g->candidating, "%");
   dt_bauhaus_slider_set_digits(g->candidating, 0);
   dt_bauhaus_widget_set_quad_paint(g->candidating, dtgtk_cairo_paint_showmask, 0, NULL);
