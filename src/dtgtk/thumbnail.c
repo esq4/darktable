@@ -836,10 +836,15 @@ static gboolean _event_main_motion(GtkWidget *widget, GdkEventMotion *event, gpo
   // first, we hide the block overlays after a delay if the mouse hasn't move
   if(thumb->over == DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK)
   {
-    // check current mouse position, if lower-half never display the overlay
-    GtkAllocation allocation;
-    gtk_widget_get_allocation(widget, &allocation);
-    thumb->display_overlay = (event->y < allocation.height / 2.f);
+    if(widget != thumb->w_image)
+      thumb->display_overlay = FALSE;
+    else
+    {
+      // check current mouse position, if lower-half never display the overlay
+      GtkAllocation allocation;
+      gtk_widget_get_allocation(widget, &allocation);
+      thumb->display_overlay = (event->y < allocation.height / 2.f);
+    }
 
     if(thumb->overlay_timeout_id > 0)
     {
@@ -1131,10 +1136,15 @@ static gboolean _event_box_enter_leave(GtkWidget *widget, GdkEventCrossing *even
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   // if we leave for ancestor, that means we leave for blank thumbtable area
-  if(event->type == GDK_LEAVE_NOTIFY && event->detail == GDK_NOTIFY_ANCESTOR) dt_control_set_mouse_over_id(-1);
+  if(event->type == GDK_LEAVE_NOTIFY
+     && event->detail == GDK_NOTIFY_ANCESTOR)
+    dt_control_set_mouse_over_id(-1);
 
-  if(!thumb->mouse_over && event->type == GDK_ENTER_NOTIFY && !thumb->disable_mouseover)
+  if(!thumb->mouse_over
+     && event->type == GDK_ENTER_NOTIFY
+     && !thumb->disable_mouseover)
     dt_control_set_mouse_over_id(thumb->imgid);
+
   _set_flag(widget, GTK_STATE_FLAG_PRELIGHT, (event->type == GDK_ENTER_NOTIFY));
   _set_flag(thumb->w_image_box, GTK_STATE_FLAG_PRELIGHT, (event->type == GDK_ENTER_NOTIFY));
   return FALSE;
@@ -1333,7 +1343,8 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
 
     // determine the overlays parents
     GtkWidget *overlays_parent = thumb->w_main;
-    if(thumb->over == DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK) overlays_parent = thumb->w_image_box;
+    if(thumb->over == DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK)
+      overlays_parent = thumb->w_image_box;
 
     // the infos background
     thumb->w_bottom_eb = gtk_event_box_new();
