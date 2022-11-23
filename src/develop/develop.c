@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2021 darktable developers.
+    Copyright (C) 2009-2022 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2009,7 +2009,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
          || hist->module->legacy_params(hist->module, module_params, labs(modversion),
                                         hist->params, labs(hist->module->version())))
       {
-        fprintf(stderr, "[dev_read_history] module `%s' version mismatch: history is %d, dt %d.\n",
+        fprintf(stderr, "[dev_read_history] module `%s' version mismatch: history is %d, darktable is %d.\n",
                 hist->module->op, modversion, hist->module->version());
 
         const char *fname = dev->image_storage.filename + strlen(dev->image_storage.filename);
@@ -3142,21 +3142,21 @@ void dt_dev_undo_end_record(dt_develop_t *dev)
   }
 }
 
-void dt_dev_image(
+void dt_dev_image_ext(
   uint32_t imgid,
   size_t width,
   size_t height,
   int history_end,
   uint8_t **buf,
   size_t *processed_width,
-  size_t *processed_height)
+  size_t *processed_height,
+  int border_size,
+  gboolean iso_12646)
 {
-  // create a dev
-
   dt_develop_t dev;
   dt_dev_init(&dev, TRUE);
-  dev.border_size = darktable.develop->border_size;
-  dev.iso_12646.enabled = darktable.develop->iso_12646.enabled;
+  dev.border_size = border_size;
+  dev.iso_12646.enabled = iso_12646;
 
   // create the full pipe
 
@@ -3190,6 +3190,24 @@ void dt_dev_image(
   // we take the backbuf, avoid it to be released
 
   dt_dev_cleanup(&dev);
+}
+
+void dt_dev_image(
+  uint32_t imgid,
+  size_t width,
+  size_t height,
+  int history_end,
+  uint8_t **buf,
+  size_t *processed_width,
+  size_t *processed_height)
+{
+  // create a dev
+
+  dt_dev_image_ext(imgid, width, height,
+                   history_end,
+                   buf, processed_width, processed_height,
+                   darktable.develop->border_size,
+                   darktable.develop->iso_12646.enabled);
 }
 
 // clang-format off

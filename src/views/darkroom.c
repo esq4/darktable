@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2021 darktable developers.
+    Copyright (C) 2009-2022 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -460,7 +460,9 @@ void expose(
   static cairo_surface_t *image_surface = NULL;
   static int image_surface_width = 0, image_surface_height = 0, image_surface_imgid = -1;
 
-  if(image_surface_width != width || image_surface_height != height || image_surface == NULL)
+  if(image_surface_width != width
+     || image_surface_height != height
+     || image_surface == NULL)
   {
     // create double-buffered image to draw on, to make modules draw more fluently.
     image_surface_width = width;
@@ -750,7 +752,7 @@ int try_enter(dt_view_t *self)
   if(imgid < 0)
   {
     // fail :(
-    dt_control_log(_("no image to open !"));
+    dt_control_log(_("no image to open!"));
     return 1;
   }
 
@@ -3925,7 +3927,9 @@ static void second_window_expose(GtkWidget *widget, dt_develop_t *dev, cairo_t *
   static cairo_surface_t *image_surface = NULL;
   static int image_surface_width = 0, image_surface_height = 0, image_surface_imgid = -1;
 
-  if(image_surface_width != width || image_surface_height != height || image_surface == NULL)
+  if(image_surface_width != width
+     || image_surface_height != height
+     || image_surface == NULL)
   {
     // create double-buffered image to draw on, to make modules draw more fluently.
     image_surface_width = width;
