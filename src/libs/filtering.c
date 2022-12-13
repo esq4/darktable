@@ -1635,6 +1635,14 @@ static void _topbar_rule_add(GtkWidget *widget, dt_lib_module_t *self)
   const int prop = GPOINTER_TO_INT(dt_bauhaus_combobox_get_data(widget));
   if(prop < 0) return;
 
+  // verify the number of rules
+  if(d->nb_rules >= DT_COLLECTION_MAX_RULES)
+  {
+    dt_control_log(_("you can't add more rules."));
+    dt_bauhaus_combobox_set(widget, 0);
+    return;
+  }
+
   // add the new rule
   g_object_set_data(G_OBJECT(widget), "collect_id", GINT_TO_POINTER(prop));
   g_object_set_data(G_OBJECT(widget), "topbar", GINT_TO_POINTER(1));
@@ -1677,6 +1685,7 @@ static void _topbar_show_pref_menu(dt_lib_module_t *self, GtkWidget *bt)
 
   // the "add new rule" part
   GtkWidget *nr = dt_bauhaus_combobox_new(NULL);
+  dt_bauhaus_combobox_mute_scrolling(nr);
   dt_bauhaus_widget_set_label(nr, NULL, _("new filter"));
   _topbar_populate_rules_combo(nr, d);
   g_signal_connect(G_OBJECT(nr), "value-changed", G_CALLBACK(_topbar_rule_add), self);
@@ -2255,7 +2264,7 @@ void view_enter(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
   _topbar_update(self);
 
   // we change the tooltip of the reset button here, as we are sure the header is defined now
-  gtk_widget_set_tooltip_text(self->reset_button, _("reset\nctrl-click to remove pinned rules too"));
+  gtk_widget_set_tooltip_text(self->reset_button, _("reset\nctrl+click to remove pinned rules too"));
 }
 
 void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct dt_view_t *new_view)
