@@ -24,9 +24,9 @@ You are strongly advised to take a backup first.
 
 Since darktable 4.0:
 
-- Almost ???? commits to darktable+rawspeed
-- ??? pull requests handled
-- ??? issues closed
+- Almost 1408 commits to darktable+rawspeed
+- 408 pull requests handled
+- 59 issues closed
 
 ## The Big Ones
 
@@ -344,14 +344,52 @@ N/A
 
 ### Base Support
 
+- Canon EOS M2
+- Fujifilm FinePix HS50EXR
+- Fujifilm FinePix S6000fd
+- Fujifilm X-H2 (compressed)
+- Fujifilm X-H2S (compressed)
+- Fujifilm X-T30 II (compressed)
+- Fujifilm X-T5 (compressed)
+- Leica D-LUX 6 (4:3, 3:2, 16:9, 1:1)
+- Leica M Monochrom (Typ 246) (dng)
+- Nikon 1 J4 (12bit-compressed)
+- Nikon 1 S1 (12bit-compressed)
+- Nikon Coolpix P7700 (12bit-compressed)
+- Nikon D1H (12bit-uncompressed)
+- Nikon D2H (12bit-compressed, 12bit-uncompressed)
+- Nikon D3S (14bit-compressed, 14bit-uncompressed, 12bit-compressed, 12bit-uncompressed)
+- Nikon Z 9 (14bit-compressed)
+- Olympus E-10
+- Olympus E-M10 Mark IIIs
+- Olympus E-P7
+- Olympus SP570UZ
+- Panasonic DMC-G2 (4:3, 3:2, 16:9, 1:1)
+- Pentax K2000
+- Pentax K200D
+- Ricoh GR II
+- Samsung NX mini
+- Samsung NX10
+- Samsung NX11
+- Samsung NX20
+- Samsung NX2000
+- Samsung NX5
+- Sony DSLR-A380
+- Sony DSLR-A560
+- Sony ILCE-7RM5
 
 ### White Balance Presets
 
+   No data for this release.
 
 ### Noise Profiles
 
-
-### Custom Color Matrices
+- Fujifilm X-E4
+- Fujifilm X-T5
+- Leica M (Typ 240)
+- Nikon Z 9
+- Olympus E-500
+- Panasonic DMC-FZ330
 
 ### Missing Compression Mode Support
 
@@ -363,10 +401,7 @@ N/A
 
 No samples on raw.pixls.us
 
-- Canon EOS M2
 - Creo/Leaf Aptus 22(LF3779)/Hasselblad H1
-- Fujifilm FinePix HS50EXR
-- Fujifilm FinePix S6000fd
 - Fujifilm FinePix S9600fd
 - Fujifilm IS-1
 - GoPro FUSION
@@ -374,36 +409,17 @@ No samples on raw.pixls.us
 - Leaf Aptus-II 5(LI300059)/Mamiya 645 AFD
 - Leaf Credo 60
 - Leaf Credo 80
-- Leica D-LUX 6
 - Minolta DiMAGE 5
-- Nikon 1 J4
-- Nikon 1 S1
-- Nikon Coolpix P7700
-- Nikon D1H
-- Nikon D2H
-- Nikon D3S
-- Olympus E-10
 - Olympus SP320
-- Olympus SP570UZ
 - Panasonic DMC-FX150
-- Panasonic DMC-G2
-- Pentax K200D
-- Pentax K2000
 - Pentax Q10
 - Phase One IQ250
 - Samsung GX10
 - Samsung GX20
-- Samsung NX5
-- Samsung NX10
-- Samsung NX11
-- Samsung NX20
-- Samsung NX2000
 - Samsung EK-GN120
 - Samsung SM-G920F
 - Samsung SM-G935F
 - Sinar Hy6/ Sinarback eXact
-- Sony DSLR-A380
-- Sony DSLR-A560
 - ST Micro STV680
 
 ## Translations
