@@ -108,6 +108,7 @@ typedef struct dt_iop_crop_gui_data_t
   gboolean shift_hold;
   gboolean ctrl_hold;
   gboolean preview_ready;
+  gint64 focus_time;
   dt_gui_collapsible_section_t cs;
 } dt_iop_crop_gui_data_t;
 
@@ -383,22 +384,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 }
 
+
 static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   if(!g) return; // seems that sometimes, g can be undefined for some reason...
   g->preview_ready = TRUE;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
-  if(self->dev->gui_module != self)
-  {
-    dt_image_update_final_size(self->dev->preview_pipe->output_imgid);
-  }
+
   // force max size to be recomputed
   g->clip_max_pipe_hash = 0;
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
+  darktable.develop->history_postpone_invalidate = in && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS;
+
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
   if(self->enabled)
@@ -430,6 +431,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(in)
     g->preview_ready = TRUE;
+
+  g->focus_time = g_get_monotonic_time();
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -985,13 +988,6 @@ static void _event_key_swap(dt_iop_module_t *self)
   dt_control_queue_redraw_center();
 }
 
-static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
-{
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
-  _commit_box(self, g, p);
-}
-
 static void _event_aspect_flip(GtkWidget *button, dt_iop_module_t *self)
 {
   _event_key_swap(self);
@@ -1160,9 +1156,6 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->aspect_presets), "quad-pressed", G_CALLBACK(_event_aspect_flip), self);
   gtk_box_pack_start(GTK_BOX(box_enabled), g->aspect_presets, TRUE, TRUE, 0);
 
-  GtkWidget *commit = dt_action_button_new((dt_lib_module_t *)self, N_("commit"), _event_commit_clicked, self, _("commit changes"), GDK_KEY_Return, 0);
-  gtk_box_pack_end(GTK_BOX(box_enabled), commit, TRUE, TRUE, 0);
-
   // we put margins values under an expander
   dt_gui_new_collapsible_section
     (&g->cs,
@@ -1330,12 +1323,25 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g_object_unref(layout);
   }
 
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
+  double alpha = CLAMP(1.0 - (g_get_monotonic_time() - g->focus_time) / 2e6f, 0.0, 1.0);
+  dt_draw_set_color_overlay(cr, TRUE, alpha);
+  const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
+
+  cairo_move_to(cr, g->clip_x * wd + border, g->clip_y * ht);
+  cairo_line_to(cr, g->clip_x * wd + border, (g->clip_y + g->clip_h) * ht);
+  cairo_move_to(cr, (g->clip_x + g->clip_w) * wd - border, g->clip_y * ht);
+  cairo_line_to(cr, (g->clip_x + g->clip_w) * wd - border, (g->clip_y + g->clip_h) * ht);
+  cairo_move_to(cr, g->clip_x * wd, g->clip_y * ht + border);
+  cairo_line_to(cr, (g->clip_x + g->clip_w) * wd, g->clip_y * ht + border);
+  cairo_move_to(cr, g->clip_x * wd, (g->clip_y + g->clip_h) * ht - border);
+  cairo_line_to(cr, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht - border);
+  cairo_stroke(cr);
+
   // draw crop area guides
   dt_guides_draw(cr, g->clip_x * wd, g->clip_y * ht, g->clip_w * wd, g->clip_h * ht, zoom_scale);
 
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 1.0);
-  const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
+  dt_draw_set_color_overlay(cr, TRUE, 1.0);
 
   const _grab_region_t grab = g->cropping ? g->cropping : _gui_get_grab(pzx, pzy, g, border, wd, ht);
 
@@ -1575,7 +1581,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
 
     // switch module on already, other code depends in this:
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
+    if(!self->enabled) dt_dev_add_history_item(darktable.develop, self, TRUE);
 
     g->button_down_x = x;
     g->button_down_y = y;
@@ -1624,6 +1630,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     g->clip_w = 1.0f;
     g->clip_h = 1.0f;
     _aspect_apply(self, GRAB_BOTTOM_RIGHT);
+    gui_changed(self, NULL, NULL);
     return 1;
   }
   else

@@ -88,7 +88,7 @@ static inline dt_develop_blend_colorspace_t _blend_default_module_blend_colorspa
 
 dt_develop_blend_colorspace_t dt_develop_blend_default_module_blend_colorspace(dt_iop_module_t *module)
 {
-  const gboolean is_scene_referred = dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred");
+  const gboolean is_scene_referred = dt_is_scene_referred();
   return _blend_default_module_blend_colorspace(module, is_scene_referred);
 }
 
@@ -380,7 +380,7 @@ static void _develop_blend_process_feather(const float *const guide, float *cons
   float *const restrict mask_bak = dt_alloc_align_float(width * height);
   if(mask_bak)
   {
-    memcpy(mask_bak, mask, sizeof(float) * width * height);
+    dt_iop_image_copy_by_size(mask_bak, mask, width, height, 1);
     guided_filter(guide, mask_bak, mask, width, height, ch, w, sqrt_eps, guide_weight, 0.f, 1.f);
     dt_free_align(mask_bak);
   }
@@ -1907,4 +1907,3 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

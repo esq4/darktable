@@ -1,6 +1,6 @@
 /*
   This file is part of darktable,
-  Copyright (C) 2016-2022 darktable developers.
+  Copyright (C) 2016-2023 darktable developers.
 
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -93,8 +93,6 @@
 
 // define to get debugging output
 #undef ASHIFT_DEBUG
-
-#define SQR(a) ((a) * (a))
 
 // maximum number of drawn lines that can be saved in parameters
 // any change in this value needs to upgrade parameters version !
@@ -1343,22 +1341,6 @@ error:
   return FALSE;
 }
 
-// XYZ -> sRGB matrix
-static void XYZ_to_sRGB(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t sRGB)
-{
-  sRGB[0] =  3.1338561f * XYZ[0] - 1.6168667f * XYZ[1] - 0.4906146f * XYZ[2];
-  sRGB[1] = -0.9787684f * XYZ[0] + 1.9161415f * XYZ[1] + 0.0334540f * XYZ[2];
-  sRGB[2] =  0.0719453f * XYZ[0] - 0.2289914f * XYZ[1] + 1.4052427f * XYZ[2];
-}
-
-// sRGB -> XYZ matrix
-static void sRGB_to_XYZ(const dt_aligned_pixel_t sRGB, dt_aligned_pixel_t XYZ)
-{
-  XYZ[0] = 0.4360747f * sRGB[0] + 0.3850649f * sRGB[1] + 0.1430804f * sRGB[2];
-  XYZ[1] = 0.2225045f * sRGB[0] + 0.7168786f * sRGB[1] + 0.0606169f * sRGB[2];
-  XYZ[2] = 0.0139322f * sRGB[0] + 0.0971045f * sRGB[1] + 0.7141733f * sRGB[2];
-}
-
 // detail enhancement via bilateral grid (function arguments in and out may represent identical buffers)
 static int detail_enhance(const float *const in, float *const out, const int width, const int height)
 {
@@ -1381,7 +1363,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
   for(size_t index = 0; index < 4*npixels; index += 4)
   {
     dt_aligned_pixel_t XYZ;
-    sRGB_to_XYZ(in + index, XYZ);
+    dt_Rec709_to_XYZ_D50(in + index, XYZ);  // convert linear sRBG to XYZ
     dt_XYZ_to_Lab(XYZ, out + index);
   }
 
@@ -1409,7 +1391,7 @@ static int detail_enhance(const float *const in, float *const out, const int wid
   {
     dt_aligned_pixel_t XYZ;
     dt_Lab_to_XYZ(out + index, XYZ);
-    XYZ_to_sRGB(XYZ, out + index);
+    dt_XYZ_to_linearRGB(XYZ, out + index);
   }
 
   return success;
@@ -2495,7 +2477,7 @@ static double crop_fitness(double *params, void *data)
       I[1] /= I[2];
 
       // calculate distance from I to P
-      const float d2 = SQR(P[0] - I[0]) + SQR(P[1] - I[1]);
+      const float d2 = sqrf(P[0] - I[0]) + sqrf(P[1] - I[1]);
 
       // the minimum distance over all intersection points
       d2min = MIN(d2min, d2);
@@ -2768,7 +2750,7 @@ static void crop_adjust(dt_iop_module_t *module, const dt_iop_ashift_params_t *c
       I[1] /= I[2];
 
       // calculate distance from I to P
-      const float d2 = SQR(P[0] - I[0]) + SQR(P[1] - I[1]);
+      const float d2 = sqrf(P[0] - I[0]) + sqrf(P[1] - I[1]);
 
       // the minimum distance over all intersection points
       d2min = MIN(d2min, d2);
@@ -3230,6 +3212,7 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
 
   // finally apply cropping
   do_crop(module, p);
+  dt_dev_invalidate_all(darktable.develop);
 
   ++darktable.gui->reset;
   dt_bauhaus_slider_set(g->rotation, p->rotation);
@@ -3848,7 +3831,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // we draw the cropping area; we need x_off/y_off/width/height which is only available
   // after g->buf has been processed
-  if(g->buf && self->enabled)
+  if(g->buf && self->enabled && gui_has_focus(self))
   {
     // roi data of the preview pipe input buffer
 
@@ -4023,51 +4006,54 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     pzx += 0.5f;
     pzy += 0.5f;
 
-    PangoRectangle ink;
-    PangoLayout *layout;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-    pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
-    layout = pango_cairo_create_layout(cr);
-    pango_layout_set_font_description(layout, desc);
     const float bzx = g->straighten_x + .5f, bzy = g->straighten_y + .5f;
-    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d, 0, 2.0 * M_PI);
+    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
-    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d, 0, 2.0 * M_PI);
+    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
     cairo_move_to(cr, bzx * wd, bzy * ht);
     cairo_line_to(cr, pzx * wd, pzy * ht);
     cairo_stroke(cr);
 
-    // show rotation angle
     float dx = pzx * wd - bzx * wd, dy = pzy * ht - bzy * ht;
-    if(dx < 0)
+    if(sqrt(dx * dx + dy * dy) * zoom_scale >= DT_PIXEL_APPLY_DPI(25))
     {
-      dx = -dx;
-      dy = -dy;
-    }
-    float angle = atan2f(dy, dx);
-    angle = angle * 180 / M_PI;
-    if(angle > 45.0) angle -= 90;
-    if(angle < -45.0) angle += 90;
+      // show rotation angle
+      if(dx < 0)
+      {
+        dx = -dx;
+        dy = -dy;
+      }
+      float angle = atan2f(dy, dx);
+      angle = angle * 180 / M_PI;
+      if(angle > 45.0) angle -= 90;
+      if(angle < -45.0) angle += 90;
 
-    char view_angle[16];
-    view_angle[0] = '\0';
-    snprintf(view_angle, sizeof(view_angle), "%.2f°", angle);
-    pango_layout_set_text(layout, view_angle, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    const float text_w = ink.width;
-    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / zoom_scale;
-    const float margin = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
-    cairo_set_source_rgba(cr, .5, .5, .5, .9);
-    const float xp = pzx * wd + DT_PIXEL_APPLY_DPI(20) / zoom_scale;
-    const float yp = pzy * ht - ink.height;
-    dt_gui_draw_rounded_rectangle(cr, text_w + 2 * margin, text_h + 2 * margin, xp - margin, yp - margin);
-    cairo_set_source_rgba(cr, .7, .7, .7, .7);
-    cairo_move_to(cr, xp, yp);
-    pango_cairo_show_layout(cr, layout);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
+      PangoRectangle ink;
+      PangoLayout *layout;
+      PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+      pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
+      pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
+      layout = pango_cairo_create_layout(cr);
+      pango_layout_set_font_description(layout, desc);
+      char view_angle[16];
+      view_angle[0] = '\0';
+      snprintf(view_angle, sizeof(view_angle), "%.2f°", angle);
+      pango_layout_set_text(layout, view_angle, -1);
+      pango_layout_get_pixel_extents(layout, &ink, NULL);
+      const float text_w = ink.width;
+      const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / zoom_scale;
+      const float margin = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
+      cairo_set_source_rgba(cr, .5, .5, .5, .9);
+      const float xp = pzx * wd + DT_PIXEL_APPLY_DPI(20) / zoom_scale;
+      const float yp = pzy * ht - ink.height;
+      dt_gui_draw_rounded_rectangle(cr, text_w + 2 * margin, text_h + 2 * margin, xp - margin, yp - margin);
+      cairo_set_source_rgba(cr, .7, .7, .7, .7);
+      cairo_move_to(cr, xp, yp);
+      pango_cairo_show_layout(cr, layout);
+      pango_font_description_free(desc);
+      g_object_unref(layout);
+    }
     cairo_restore(cr);
   }
 
@@ -4802,6 +4788,9 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     float dx = pts[0] - pts[2];
     float dy = pts[1] - pts[3];
+    if(sqrt(dx * dx + dy * dy) /* zoom_scale */ < DT_PIXEL_APPLY_DPI(25))
+      return TRUE;
+
     if(dx < 0)
     {
       dx = -dx;
@@ -4822,8 +4811,9 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     if(a < -180.0) a += 360.0;
     if(a > 180.0) a -= 360.0;
 
-    a -= dt_bauhaus_slider_get(g->rotation);
-    dt_bauhaus_slider_set(g->rotation, -a);
+    float n = dt_bauhaus_slider_get(g->rotation) - a;
+    dt_bauhaus_slider_set(g->rotation, n);
+    dt_toast_log(_("rotation adjusted by %3.1f° to %3.1f°"), -a, n);
     return TRUE;
   }
 
@@ -5020,6 +5010,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 #ifdef ASHIFT_DEBUG
   model_probe(self, p, g->lastfit);
 #endif
+
+  if(w != g->cropmode) dt_dev_invalidate_all(self->dev);
   if(g->buf_height > 0 && g->buf_width > 0)
   {
     do_crop(self, p);
@@ -5043,6 +5035,7 @@ void gui_reset(struct dt_iop_module_t *self)
   _do_clean_structure(self, p, FALSE);
   _gui_update_structure_states(self, NULL);
   // force to reprocess the preview, otherwise the buffer is ko
+  dt_dev_invalidate_all(self->dev);
   dt_dev_pixelpipe_flush_caches(self->dev->preview_pipe);
 }
 
@@ -5250,6 +5243,7 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
     {
       // module is not enabled -> invoke it and queue the job to be processed once
       // the preview image is ready
+      dt_dev_invalidate_all(self->dev);
       g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE;
       g->jobparams = enhance;
     }
@@ -5287,6 +5281,7 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
       _swap_shadow_crop_box(p, g); // temporarily update real crop box
       dt_dev_add_history_item(darktable.develop, self, TRUE);
       _swap_shadow_crop_box(p, g);
+      dt_dev_invalidate_all(darktable.develop);
       break;
 
     case ASHIFT_JOBCODE_GET_STRUCTURE_QUAD:
@@ -5523,17 +5518,10 @@ static gboolean _event_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *sel
   return FALSE;
 }
 
-static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *self)
-{
-  if(self->dev->gui_module != self)
-  {
-    dt_image_update_final_size(self->dev->preview_pipe->output_imgid);
-  }
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
-}
-
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
+  darktable.develop->history_postpone_invalidate = in && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS;
+
   if(self->enabled)
   {
     dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
@@ -5545,9 +5533,6 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     }
     else
     {
-      // once the pipe is recomputed, we want to update final sizes
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                      G_CALLBACK(_event_preview_updated_callback), self);
       _commit_crop_box(p, g);
     }
   }
@@ -5598,6 +5583,7 @@ static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *even
   {
     // module is not enabled -> invoke it and queue the job to be processed once
     // the preview image is ready
+    dt_dev_invalidate_all(self->dev);
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
   }
 
@@ -5623,6 +5609,7 @@ static int _event_structure_lines_clicked(GtkWidget *widget, GdkEventButton *eve
   {
     // module is not enabled -> invoke it and queue the job to be processed once
     // the preview image is ready
+    dt_dev_invalidate_all(self->dev);
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
   }
 
@@ -5733,7 +5720,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->widget = main_box;
 
-  GtkWidget *helpers = dt_ui_section_label_new(_("perspective"));
+  GtkWidget *helpers = dt_ui_section_label_new(C_("section", "perspective"));
   gtk_box_pack_start(GTK_BOX(self->widget), helpers, TRUE, TRUE, 0);
 
   GtkGrid *auto_grid = GTK_GRID(gtk_grid_new());
@@ -5831,10 +5818,15 @@ void gui_init(struct dt_iop_module_t *self)
   /* add signal handler for preview pipe finish to redraw the overlay */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_preview_callback), self);
+
+  darktable.develop->proxy.rotate = self;
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
+  if(darktable.develop->proxy.rotate == self)
+    darktable.develop->proxy.rotate = NULL;
+
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
