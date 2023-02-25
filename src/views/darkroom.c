@@ -3477,7 +3477,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           && darktable.control->button_down_which == 3
           && dev->proxy.rotate)
   {
-    dev->proxy.rotate->mouse_moved(dev->proxy.rotate, x, y, pressure, which);
+    //ab pkm dev->proxy.rotate->mouse_moved(dev->proxy.rotate, x, y, pressure, which);
   }
 }
 
@@ -3513,7 +3513,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   }
   // rotate
   if(which == 3 && dev->proxy.rotate)
-    handled = dev->proxy.rotate->button_released(dev->proxy.rotate, x, y, which, state);
+    //ab pkm handled = dev->proxy.rotate->button_released(dev->proxy.rotate, x, y, which, state);
   if(handled) return handled;
   // masks
   if(dev->form_visible)
@@ -3555,8 +3555,8 @@ int button_pressed(dt_view_t *self,
       dt_control_change_cursor(GDK_HAND1);
       return 1;
     }
-    else if(which == 3 && dev->proxy.rotate)
-      return dev->proxy.rotate->button_pressed(dev->proxy.rotate, x, y, pressure, which, type, state);
+    //ab pkm else if(which == 3 && dev->proxy.rotate)
+      //ab pkm return dev->proxy.rotate->button_pressed(dev->proxy.rotate, x, y, pressure, which, type, state);
   }
 
   int handled = 0;
@@ -3756,8 +3756,8 @@ int button_pressed(dt_view_t *self,
     dt_control_navigation_redraw();
     return 1;
   }
-  if(which == 3 && dev->proxy.rotate)
-    return dev->proxy.rotate->button_pressed(dev->proxy.rotate, x, y, pressure, which, type, state);
+  //ab pkm if(which == 3 && dev->proxy.rotate)
+    //ab pkm return dev->proxy.rotate->button_pressed(dev->proxy.rotate, x, y, pressure, which, type, state);
 
   return 0;
 }
@@ -3856,6 +3856,7 @@ static float _calculate_new_scroll_zoom_tscale(const int up,
   return tscalenew;
 }
 
+
 void scrolled(dt_view_t *self, double x, double y, int up, int state)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -3866,6 +3867,18 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   const int32_t height_i = self->height;
   if(width_i > capwd) x += (capwd - width_i) * .5f;
   if(height_i > capht) y += (capht - height_i) * .5f;
+
+  //ab pkm
+  if(!dt_iop_color_picker_is_visible(dev))
+  {
+    if(dt_key_modifier_state() & GDK_BUTTON3_MASK)
+    {
+      dt_dev_jump_image(dev, up ? -1 :  1, TRUE);
+      return;
+    }
+  }
+  //ba pkm
+
 
   int handled = 0;
   // masks
