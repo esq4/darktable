@@ -403,6 +403,8 @@ static void _compute_correction(dt_iop_module_t *self,
   *correction = p->deflicker_target_level - ev;
 }
 
+static gboolean _show_computed(gpointer user_data);
+
 static void _process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t*)self->gui_data;
@@ -434,6 +436,8 @@ static void _process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       dt_iop_gui_enter_critical_section(self);
       g->deflicker_computed_exposure = exposure;
       dt_iop_gui_leave_critical_section(self);
+
+      g_idle_add(_show_computed, self);
     }
   }
 
@@ -499,11 +503,8 @@ void process(struct dt_iop_module_t *self,
   {
     out[k] = (in[k] - black) * scale;
   }
-
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
-    dt_iop_alpha_copy(i, o, roi_out->width, roi_out->height);
-
-  for(int k = 0; k < 3; k++) piece->pipe->dsc.processed_maximum[k] *= d->scale;
+  for(int k = 0; k < 3; k++)
+    piece->pipe->dsc.processed_maximum[k] *= d->scale;
 }
 
 
@@ -886,10 +887,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 }
 
 
-static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
+static gboolean _show_computed(gpointer user_data)
 {
-  if(darktable.gui->reset) return FALSE;
-
+  dt_iop_module_t *self = user_data;
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
   dt_iop_gui_enter_critical_section(self);
@@ -897,16 +897,14 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
   {
     gchar *str = g_strdup_printf(_("%.2f EV"), g->deflicker_computed_exposure);
 
-    ++darktable.gui->reset;
     gtk_label_set_text(g->deflicker_used_EC, str);
-    --darktable.gui->reset;
 
     g_free(str);
   }
   dt_iop_gui_leave_critical_section(self);
-  return FALSE;
-}
 
+  return G_SOURCE_REMOVE;
+}
 
 static gboolean _target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
@@ -1101,10 +1099,12 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->mode_stack), TRUE, TRUE, 0);
 
   g->black = dt_bauhaus_slider_from_params(self, "black");
-  gtk_widget_set_tooltip_text(g->black, _("adjust the black level to unclip negative RGB values.\n"
-                                          "you should never use it to add more density in blacks!\n"
-                                          "if poorly set, it will clip near-black colors out of gamut\n"
-                                          "by pushing RGB values into negatives."));
+  gtk_widget_set_tooltip_text
+    (g->black,
+     _("adjust the black level to unclip negative RGB values.\n"
+       "you should never use it to add more density in blacks!\n"
+       "if poorly set, it will clip near-black colors out of gamut\n"
+       "by pushing RGB values into negatives."));
   dt_bauhaus_slider_set_digits(g->black, 4);
   dt_bauhaus_slider_set_soft_range(g->black, -0.1, 0.1);
 
@@ -1114,16 +1114,24 @@ void gui_init(struct dt_iop_module_t *self)
      _("spot exposure mapping"),
      GTK_BOX(self->widget));
 
-  gtk_widget_set_tooltip_text(g->cs.expander, _("define a target brightness, in terms of exposure, for a selected region of the image (the control sample), which you then match against the same target brightness in other images. the control sample can either be a critical part of your subject or a non-moving and consistently-lit surface over your series of images."));
+  gtk_widget_set_tooltip_text
+    (g->cs.expander,
+     _("define a target brightness, in terms of exposure,\n"
+       " for a selected region of the image (the control sample),\n"
+       " which you then match against the same target brightness\n"
+       " in other images. the control sample can either\n"
+       " be a critical part of your subject or a non-moving and\n"
+       " consistently-lit surface over your series of images."));
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(g->spot_mode, self, NULL, N_("spot mode"),
-                                _("\"correction\" automatically adjust exposure\n"
-                                  "such that the input lightness is mapped to the target.\n"
-                                  "\"measure\" simply shows how an input color is mapped by the exposure compensation\n"
-                                  "and can be used to define a target."),
-                                0, _spot_settings_changed_callback, self,
-                                N_("correction"),
-                                N_("measure"));
+  DT_BAUHAUS_COMBOBOX_NEW_FULL
+    (g->spot_mode, self, NULL, N_("spot mode"),
+     _("\"correction\" automatically adjust exposure\n"
+       "such that the input lightness is mapped to the target.\n"
+       "\"measure\" simply shows how an input color is mapped by\n"
+       " the exposure compensation and can be used to define a target."),
+     0, _spot_settings_changed_callback, self,
+     N_("correction"),
+     N_("measure"));
   gtk_box_pack_start(GTK_BOX(g->cs.container), GTK_WIDGET(g->spot_mode), TRUE, TRUE, 0);
 
   GtkWidget *hhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
@@ -1171,8 +1179,6 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(g->cs.container), GTK_WIDGET(hhbox), FALSE, FALSE, 0);
 
-  g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_draw), self);
-
   /* register hooks with current dev so that  histogram
      can interact with this module.
   */
@@ -1193,6 +1199,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   dt_free_align(g->deflicker_histogram);
   g->deflicker_histogram = NULL;
+
+  g_idle_remove_by_data(self);
 
   IOP_GUI_FREE;
 }

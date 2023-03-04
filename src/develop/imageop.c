@@ -307,8 +307,8 @@ void dt_iop_default_init(dt_iop_module_t *module)
       break;
     default:
       dt_print(DT_DEBUG_PARAMS,
-               "in `%s' unsupported introspection type \"%s\" encountered"
-               " in dt_iop_default_init (field %s)\n",
+               "[dt_iop_default_init] in `%s' unsupported introspection type \"%s\" encountered"
+               " in (field %s)\n",
                module->op, i->header.type_name, i->header.field_name);
       break;
     }
@@ -860,12 +860,6 @@ static gboolean _rename_module_key_press(GtkWidget *entry,
 
        const gchar *name = gtk_entry_get_text(GTK_ENTRY(entry));
 
-      // restore saved 1st character of instance name (without it the
-      // same name wouls still produce unnecessary copy + add history
-      // item)
-      module->multi_name[0] = module->multi_name[sizeof(module->multi_name) - 1];
-      module->multi_name[sizeof(module->multi_name) - 1] = 0;
-
       if(g_strcmp0(module->multi_name, name) != 0)
       {
         g_strlcpy(module->multi_name, name, sizeof(module->multi_name));
@@ -892,16 +886,16 @@ static gboolean _rename_module_key_press(GtkWidget *entry,
   }
   else if(event->keyval == GDK_KEY_Escape)
   {
-    // restore saved 1st character of instance name
-    module->multi_name[0] = module->multi_name[sizeof(module->multi_name) - 1];
-    module->multi_name[sizeof(module->multi_name) - 1] = 0;
-
     ended = 1;
   }
 
   if(ended)
   {
-    g_signal_handlers_disconnect_by_func(entry, G_CALLBACK(_rename_module_key_press), module);
+    gtk_widget_show(module->instance_name);
+
+    g_signal_handlers_disconnect_by_func(entry,
+                                         G_CALLBACK(_rename_module_key_press),
+                                         module);
     gtk_widget_destroy(entry);
     dt_iop_show_hide_header_buttons(module, NULL, TRUE, FALSE); // after removing entry
     dt_iop_gui_update_header(module);
@@ -940,10 +934,8 @@ void dt_iop_gui_rename_module(dt_iop_module_t *module)
   gtk_entry_set_max_length(GTK_ENTRY(entry), sizeof(module->multi_name) - 1);
   gtk_entry_set_text(GTK_ENTRY(entry), module->multi_name);
 
-  // remove instance name but save 1st character in case of escape
-  module->multi_name[sizeof(module->multi_name) - 1] = module->multi_name[0];
-  module->multi_name[0] = 0;
-  dt_iop_gui_update_header(module);
+  //  hide module instance name as we need the space for the entry
+  gtk_widget_hide(module->instance_name);
 
   gtk_widget_add_events(entry, GDK_FOCUS_CHANGE_MASK);
   g_signal_connect(entry, "key-press-event", G_CALLBACK(_rename_module_key_press), module);
@@ -1083,7 +1075,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
   char tooltip[512];
   gchar *module_label = dt_history_item_get_name(module);
   snprintf(tooltip, sizeof(tooltip),
-           module->enabled ? _("%s is switched on") : _("%s is switched off"),
+           module->enabled ? _("'%s' is switched on") : _("'%s' is switched off"),
            module_label);
   g_free(module_label);
   gtk_widget_set_tooltip_text(GTK_WIDGET(togglebutton), tooltip);
@@ -1129,31 +1121,60 @@ static void _iop_panel_name(dt_iop_module_t *module)
 {
   // IOP instance name if any
 
+  // do not mess with panel name if we are not on the top of the history
+  if(darktable.develop->history_end < g_list_length(darktable.develop->history))
+    return;
+
   GtkLabel *iname = GTK_LABEL(module->instance_name);
+  gchar *new_label = NULL;
+  gchar *multi_name = NULL;
+  gboolean changed = FALSE;
 
   if(module->has_trouble && module->enabled)
   {
-    gtk_label_set_text(iname, "⚠");
+    new_label = g_strdup("⚠");
+    multi_name = g_strdup("⚠");
     gtk_widget_set_name(GTK_WIDGET(iname), "iop-module-name-error");
   }
   else
   {
     if(!module->multi_name[0] || strcmp(module->multi_name, "0") == 0)
     {
-      gtk_label_set_text(iname, "");
+      new_label = g_strdup("");
+      multi_name = g_strdup("");
       gtk_widget_set_name(GTK_WIDGET(iname), "");
     }
     else
     {
-      gchar *name = g_strdup_printf("• %s", module->multi_name);
-      gtk_label_set_text(iname, name);
-      g_free(name);
+      new_label = g_strdup_printf("• %s", module->multi_name);
+      multi_name = g_strdup(module->multi_name);
       gtk_widget_set_name(GTK_WIDGET(iname), "iop-module-name");
     }
   }
 
-  gtk_label_set_ellipsize(iname, PANGO_ELLIPSIZE_MIDDLE);
-  g_object_set(G_OBJECT(iname), "xalign", 0.0, (gchar *)0);
+  gtk_label_set_text(iname, new_label);
+
+  // update corresponding history (last entry with same multi_priority)
+
+  for(const GList *history = g_list_last(darktable.develop->history);
+      history;
+      history = g_list_previous(history))
+  {
+    dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)(history->data);
+    if(hitem->module == module
+       && hitem->module->multi_priority == module->multi_priority)
+    {
+      changed = strcmp(hitem->multi_name, multi_name);
+      g_strlcpy(hitem->multi_name, multi_name, sizeof(hitem->multi_name));
+      break;
+    }
+  }
+
+  g_free(multi_name);
+  g_free(new_label);
+
+  if(changed)
+    dt_dev_add_history_item(darktable.develop, module, FALSE);
 }
 
 void dt_iop_gui_update_header(dt_iop_module_t *module)
@@ -1334,7 +1355,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
 
       // we found an old params version.  Update the database with it.
 
-      dt_print(DT_DEBUG_ALWAYS,
+      dt_print(DT_DEBUG_PARAMS,
                "[imageop_init_presets] found version %d for '%s' preset '%s'\n",
         old_params_version, module_so->op, name);
 
@@ -1695,7 +1716,7 @@ void dt_iop_commit_blend_params(dt_iop_module_t *module,
     for(GList *iter = module->dev->iop; iter; iter = g_list_next(iter))
     {
       dt_iop_module_t *m = (dt_iop_module_t *)iter->data;
-      if(!strcmp(m->op, blendop_params->raster_mask_source))
+      if(dt_iop_module_is(m->so, blendop_params->raster_mask_source))
       {
         if(m->multi_priority == blendop_params->raster_mask_instance)
         {
@@ -1715,7 +1736,8 @@ void dt_iop_commit_blend_params(dt_iop_module_t *module,
 
 gboolean _iop_validate_params(dt_introspection_field_t *field,
                               gpointer params,
-                              const gboolean report)
+                              const gboolean report,
+                              const char *name)
 {
   dt_iop_params_t *p = (dt_iop_params_t *)((uint8_t *)params + field->header.offset);
 
@@ -1728,7 +1750,7 @@ gboolean _iop_validate_params(dt_introspection_field_t *field,
     {
       dt_introspection_field_t *entry = field->Struct.fields[i];
 
-      all_ok &= _iop_validate_params(entry, params, report);
+      all_ok &= _iop_validate_params(entry, params, report, name);
     }
     break;
   case DT_INTROSPECTION_TYPE_UNION:
@@ -1737,7 +1759,7 @@ gboolean _iop_validate_params(dt_introspection_field_t *field,
     {
       dt_introspection_field_t *entry = field->Union.fields[i];
 
-      if(_iop_validate_params(entry, params, report && i == 0))
+      if(_iop_validate_params(entry, params, report && i == 0, name))
       {
         all_ok = TRUE;
         break;
@@ -1751,9 +1773,9 @@ gboolean _iop_validate_params(dt_introspection_field_t *field,
       {
         if(report)
           dt_print(DT_DEBUG_ALWAYS,
-                   "validation check failed in _iop_validate_params"
-                   " for type \"%s\"; string not null terminated.\n",
-                   field->header.type_name);
+                   "[iop_validate_params] `%s' failed for not null terminated type string"
+                   " \"%s\";\n",
+                   name, field->header.type_name);
         all_ok = FALSE;
       }
     }
@@ -1763,12 +1785,12 @@ gboolean _iop_validate_params(dt_introspection_field_t *field,
           i < field->Array.count;
           i++, item_offset += field->Array.field->header.size)
       {
-        if(!_iop_validate_params(field->Array.field, (uint8_t *)params + item_offset, report))
+        if(!_iop_validate_params(field->Array.field, (uint8_t *)params + item_offset, report, name))
         {
           if(report)
-            dt_print(DT_DEBUG_ALWAYS, "validation check failed in"
-                     " _iop_validate_params for type \"%s\", for array element \"%d\"\n",
-                     field->header.type_name, i);
+            dt_print(DT_DEBUG_ALWAYS, "[iop_validate_params] `%s' failed"
+                     " for type \"%s\", for array element \"%d\"\n",
+                     name, field->header.type_name, i);
           all_ok = FALSE;
           break;
         }
@@ -1821,17 +1843,17 @@ gboolean _iop_validate_params(dt_introspection_field_t *field,
     break;
   default:
     dt_print(DT_DEBUG_ALWAYS,
-             "unsupported introspection type \"%s\" encountered"
-             " in _iop_validate_params (field %s)\n",
-             field->header.type_name, field->header.name);
+             "[iop_validate_params] `%s' unsupported introspection type \"%s\" encountered,"
+             " (field %s)\n",
+             name, field->header.type_name, field->header.name);
     all_ok = FALSE;
     break;
   }
 
   if(!all_ok && report)
     dt_print(DT_DEBUG_ALWAYS,
-             "validation check failed in _iop_validate_params for type \"%s\"%s%s\n",
-             field->header.type_name,
+             "[iop_validate_params] `%s' failed for type \"%s\"%s%s\n",
+             name, field->header.type_name,
              *field->header.name ? ", field: " : "",
              field->header.name);
 
@@ -1895,8 +1917,7 @@ void dt_iop_commit_params(dt_iop_module_t *module,
     piece->process_tiling_ready = 1;
 
   if(darktable.unmuted & DT_DEBUG_PARAMS && module->so->get_introspection())
-    _iop_validate_params(module->so->get_introspection()->field, params, TRUE);
-
+    _iop_validate_params(module->so->get_introspection()->field, params, TRUE, module->so->op);
   module->commit_params(module, params, pipe, piece);
 
   // adjust the label to match presets if possible or otherwise the default
@@ -2353,7 +2374,7 @@ static void _header_size_callback(GtkWidget *widget,
         }
         else
         {
-          dt_print(DT_DEBUG_ALWAYS, "unknown darkroom/ui/hide_header_buttons option %s\n", config);
+          dt_print(DT_DEBUG_ALWAYS, "[header size callback] unknown darkroom/ui/hide_header_buttons option %s\n", config);
         }
       }
     }
@@ -2703,6 +2724,8 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   module->instance_name = gtk_label_new("");
   hw[IOP_MODULE_INSTANCE_NAME] = module->instance_name;
   gtk_widget_set_name(module->instance_name, "iop-module-name");
+  gtk_label_set_ellipsize(GTK_LABEL(module->instance_name), PANGO_ELLIPSIZE_MIDDLE);
+  g_object_set(G_OBJECT(module->instance_name), "xalign", 0.0, (gchar *)0);
 
   if((module->flags() & IOP_FLAGS_DEPRECATED) && module->deprecated_msg())
     gtk_widget_set_tooltip_text(lab, module->deprecated_msg());
@@ -2759,7 +2782,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   gchar *module_label = dt_history_item_get_name(module);
   snprintf(tooltip, sizeof(tooltip),
-           module->enabled ? _("%s is switched on") : _("%s is switched off"),
+           module->enabled ? _("'%s' is switched on") : _("'%s' is switched off"),
            module_label);
   g_free(module_label);
   gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_SWITCH]), tooltip);
@@ -2876,7 +2899,7 @@ dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op)
   for(GList *modules = iop_list; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
-    if(strcmp(mod->op, op) == 0)
+    if(dt_iop_module_is(mod->so, op))
     {
       result = mod;
       break;
@@ -2897,7 +2920,8 @@ int dt_iop_get_module_flags(const char *op)
   while(modules)
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)modules->data;
-    if(!strcmp(module->op, op)) return module->flags();
+    if(dt_iop_module_is(module, op))
+      return module->flags();
     modules = g_list_next(modules);
   }
   return 0;
@@ -2942,7 +2966,7 @@ static void _enable_module_callback(dt_iop_module_t *module)
   //cannot toggle module if there's no enable button
   if(module->hide_enable_button) return;
 
-  gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(module->off));
+  const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(module->off));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), !active);
 }
 
@@ -3131,7 +3155,7 @@ dt_iop_module_t *dt_iop_get_module_by_op_priority(GList *modules,
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)m->data;
 
-    if(strcmp(mod->op, operation) == 0
+    if(dt_iop_module_is(mod->so, operation)
        && (mod->multi_priority == multi_priority || multi_priority == -1))
     {
       mod_ret = mod;
@@ -3248,7 +3272,7 @@ dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules,
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)m->data;
 
-    if((strcmp(mod->op, operation) == 0)
+    if((dt_iop_module_is(mod->so, operation))
        && ((multi_name == NULL) || (strcmp(mod->multi_name, multi_name) == 0)))
     {
       mod_ret = mod;
@@ -3283,7 +3307,7 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
   while(iop)
   {
     dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
-    if(!strcmp(m->op, module->op))
+    if(dt_iop_module_is(m->so, module->op))
     {
       is_first = (m == module);
       break;

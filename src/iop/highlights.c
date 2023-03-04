@@ -1590,10 +1590,10 @@ static inline gint wavelets_process(const float *const restrict in, float
     {
       char name[64];
       sprintf(name, "scale-input-%i", s);
-      dt_dump_pfm(name, buffer_in, width, height, DT_DUMP_PFM_RGB, "highlights");
+      dt_dump_pfm(name, buffer_in, width, height,  4 * sizeof(float), "highlights");
 
       sprintf(name, "scale-blur-%i", s);
-      dt_dump_pfm(name, buffer_out, width, height, DT_DUMP_PFM_RGB, "highlights");
+      dt_dump_pfm(name, buffer_out, width, height,  4 * sizeof(float), "highlights");
     }
   }
   dt_free_align(tempbuf);
@@ -1620,30 +1620,46 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;
-  const size_t size = roi_in->width * roi_in->height;
-
   const size_t ds_height = height / DS_FACTOR;
   const size_t ds_width = width / DS_FACTOR;
-  const size_t ds_size = ds_height * ds_width;
 
-  float *const restrict interpolated = dt_alloc_align_float(size * 4);  // [R, G, B, norm] for each pixel
-  float *const restrict clipping_mask = dt_alloc_align_float(size * 4); // [R, G, B, norm] for each pixel
+  // [R, G, B, norm] for each pixel
+  float *restrict interpolated, *restrict clipping_mask;
+  // temp buffers for blurs. We will need to cycle between them for memory efficiency
+  float *restrict LF_odd, *restrict LF_even, *restrict temp;
+  // wavelets scales buffers
+  float *restrict HF, *restrict ds_interpolated, *restrict ds_clipping_mask;
 
-  // temp buffer for blurs. We will need to cycle between them for memory efficiency
-  float *const restrict LF_odd = dt_alloc_align_float(ds_size * 4);
-  float *const restrict LF_even = dt_alloc_align_float(ds_size * 4);
-  float *const restrict temp = dt_alloc_align_float(ds_size * 4);
+  if(!dt_iop_alloc_image_buffers(self, roi_in, roi_out,
+                                 4 | DT_IMGSZ_INPUT, &interpolated,
+                                 4 | DT_IMGSZ_INPUT, &clipping_mask,
+                                 0, NULL))
+  {
+    dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out, 0);
+    return;
+  }
+
+  const dt_iop_roi_t roi_ds = { .x = 0, .y = 0, .height = ds_height, .width = ds_width };
+  if(!dt_iop_alloc_image_buffers(self, &roi_ds, &roi_ds,
+                                 4 | DT_IMGSZ_INPUT, &LF_odd,
+                                 4 | DT_IMGSZ_INPUT, &LF_even,
+                                 4 | DT_IMGSZ_INPUT, &temp,
+                                 4 | DT_IMGSZ_INPUT, &HF,
+                                 4 | DT_IMGSZ_INPUT, &ds_interpolated,
+                                 4 | DT_IMGSZ_INPUT, &ds_clipping_mask,
+                                 0, NULL))
+  {
+    dt_free_align(interpolated);
+    dt_free_align(clipping_mask);
+    dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out, 0);
+    return;
+  }
 
   const float scale = fmaxf(DS_FACTOR * piece->iscale / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
 
   const float noise_level = data->noise_level / scale;
-
-  // wavelets scales buffers
-  float *restrict HF = dt_alloc_align_float(ds_size * 4);
-  float *restrict ds_interpolated = dt_alloc_align_float(ds_size * 4);
-  float *restrict ds_clipping_mask = dt_alloc_align_float(ds_size * 4);
 
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
@@ -1670,8 +1686,8 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
 
   if(darktable.dump_pfm_module)
   {
-    dt_dump_pfm("interpolated", interpolated, width, height, DT_DUMP_PFM_RGB, "highlights");
-    dt_dump_pfm("clipping_mask", clipping_mask, width, height, DT_DUMP_PFM_RGB, "highlights");
+    dt_dump_pfm("interpolated", interpolated, width, height,  4 * sizeof(float), "highlights");
+    dt_dump_pfm("clipping_mask", clipping_mask, width, height,  4 * sizeof(float), "highlights");
   }
 
   dt_free_align(interpolated);
@@ -2211,8 +2227,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                           piece->pipe->dsc.processed_maximum[2]);
     for(int k = 0; k < 3; k++) piece->pipe->dsc.processed_maximum[k] = m;
   }
-
-  if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

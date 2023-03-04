@@ -32,6 +32,7 @@
 #include "common/mipmap_cache.h"
 #include "common/opencl.h"
 #include "common/tags.h"
+#include "common/presets.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
@@ -662,7 +663,9 @@ restart:
 
 static inline void _dt_dev_load_pipeline_defaults(dt_develop_t *dev)
 {
-  for(const GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
+  for(const GList *modules = g_list_last(dev->iop);
+      modules;
+      modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
     dt_iop_reload_defaults(module);
@@ -1125,7 +1128,7 @@ void dt_dev_add_masks_history_item_ext(
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
-      if(strcmp(mod->op, "mask_manager") == 0)
+      if(dt_iop_module_is(mod->so, "mask_manager"))
       {
         module = mod;
         break;
@@ -1462,16 +1465,28 @@ void _dev_insert_module(dt_develop_t *dev, dt_iop_module_t *module, const int im
 {
   sqlite3_stmt *stmt;
 
+  // we make sure that the multi-name is updated if possible with the
+  // actual preset name if any is defined for the default parameters.
+
+  char *preset_name = dt_presets_get_name
+    (module->op,
+     module->default_params, module->params_size, TRUE,
+     module->blend_params, sizeof(dt_develop_blend_params_t));
+
   DT_DEBUG_SQLITE3_PREPARE_V2(
     dt_database_get(darktable.db),
-    "INSERT INTO memory.history VALUES (?1, 0, ?2, ?3, ?4, 1, NULL, 0, 0, '', 0)",
+    "INSERT INTO memory.history VALUES (?1, 0, ?2, ?3, ?4, 1, NULL, 0, 0, ?5, 0)",
     -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, module->version());
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, module->op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, module->default_params, module->params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, module->default_params, module->params_size,
+                             SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, preset_name ? preset_name : "", -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+
+  g_free(preset_name);
 
   dt_print(DT_DEBUG_PARAMS, "[dev_insert_module] `%s' inserted to history\n", module->op);
 }
@@ -1534,17 +1549,19 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
           // For new edits the temperature will be added back
           // depending on the chromatic adaptation the standard way.
 
-          if(!strcmp(module->op, "temperature")
+          if(dt_iop_module_is(module->so, "temperature")
              && (image->change_timestamp == -1))
           {
             // it is important to recover temperature in this case
             // (modern chroma and not module present as we need to
             // have the pre 3.0 default parameters used.
+            const gchar *current_workflow =
+              dt_conf_get_string_const("plugins/darkroom/workflow");
 
             dt_conf_set_string("plugins/darkroom/workflow", "display-referred (legacy)");
             dt_iop_reload_defaults(module);
             _dev_insert_module(dev, module, imgid);
-            dt_conf_set_string("plugins/darkroom/workflow", "scene-referred (filmic)");
+            dt_conf_set_string("plugins/darkroom/workflow", current_workflow);
             dt_iop_reload_defaults(module);
           }
         }
@@ -1585,11 +1602,11 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
 
-      if(((auto_apply_exposure && strcmp(module->op, "exposure") == 0)
-          || (auto_apply_filmic && strcmp(module->op, "filmicrgb") == 0)
-          || (auto_apply_sigmoid && strcmp(module->op, "sigmoid") == 0)
-          || (auto_apply_basecurve && strcmp(module->op, "basecurve") == 0)
-          || (auto_apply_cat && strcmp(module->op, "channelmixerrgb") == 0))
+      if(((auto_apply_exposure && dt_iop_module_is(module->so, "exposure"))
+          || (auto_apply_filmic && dt_iop_module_is(module->so, "filmicrgb"))
+          || (auto_apply_sigmoid && dt_iop_module_is(module->so, "sigmoid"))
+          || (auto_apply_basecurve && dt_iop_module_is(module->so, "basecurve"))
+          || (auto_apply_cat && dt_iop_module_is(module->so, "channelmixerrgb")))
          && !dt_history_check_module_exists(imgid, module->op, FALSE)
          && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
       {
@@ -1901,7 +1918,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
 
   dt_dev_undo_start_record(dev);
 
-  int auto_apply_modules = 0;
+  int auto_apply_modules_count = 0;
   gboolean first_run = FALSE;
   gboolean legacy_params = FALSE;
 
@@ -1910,30 +1927,40 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
   if(!no_image)
   {
     // cleanup
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.history", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+                          "DELETE FROM memory.history", NULL, NULL, NULL);
 
     dt_print(DT_DEBUG_PARAMS, "[dt_dev_read_history_ext] temporary history deleted\n");
 
-    // make sure all modules default params are loaded to init history
+    // Make sure all modules default params are loaded to init
+    // history. This is important as some modules have specific
+    // defaults based on metadata.
+
     _dt_dev_load_pipeline_defaults(dev);
 
-    // prepend all default modules to memory.history
+    // Prepend all default modules to memory.history
+
     _dev_add_default_modules(dev, imgid);
-    const int default_modules = _dev_get_module_nb_records();
+    const int default_modules_count = _dev_get_module_nb_records();
 
-    // maybe add auto-presets to memory.history
+    // Maybe add auto-presets to memory.history
     first_run = _dev_auto_apply_presets(dev);
-    auto_apply_modules = _dev_get_module_nb_records() - default_modules;
+    auto_apply_modules_count = _dev_get_module_nb_records() - default_modules_count;
 
-    dt_print(DT_DEBUG_PARAMS, "[dt_dev_read_history_ext] temporary history initialised with default params and presets\n");
+    dt_print(DT_DEBUG_PARAMS,
+             "[dt_dev_read_history_ext] temporary history initialised with"
+             " default params and presets\n");
 
-    // now merge memory.history into main.history
+    // Now merge memory.history into main.history
+
     _dev_merge_history(dev, imgid);
 
-    dt_print(DT_DEBUG_PARAMS, "[dt_dev_read_history_ext] temporary history merged with image history\n");
+    dt_print(DT_DEBUG_PARAMS,
+             "[dt_dev_read_history_ext] temporary history merged with image history\n");
 
     //  first time we are loading the image, try to import lightroom .xmp if any
-    if(dev->image_loading && first_run) dt_lightroom_import(dev->image_storage.id, dev, TRUE);
+    if(dev->image_loading && first_run)
+      dt_lightroom_import(dev->image_storage.id, dev, TRUE);
 
     // if a snapshot move all auto-presets into the history_snapshot table
 
@@ -1998,6 +2025,13 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
 
   dev->history_end = 0;
 
+  // Specific handling for None workflow (interdependency)
+
+  const gboolean is_workflow_none = dt_conf_is_equal("plugins/darkroom/workflow", "none");
+
+  dt_iop_module_t *channelmixerrgb = NULL;
+  dt_iop_module_t *temperature = NULL;
+
   // Strip rows from DB lookup. One row == One module in history
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -2044,7 +2078,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      if(!strcmp(module->op, module_name))
+      if(dt_iop_module_is(module->so, module_name))
       {
         if(module->multi_priority == multi_priority)
         {
@@ -2091,6 +2125,14 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
                module_name, imgid, dev->image_storage.filename);
       free(hist);
       continue;
+    }
+
+    if(is_workflow_none && hist->module->enabled)
+    {
+      if(dt_iop_module_is(hist->module->so, "temperature"))
+        temperature = hist->module;
+      if(dt_iop_module_is(hist->module->so, "channelmixerrgb"))
+        channelmixerrgb = hist->module;
     }
 
     // module has no user params and won't bother us in GUI - exit early, we are done
@@ -2184,7 +2226,8 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
       }
       else
       {
-        if(!strcmp(hist->module->op, "spots") && modversion == 1)
+        if(dt_iop_module_is(hist->module->so, "spots")
+           && modversion == 1)
         {
           // quick and dirty hack to handle spot removal legacy_params
           memcpy(hist->blend_params, hist->module->blend_params,
@@ -2199,7 +2242,9 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
        * by default, so if it is disabled, enable it, and replace params with
        * default_params. if user want to, he can disable it.
        */
-      if(!strcmp(hist->module->op, "flip") && hist->enabled == 0 && labs(modversion) == 1)
+      if(dt_iop_module_is(hist->module->so, "flip")
+         && hist->enabled == 0
+         && labs(modversion) == 1)
       {
         memcpy(hist->params, hist->module->default_params, hist->module->params_size);
         hist->enabled = 1;
@@ -2207,13 +2252,24 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     }
 
     // make sure that always-on modules are always on. duh.
-    if(hist->module->default_enabled == 1 && hist->module->hide_enable_button == 1)
+    if(hist->module->default_enabled == 1
+       && hist->module->hide_enable_button == 1)
       hist->enabled = 1;
 
     dev->history = g_list_append(dev->history, hist);
     dev->history_end++;
   }
   sqlite3_finalize(stmt);
+
+  // Both modules are actives and found on the history stack, let's
+  // again reload the defaults to ensure the whiteblance is properly
+  // set depending on the CAT handling.
+  if(temperature && channelmixerrgb)
+  {
+    dt_print(DT_DEBUG_PARAMS,
+             "[dt_dev_read_history_ext] reset defaults for workflow none\n");
+    temperature->reload_defaults(temperature);
+  }
 
   dt_ioppr_resync_modules_order(dev);
 
@@ -2260,7 +2316,10 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     // if altered doesn't mask it
     if(!(hash_status & DT_HISTORY_HASH_CURRENT))
     {
-      flags = flags | (auto_apply_modules ? DT_HISTORY_HASH_AUTO : DT_HISTORY_HASH_BASIC);
+      flags = flags
+        | (auto_apply_modules_count
+           ? DT_HISTORY_HASH_AUTO
+           : DT_HISTORY_HASH_BASIC);
     }
     dt_history_hash_write_from_history(imgid, flags);
     // As we have a proper history right now and this is first_run we
@@ -2436,15 +2495,6 @@ void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev,
   zoom2_y += mouse_off_y / (proch * scale);
   *zoom_x = zoom2_x;
   *zoom_y = zoom2_y;
-}
-
-void dt_dev_get_history_item_label(dt_dev_history_item_t *hist,
-                                   char *label,
-                                   const int cnt)
-{
-  gchar *module_label = dt_history_item_get_name(hist->module);
-  g_snprintf(label, cnt, "%s (%s)", module_label, hist->enabled ? _("on") : _("off"));
-  g_free(module_label);
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, uint32_t imgid)
@@ -2826,7 +2876,7 @@ gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
   if(!module->multi_name[0] || strcmp(module->multi_name, "0") == 0)
     label = g_strdup(module->name());
   else
-    label = g_strdup_printf("%s %s", module->name(), module->multi_name);
+    label = g_strdup_printf("%s • %s", module->name(), module->multi_name);
   return label;
 }
 

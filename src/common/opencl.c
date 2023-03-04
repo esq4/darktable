@@ -806,7 +806,7 @@ static int dt_opencl_device_init(
       int loaded_cached;
       char md5sum[33];
       if(dt_opencl_load_program(dev, prog, filename, binname, cachedir, md5sum, includemd5, &loaded_cached)
-         && dt_opencl_build_program(dev, prog, binname, cachedir, md5sum, loaded_cached) != CL_SUCCESS)
+         && dt_opencl_build_program(dev, prog, binname, cachedir, md5sum, loaded_cached))
       {
         dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] failed to compile program `%s'!\n", programname);
         fclose(f);
@@ -1841,13 +1841,13 @@ static FILE *fopen_stat(const char *filename, struct stat *st)
   FILE *f = g_fopen(filename, "rb");
   if(!f)
   {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_fopen_stat] could not open file `%s'!\n", filename);
+    dt_print(DT_DEBUG_OPENCL | DT_DEBUG_VERBOSE, "[opencl_fopen_stat] could not open file `%s'!\n", filename);
     return NULL;
   }
   int fd = fileno(f);
   if(fstat(fd, st) < 0)
   {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_fopen_stat] could not stat file `%s'!\n", filename);
+    dt_print(DT_DEBUG_OPENCL | DT_DEBUG_VERBOSE, "[opencl_fopen_stat] could not stat file `%s'!\n", filename);
     return NULL;
   }
   return f;
@@ -1949,7 +1949,8 @@ int dt_opencl_load_program(
   if(rd != filesize)
   {
     free(file);
-    dt_print(DT_DEBUG_OPENCL, "[opencl_load_source] could not read all of file `%s'!\n", filename);
+    dt_print(DT_DEBUG_OPENCL, "[opencl_load_source] could not read all of file `%s' for program number %d!\n",
+      filename, prog);
     return 0;
   }
 
@@ -2088,7 +2089,8 @@ int dt_opencl_load_program(
   return 1;
 }
 
-int dt_opencl_build_program(
+// return TRUE in case of an error condition
+gboolean dt_opencl_build_program(
         const int dev,
         const int prog,
         const char *binname,
@@ -2096,7 +2098,7 @@ int dt_opencl_build_program(
         char *md5sum,
         int loaded_cached)
 {
-  if(prog < 0 || prog >= DT_OPENCL_MAX_PROGRAMS) return -1;
+  if(prog < 0 || prog > DT_OPENCL_MAX_PROGRAMS) return TRUE;
   dt_opencl_t *cl = darktable.opencl;
   cl_program program = cl->dev[dev].program[prog];
   cl_int err = (cl->dlocl->symbols->dt_clBuildProgram)(program, 1, &(cl->dev[dev].devid), cl->dev[dev].options, 0, 0);
@@ -2133,92 +2135,100 @@ int dt_opencl_build_program(
   }
 
   if(err != CL_SUCCESS)
-    return err;
-  else
+    return TRUE;
+
+  if(!loaded_cached)
   {
-    if(!loaded_cached)
-    {
-      dt_print(DT_DEBUG_OPENCL | DT_DEBUG_VERBOSE, "[opencl_build_program] saving binary\n");
+    dt_print(DT_DEBUG_OPENCL | DT_DEBUG_VERBOSE, "[opencl_build_program] saving binary\n");
 
-      cl_uint numdev = 0;
-      err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_NUM_DEVICES, sizeof(cl_uint),
+    cl_uint numdev = 0;
+    err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_NUM_DEVICES, sizeof(cl_uint),
                                                       &numdev, NULL);
-      if(err != CL_SUCCESS)
-      {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_NUM_DEVICES failed: %s\n", cl_errstr(err));
-        return CL_SUCCESS;
-      }
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_NUM_DEVICES failed: %s\n", cl_errstr(err));
+      return TRUE;
+    }
 
-      cl_device_id *devices = malloc(sizeof(cl_device_id) * numdev);
-      err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_DEVICES,
+    cl_device_id *devices = malloc(sizeof(cl_device_id) * numdev);
+    err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_DEVICES,
                                                       sizeof(cl_device_id) * numdev, devices, NULL);
-      if(err != CL_SUCCESS)
-      {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_DEVICES failed: %s\n", cl_errstr(err));
-        free(devices);
-        return CL_SUCCESS;
-      }
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_DEVICES failed: %s\n", cl_errstr(err));
+      free(devices);
+      return TRUE;
+    }
 
-      size_t *binary_sizes = malloc(sizeof(size_t) * numdev);
-      err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_BINARY_SIZES,
+    size_t *binary_sizes = malloc(sizeof(size_t) * numdev);
+    err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_BINARY_SIZES,
                                                       sizeof(size_t) * numdev, binary_sizes, NULL);
-      if(err != CL_SUCCESS)
-      {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_BINARY_SIZES failed: %s\n", cl_errstr(err));
-        free(binary_sizes);
-        free(devices);
-        return CL_SUCCESS;
-      }
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_BINARY_SIZES failed: %s\n", cl_errstr(err));
+      free(binary_sizes);
+      free(devices);
+      return TRUE;
+    }
 
-      unsigned char **binaries = malloc(sizeof(unsigned char *) * numdev);
-      for(int i = 0; i < numdev; i++) binaries[i] = (unsigned char *)malloc(binary_sizes[i]);
-      err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_BINARIES,
+    unsigned char **binaries = malloc(sizeof(unsigned char *) * numdev);
+    for(int i = 0; i < numdev; i++)
+      binaries[i] = (unsigned char *)malloc(binary_sizes[i]);
+    err = (cl->dlocl->symbols->dt_clGetProgramInfo)(program, CL_PROGRAM_BINARIES,
                                                       sizeof(unsigned char *) * numdev, binaries, NULL);
-      if(err != CL_SUCCESS)
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_BINARIES failed: %s\n", cl_errstr(err));
+      goto ret;
+    }
+
+    err = DT_OPENCL_DEFAULT_ERROR; // in case of a writing error we have this error
+    for(int i = 0; i < numdev; i++)
+    {
+      if(cl->dev[dev].devid == devices[i])
       {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_BINARIES failed: %s\n", cl_errstr(err));
-        goto ret;
-      }
 
-      for(int i = 0; i < numdev; i++)
-        if(cl->dev[dev].devid == devices[i])
-        {
-          // save opencl compiled binary as md5sum-named file
-          char link_dest[PATH_MAX] = { 0 };
-          snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, md5sum);
-          FILE *f = g_fopen(link_dest, "wb");
-          if(!f) goto ret;
-          size_t bytes_written = fwrite(binaries[i], sizeof(char), binary_sizes[i], f);
-          if(bytes_written != binary_sizes[i]) goto ret;
-          fclose(f);
+        // save opencl compiled binary as md5sum-named file
+        char link_dest[PATH_MAX] = { 0 };
+        snprintf(link_dest, sizeof(link_dest), "%s" G_DIR_SEPARATOR_S "%s", cachedir, md5sum);
+        FILE *f = g_fopen(link_dest, "wb");
+        if(!f) goto ret;
+        size_t bytes_written = fwrite(binaries[i], sizeof(char), binary_sizes[i], f);
+        if(bytes_written != binary_sizes[i]) goto ret;
+        fclose(f);
 
-          // create link (e.g. basic.cl.bin -> f1430102c53867c162bb60af6c163328)
-          char cwd[PATH_MAX] = { 0 };
-          if(!getcwd(cwd, sizeof(cwd))) goto ret;
-          if(chdir(cachedir) != 0) goto ret;
-          char dup[PATH_MAX] = { 0 };
-          g_strlcpy(dup, binname, sizeof(dup));
-          char *bname = basename(dup);
+        // create link (e.g. basic.cl.bin -> f1430102c53867c162bb60af6c163328)
+        char cwd[PATH_MAX] = { 0 };
+        if(!getcwd(cwd, sizeof(cwd))) goto ret;
+        if(chdir(cachedir) != 0) goto ret;
+        char dup[PATH_MAX] = { 0 };
+        g_strlcpy(dup, binname, sizeof(dup));
+        char *bname = basename(dup);
 #if defined(_WIN32)
-          //CreateSymbolicLink in Windows requires admin privileges, which we don't want/need
-          //store has using a simple filerename
-          char finalfilename[PATH_MAX] = { 0 };
-          snprintf(finalfilename, sizeof(finalfilename), "%s" G_DIR_SEPARATOR_S "%s.%s", cachedir, bname, md5sum);
-          rename(link_dest, finalfilename);
+        //CreateSymbolicLink in Windows requires admin privileges, which we don't want/need
+        //store has using a simple filerename
+        char finalfilename[PATH_MAX] = { 0 };
+        snprintf(finalfilename, sizeof(finalfilename), "%s" G_DIR_SEPARATOR_S "%s.%s", cachedir, bname, md5sum);
+        rename(link_dest, finalfilename);
 #else
-          if(symlink(md5sum, bname) != 0) goto ret;
+        if(symlink(md5sum, bname) != 0) goto ret;
 #endif //!defined(_WIN32)
-          if(chdir(cwd) != 0) goto ret;
-        }
+        if(chdir(cwd) != 0) goto ret;
+      }
+    }
+    err = CL_SUCCESS; // all writings done without an error
 
     ret:
-      for(int i = 0; i < numdev; i++) free(binaries[i]);
+      for(int i = 0; i < numdev; i++)
+        free(binaries[i]);
       free(binaries);
       free(binary_sizes);
       free(devices);
-    }
-    return CL_SUCCESS;
+    if(err != CL_SUCCESS)
+      dt_print(DT_DEBUG_OPENCL, "[dt_opencl_build_program] problems while writing cl files\n");
   }
+
+  return err != CL_SUCCESS;
 }
 
 int dt_opencl_create_kernel(const int prog, const char *name)
@@ -2576,7 +2586,7 @@ int dt_opencl_write_host_to_device_rowpitch_non_blocking(
   const size_t region[] = { width, height, 1 };
   // non-blocking.
 
-  cl_int err = dt_opencl_write_host_to_device_raw(devid, host, device, origin, region, rowpitch, CL_FALSE);
+  const cl_int err = dt_opencl_write_host_to_device_raw(devid, host, device, origin, region, rowpitch, CL_FALSE);
   _check_clmem_err(devid, err); 
   return err;
 }
@@ -2595,7 +2605,7 @@ int dt_opencl_write_host_to_device_raw(
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Write Image (from host to device)]");
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteImage)(darktable.opencl->dev[devid].cmd_queue,
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueWriteImage)(darktable.opencl->dev[devid].cmd_queue,
                                                                     device, blocking ? CL_TRUE : CL_FALSE, origin, region,
                                                                     rowpitch, 0, host, 0, NULL, eventp);
   _check_clmem_err(devid, err); 
@@ -2614,7 +2624,7 @@ int dt_opencl_enqueue_copy_image(
     return -1;
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Copy Image (on device)]");
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImage)(
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImage)(
       darktable.opencl->dev[devid].cmd_queue, src, dst, orig_src, orig_dst, region, 0, NULL, eventp);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl copy_image] could not copy image on device %d: %s\n", devid, cl_errstr(err));
@@ -2634,7 +2644,7 @@ int dt_opencl_enqueue_copy_image_to_buffer(
     return -1;
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Copy Image to Buffer (on device)]");
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImageToBuffer)(
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImageToBuffer)(
       darktable.opencl->dev[devid].cmd_queue, src_image, dst_buffer, origin, region, offset, 0, NULL, eventp);
 
   if(err != CL_SUCCESS)
@@ -2655,7 +2665,7 @@ int dt_opencl_enqueue_copy_buffer_to_image(
     return -1;
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Copy Buffer to Image (on device)]");
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyBufferToImage)(
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyBufferToImage)(
       darktable.opencl->dev[devid].cmd_queue, src_buffer, dst_image, offset, origin, region, 0, NULL, eventp);
 
   if(err != CL_SUCCESS)
@@ -2676,7 +2686,7 @@ int dt_opencl_enqueue_copy_buffer_to_buffer(
     return -1;
 
   cl_event *eventp = dt_opencl_events_get_slot(devid, "[Copy Buffer to Buffer (on device)]");
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyBuffer)(darktable.opencl->dev[devid].cmd_queue,
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyBuffer)(darktable.opencl->dev[devid].cmd_queue,
                                                                    src_buffer, dst_buffer, srcoffset,
                                                                    dstoffset, size, 0, NULL, eventp);
   if(err != CL_SUCCESS)
@@ -2947,7 +2957,7 @@ size_t dt_opencl_get_mem_object_size(cl_mem mem)
   size_t size;
   if(mem == NULL) return 0;
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_SIZE, sizeof(size), &size, NULL);
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_SIZE, sizeof(size), &size, NULL);
 
   return (err == CL_SUCCESS) ? size : 0;
 }
@@ -2957,7 +2967,7 @@ int dt_opencl_get_mem_context_id(cl_mem mem)
   cl_context context;
   if(mem == NULL) return -1;
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_CONTEXT, sizeof(context), &context, NULL);
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_CONTEXT, sizeof(context), &context, NULL);
   if(err != CL_SUCCESS)
     return -1;
 
@@ -2975,7 +2985,7 @@ int dt_opencl_get_image_width(cl_mem mem)
   size_t size;
   if(mem == NULL) return 0;
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_WIDTH, sizeof(size), &size, NULL);
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_WIDTH, sizeof(size), &size, NULL);
   if(size > INT_MAX) size = 0;
 
   return (err == CL_SUCCESS) ? (int)size : 0;
@@ -2986,7 +2996,7 @@ int dt_opencl_get_image_height(cl_mem mem)
   size_t size;
   if(mem == NULL) return 0;
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_HEIGHT, sizeof(size), &size, NULL);
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_HEIGHT, sizeof(size), &size, NULL);
   if(size > INT_MAX) size = 0;
 
   return (err == CL_SUCCESS) ? (int)size : 0;
@@ -2997,11 +3007,32 @@ int dt_opencl_get_image_element_size(cl_mem mem)
   size_t size;
   if(mem == NULL) return 0;
 
-  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_ELEMENT_SIZE, sizeof(size), &size,
+  const cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetImageInfo)(mem, CL_IMAGE_ELEMENT_SIZE, sizeof(size), &size,
                                                               NULL);
   if(size > INT_MAX) size = 0;
 
   return (err == CL_SUCCESS) ? (int)size : 0;
+}
+
+void dt_opencl_dump_pipe_pfm(const char* mod,
+                             const int devid,
+                             cl_mem img,
+                             const gboolean input,
+                             const char *pipe)
+{
+  if(!darktable.opencl->inited || devid < 0) return;
+  const int width = dt_opencl_get_image_width(img);
+  const int height = dt_opencl_get_image_height(img);
+  const int element_size = dt_opencl_get_image_element_size(img);
+  float *data = dt_alloc_align(64, (size_t)width * height * element_size);
+  if(data)
+  {
+    const cl_int err = dt_opencl_read_host_from_device(devid, data, img, width, height, element_size);
+    if(err == CL_SUCCESS)
+      dt_dump_pfm_file(pipe, data, width, height, element_size, mod, "[dt_opencl_dump_pipe_pfm]", input, !input, FALSE);
+
+    dt_free_align(data);
+  }
 }
 
 void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t action)
