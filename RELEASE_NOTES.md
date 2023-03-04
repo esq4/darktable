@@ -156,6 +156,7 @@ The following is a summary of the main features added to darktable
   - Input Color Profile
   - Color Look up Table
   - Borders
+  - Surface Blur
   - Loader for JPEG2000 file format
 
 - Improve Highlights reconstruction "inpaint opposed" performance by
@@ -330,6 +331,9 @@ The following is a summary of the main features added to darktable
   creating gradient from the mask manager has been fixed. For all
   shapes the editable state is properly set after being created making
   it possible to move and resize the different parts.
+
+- Fix brush correction tool placement as used in Retouch module, the
+  issue was more visible when the image is distorted.
 
 ## Lua
 
