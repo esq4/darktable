@@ -8,6 +8,7 @@
 
 #include "common/darktable.h"
 
+#ifdef USE_LUA
 static void __fire_darkroom_image_loaded_event(const bool clean, const int32_t imgid)
 {
   dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
@@ -17,8 +18,9 @@ static void __fire_darkroom_image_loaded_event(const bool clean, const int32_t i
       LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(imgid),
       LUA_ASYNC_DONE);
 }
+#endif
 
-// dt_dev_change_image из src/views/darkroom.c
+// _dev_change_image из src/views/darkroom.c
 static void dt_next_img_dev_change_image(dt_develop_t *dev, const int32_t imgid)
 {
   // stop crazy users from sleeping on key-repeat spacebar:
