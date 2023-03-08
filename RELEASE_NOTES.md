@@ -101,8 +101,8 @@ The following is a summary of the main features added to darktable
   - Tetrad
   - Square
 
-  This guides can be used to shift colors of a picture to match one of
-  the color harmony. One can see the color harmony guide a bit like
+  Those guides can be used to shift colors of a picture to match one of
+  the color harmony. One can see the color harmony guides a bit like
   the composition guides but related to colors and not to composition.
 
 ## Other Changes
@@ -157,6 +157,19 @@ The following is a summary of the main features added to darktable
   - Color Look up Table
   - Borders
   - Surface Blur
+  - Vignette
+  - Retouch
+  - Denoise Profile
+  - Invert
+  - Local Contrast with Local Laplacian
+  - Lowpass
+
+  - The gaussian generator used by many modules: Censorize, Denoise
+    Profile, Lowpass, Diffuse & Sharpen, Defringe, RAW Chromatic
+    Aberrations, Base Curve, Perspective Correction, Filmic RGB,
+    Retouch, Tone Equalizer and Zone System (deprecated). Meaning all
+    those modules have parts now running faster.
+
   - Loader for JPEG2000 file format
 
 - Improve Highlights reconstruction "inpaint opposed" performance by
@@ -183,7 +196,7 @@ The following is a summary of the main features added to darktable
 
 - Add OpenMP support to XCF export for better performances.
 
-- Add support for writing metadata to XCF format.
+- Add support for writing metadata to XCF format (see notes below).
 
 - Add OpenMP support to the RGBE loader for better performances.
 
@@ -262,6 +275,8 @@ The following is a summary of the main features added to darktable
   supported ApertureValue. The new metadata is used by Leica M
   Monochrom, M8, M9 & M10 DNGs.
 
+- Export masks for EXRs as extra channels.
+
 ## Bug Fixes
 
 - Remove the commit button from the crop module has it was not used
@@ -335,6 +350,19 @@ The following is a summary of the main features added to darktable
 - Fix brush correction tool placement as used in Retouch module, the
   issue was more visible when the image is distorted.
 
+- Fixed CPU vs OpenCL output differences in PPG and VNG/VNG4
+  demosaicers, match greens and color smoothing.
+
+- Finalscale now properly uses same user defined scaling mode for
+  image and masks.
+
+- Fix display when editing a shapes' name in masks manager. Avoid
+  overlay of the old and new name.
+
+- Fix for clean Nikon camera make and model Exif info on import;
+  opening in darkroom is no longer required, and now works for non-raw
+  files as well.
+
 ## Lua
 
 ### Add action support for Lua
@@ -383,11 +411,11 @@ The following is a summary of the main features added to darktable
 
 ## Notes
 
-- With the support of JXL, AVIF and EXR for export, selecting specific
-  metadata (eg. geo tag, creator) is not currently possible. For
-  formats JXL, AVIF and EXR, darktable will not include the metadata
-  fields unless the user selects all of the checkboxes in the export
-  preference options.
+- When exporting to AVIF, EXR, JPEG XL, or XCF, selecting specific
+  metadata (e.g. geo tag or creator) is not currently possible. For
+  AVIF, EXR, JPEG XL, and XCF formats, darktable will not include any
+  metadata fields unless the user selects all of the checkboxes in the
+  export preference options.
 
 - In order to support the correct display of numbers in darktable, the
   minimum supported Gtk version has had to be increased to
