@@ -324,18 +324,6 @@ static void dt_codepaths_init()
   // last: do we have any intrinsics sets enabled?
   darktable.codepath._no_intrinsics = !(darktable.codepath.SSE2);
 
-// if there is no SSE, we must enable plain codepath by default,
-// else, enable it conditionally.
-#if defined(__SSE__)
-  // disabled by default, needs to be manually enabled if needed.
-  // disabling all optimized codepaths enables it automatically.
-  if(dt_conf_get_bool("codepaths/openmp_simd") || darktable.codepath._no_intrinsics)
-#endif
-  {
-    darktable.codepath.OPENMP_SIMD = 1;
-    dt_print(DT_DEBUG_ALWAYS, "[dt_codepaths_init] will be using experimental plain OpenMP SIMD codepath.\n");
-  }
-
 #if defined(__SSE__)
   if(darktable.codepath._no_intrinsics)
   {
@@ -523,10 +511,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         "WARNING: either your user id or the effective user id are 0. are you running darktable as root?\n");
 #endif
 
-#if defined(__SSE__)
   // make everything go a lot faster.
-  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-#endif
+  dt_mm_enable_flush_zero();
 
   dt_set_signal_handlers();
 

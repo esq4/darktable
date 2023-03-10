@@ -286,7 +286,6 @@ typedef struct dt_codepath_t
 {
   unsigned int SSE2 : 1;
   unsigned int _no_intrinsics : 1;
-  unsigned int OPENMP_SIMD : 1; // always stays the last one
 } dt_codepath_t;
 
 typedef struct dt_sys_resources_t
@@ -469,11 +468,6 @@ static inline gboolean dt_modifiers_include(const GdkModifierType state, const G
 static inline gboolean dt_is_aligned(const void *pointer, size_t byte_count)
 {
     return (uintptr_t)pointer % byte_count == 0;
-}
-
-static inline void * dt_alloc_sse_ps(size_t pixels)
-{
-  return __builtin_assume_aligned(dt_alloc_align(64, pixels * sizeof(float)), 64);
 }
 
 static inline void * dt_check_sse_aligned(void * pointer)
