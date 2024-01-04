@@ -56,6 +56,7 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
 
   Imath::Box2i dw;
   Imf::FrameBuffer frameBuffer;
+  int dx, dy;
   uint32_t xstride, ystride;
 
 
@@ -126,7 +127,6 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
       {
         // utcOffset can be ignored for now, see dt_datetime_exif_to_numbers()
         char *datetime = strdup(Imf::capDate(header).c_str());
-        dt_exif_sanitize_datetime(datetime);
         dt_datetime_exif_to_img(img, datetime);
         free(datetime);
       }
@@ -140,11 +140,51 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
       if(Imf::hasExpTime(header)) img->exif_exposure = Imf::expTime(header);
       if(Imf::hasAperture(header)) img->exif_aperture = Imf::aperture(header);
       if(Imf::hasIsoSpeed(header)) img->exif_iso = Imf::isoSpeed(header);
+// the OPENEXR_VERSION_HEX macro is broken for 3.2.0 and earlier, must compute directly
+#if(((OPENEXR_VERSION_MAJOR << 24) | (OPENEXR_VERSION_MINOR << 16) | (OPENEXR_VERSION_PATCH << 8)) >= 0x03020000)
+      if(Imf::hasCameraMake(header))
+      {
+        g_strlcpy(img->exif_maker, Imf::cameraMake(header).c_str(), sizeof(img->exif_maker));
+      }
+      if(Imf::hasCameraModel(header))
+      {
+        g_strlcpy(img->exif_model, Imf::cameraModel(header).c_str(), sizeof(img->exif_model));
+      }
+      // Make sure we copy the exif make and model to the correct place if needed
+      dt_image_refresh_makermodel(img);
+
+      if(Imf::hasLensModel(header))
+      {
+        g_strlcpy(img->exif_lens, Imf::lensModel(header).c_str(), sizeof(img->exif_lens));
+
+        if(Imf::hasLensMake(header) && Imf::lensMake(header) == "Canon")
+        {
+          /* Use pretty name for Canon RF & RF-S lenses (as exiftool/exiv2/lensfun) */
+          if(g_str_has_prefix(img->exif_lens, "RF"))
+          {
+            std::string pretty;
+            if(img->exif_lens[2] == '-')
+              pretty = "Canon RF-S " + std::string(&img->exif_lens[4]);
+            else
+              pretty = "Canon RF " + std::string(&img->exif_lens[2]);
+            g_strlcpy(img->exif_lens, pretty.c_str(), sizeof(img->exif_lens));
+          }
+        }
+
+        /* Capitalize Nikon Z-mount lenses properly for UI presentation */
+        if(g_str_has_prefix(img->exif_lens, "NIKKOR"))
+        {
+          for(size_t i = 1; i <= 5; ++i) img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
+        }
+      }
+
+      if(Imf::hasNominalFocalLength(header)) img->exif_focal_length = Imf::nominalFocalLength(header);
+#endif
     }
   }
 
-  /* Get image width and height from displayWindow */
-  dw = header.displayWindow();
+  /* get image width and height from data window only */
+  dw = header.dataWindow();
   img->width = dw.max.x - dw.min.x + 1;
   img->height = dw.max.y - dw.min.y + 1;
 
@@ -158,13 +198,19 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
     return DT_IMAGEIO_CACHE_FULL;
   }
 
-  /* setup framebuffer */
+  /* set up frame buffer relative to data window */
+  dx = dw.min.x;
+  dy = dw.min.y;
   xstride = sizeof(float) * 4;
   ystride = sizeof(float) * img->width * 4;
-  frameBuffer.insert("R", Imf::Slice(Imf::FLOAT, (char *)(buf + 0), xstride, ystride, 1, 1, 0.0));
-  frameBuffer.insert("G", Imf::Slice(Imf::FLOAT, (char *)(buf + 1), xstride, ystride, 1, 1, 0.0));
-  frameBuffer.insert("B", Imf::Slice(Imf::FLOAT, (char *)(buf + 2), xstride, ystride, 1, 1, 0.0));
-  frameBuffer.insert("A", Imf::Slice(Imf::FLOAT, (char *)(buf + 3), xstride, ystride, 1, 1, 0.0));
+  frameBuffer.insert(
+      "R", Imf::Slice(Imf::FLOAT, (char *)(buf - dx * 4 - dy * img->width * 4 + 0), xstride, ystride, 1, 1, 0.0));
+  frameBuffer.insert(
+      "G", Imf::Slice(Imf::FLOAT, (char *)(buf - dx * 4 - dy * img->width * 4 + 1), xstride, ystride, 1, 1, 0.0));
+  frameBuffer.insert(
+      "B", Imf::Slice(Imf::FLOAT, (char *)(buf - dx * 4 - dy * img->width * 4 + 2), xstride, ystride, 1, 1, 0.0));
+  frameBuffer.insert(
+      "A", Imf::Slice(Imf::FLOAT, (char *)(buf - dx * 4 - dy * img->width * 4 + 3), xstride, ystride, 1, 1, 0.0));
 
   if(isTiled)
   {
@@ -173,8 +219,6 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
   }
   else
   {
-    /* read pixels from dataWindow */
-    dw = header.dataWindow();
     file->setFrameBuffer(frameBuffer);
     file->readPixels(dw.min.y, dw.max.y);
   }

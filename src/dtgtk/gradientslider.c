@@ -71,7 +71,7 @@ static gboolean _gradient_slider_postponed_value_change(gpointer data)
   if(!DTGTK_GRADIENT_SLIDER(data)->is_dragging) DTGTK_GRADIENT_SLIDER(data)->timeout_handle = 0;
   else
   {
-    const int delay = CLAMP(darktable.develop->average_delay * 3 / 2,
+    const int delay = CLAMP(darktable.develop->full.pipe->average_delay * 3 / 2,
                             DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MIN,
                             DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MAX);
     DTGTK_GRADIENT_SLIDER(data)->timeout_handle = g_timeout_add(delay, _gradient_slider_postponed_value_change, data);
@@ -309,7 +309,7 @@ static gboolean _gradient_slider_button_press(GtkWidget *widget, GdkEventButton 
       gslider->is_changed = TRUE;
       gslider->is_dragging = TRUE;
       // timeout_handle should always be zero here, but check just in case
-      const int delay = CLAMP(darktable.develop->average_delay * 3 / 2,
+      const int delay = CLAMP(darktable.develop->full.pipe->average_delay * 3 / 2,
                               DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MIN,
                               DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MAX);
       if(!gslider->timeout_handle)
@@ -600,7 +600,7 @@ static gboolean _gradient_slider_draw(GtkWidget *widget, cairo_t *cr)
   cairo_set_source_rgba(cr, color.red, color.green, color.blue, 1.0);
 
   // do we have a picker value to draw?
-  if(!isnan(gslider->picker[0]))
+  if(!dt_isnan(gslider->picker[0]))
   {
     int vx_min = _scale_to_screen(widget, CLAMP(gslider->picker[1], 0.0, 1.0));
     int vx_max = _scale_to_screen(widget, CLAMP(gslider->picker[2], 0.0, 1.0));

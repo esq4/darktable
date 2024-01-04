@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2016-2020 darktable developers.
+    Copyright (C) 2016-2023 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,13 +38,11 @@ void dt_iop_flip_and_zoom_8(const uint8_t *in, int32_t iw, int32_t ih, uint8_t *
 
 /** for homebrew pixel pipe: zoom pixel array. */
 void dt_iop_clip_and_zoom(float *out, const float *const in, const struct dt_iop_roi_t *const roi_out,
-                          const struct dt_iop_roi_t *const roi_in, const int32_t out_stride,
-                          const int32_t in_stride);
+                          const struct dt_iop_roi_t *const roi_in);
 
 /** zoom pixel array for roi buffers. */
 void dt_iop_clip_and_zoom_roi(float *out, const float *const in, const struct dt_iop_roi_t *const roi_out,
-                              const struct dt_iop_roi_t *const roi_in, const int32_t out_stride,
-                              const int32_t in_stride);
+                              const struct dt_iop_roi_t *const roi_in);
 #ifdef HAVE_OPENCL
 int dt_iop_clip_and_zoom_cl(int devid, cl_mem dev_out, cl_mem dev_in,
                             const struct dt_iop_roi_t *const roi_out,
@@ -98,21 +96,6 @@ void dt_iop_clip_and_zoom_demosaic_third_size_xtrans_f(float *out, const float *
 void dt_iop_clip_and_zoom_8(const uint8_t *i, int32_t ix, int32_t iy, int32_t iw, int32_t ih, int32_t ibw,
                             int32_t ibh, uint8_t *o, int32_t ox, int32_t oy, int32_t ow, int32_t oh,
                             int32_t obw, int32_t obh);
-
-void dt_iop_YCbCr_to_RGB(const dt_aligned_pixel_t yuv, dt_aligned_pixel_t rgb);
-void dt_iop_RGB_to_YCbCr(const dt_aligned_pixel_t rgb, dt_aligned_pixel_t yuv);
-
-/** takes four points (x,y) in two arrays and fills the cubic coefficients a, such that y = [X] * a, where
-  * [X] is the matrix containing all x^3 x^2 x^1 x^0 lines for all four x. */
-void dt_iop_estimate_cubic(const float x[4], const float y[4], float a[4]);
-
-/** evaluates the cubic fit, i.e. returns y = a^t [x^3 x^2 x^1 1] */
-static inline float dt_iop_eval_cubic(const float *const a, const float x)
-{
-  // could be sse4.1 _mm_dot_ps
-  const float x4[4] = { x * x * x, x * x, x, 1.0f };
-  return a[3] * x4[3] + a[2] * x4[2] + a[1] * x4[1] + a[0] * x4[0];
-}
 
 /** estimates an exponential form f(x) = a*x^g from a few (num) points (x, y).
  *  the largest point should be (1.0, y) to really get good data. */
@@ -189,6 +172,22 @@ static inline int FC(const size_t row, const size_t col, const uint32_t filters)
 #define GREEN 1
 #define BLUE 2
 #define ALPHA 3
+
+static inline float dt_iop_get_processed_maximum(dt_dev_pixelpipe_iop_t *piece)
+{
+  return  fmaxf(1.0f,
+          fmaxf(piece->pipe->dsc.processed_maximum[0],
+          fmaxf(piece->pipe->dsc.processed_maximum[1],
+                piece->pipe->dsc.processed_maximum[2])));
+}
+
+static inline float dt_iop_get_processed_minimum(dt_dev_pixelpipe_iop_t *piece)
+{
+  return  fmaxf(1.0f,
+          fminf(piece->pipe->dsc.processed_maximum[0],
+          fminf(piece->pipe->dsc.processed_maximum[1],
+                piece->pipe->dsc.processed_maximum[2])));
+}
 
 /** Calculate the xtrans pattern color from the row and column **/
 static inline int FCxtrans(const int row, const int col, const dt_iop_roi_t *const roi,

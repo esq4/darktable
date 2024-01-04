@@ -22,7 +22,8 @@ typedef enum pw_storage_backend_t
 {
   PW_STORAGE_BACKEND_NONE = 0,
   PW_STORAGE_BACKEND_KWALLET,
-  PW_STORAGE_BACKEND_LIBSECRET
+  PW_STORAGE_BACKEND_LIBSECRET,
+  PW_STORAGE_BACKEND_APPLE_KEYCHAIN
 } pw_storage_backend_t;
 
 /** pwstorage context */

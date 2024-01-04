@@ -36,6 +36,8 @@ extern "C" {
  * DPI */
 #define DT_PIXEL_APPLY_DPI(value) ((value) * darktable.gui->dpi_factor)
 
+#define DT_RESIZE_HANDLE_SIZE DT_PIXEL_APPLY_DPI(5)
+
 typedef struct dt_gui_widgets_t
 {
 
@@ -60,7 +62,6 @@ typedef struct dt_gui_scrollbars_t
     GtkWidget *hscrollbar;
 
     gboolean visible;
-    gboolean dragging;
 } dt_gui_scrollbars_t;
 
 typedef enum dt_gui_color_t
@@ -133,6 +134,7 @@ typedef struct dt_gui_gtk_t
   GtkWidget *focus_peaking_button;
 
   double dpi, dpi_factor, ppd, ppd_thb;
+  gboolean have_pen_pressure;
 
   int icon_size; // size of top panel icons
 
@@ -142,8 +144,7 @@ typedef struct dt_gui_gtk_t
   gint scroll_mask;
   guint sidebar_scroll_mask;
 
-  cairo_filter_t filter_image;    // filtering used for all modules expect darkroom
-  cairo_filter_t dr_filter_image; // filtering used in the darkroom
+  cairo_filter_t filter_image;    // filtering used to scale images to screen
 
   dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;
@@ -155,6 +156,7 @@ typedef struct _gui_collapsible_section_t
   GtkWidget *toggle;    // toggle button
   GtkWidget *expander;  // the expanded
   GtkBox *container;    // the container for all widgets into the section
+  struct dt_action_t *module; // the lib or iop module that contains this section
 } dt_gui_collapsible_section_t;
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
@@ -197,6 +199,7 @@ static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filenam
 void dt_gui_add_class(GtkWidget *widget, const gchar *class_name);
 void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
 
+void dt_open_url(const char *url);
 int dt_gui_gtk_init(dt_gui_gtk_t *gui);
 void dt_gui_gtk_run(dt_gui_gtk_t *gui);
 void dt_gui_gtk_cleanup(dt_gui_gtk_t *gui);
@@ -207,6 +210,7 @@ int dt_gui_gtk_write_config();
 void dt_gui_gtk_set_source_rgb(cairo_t *cr, dt_gui_color_t);
 void dt_gui_gtk_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
 double dt_get_system_gui_ppd(GtkWidget *widget);
+double dt_get_screen_resolution(GtkWidget *widget);
 
 /* Check sidebar_scroll_default and modifier keys to determine if scroll event
  * should be processed by control or by panel. If default is panel scroll but
@@ -410,6 +414,9 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
 gboolean dt_gui_show_yes_no_dialog(const char *title, const char *format, ...);
 
 void dt_gui_add_help_link(GtkWidget *widget, const char *link);
+char *dt_gui_get_help_url(GtkWidget *widget);
+void dt_gui_dialog_add_help(GtkDialog *dialog, const char *topic);
+void dt_gui_show_help(GtkWidget *widget);
 
 // load a CSS theme
 void dt_gui_load_theme(const char *theme);
@@ -448,6 +455,8 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
 
 void dt_gui_draw_rounded_rectangle(cairo_t *cr, float width, float height, float x, float y);
 
+void dt_gui_widget_reallocate_now(GtkWidget *widget);
+
 // event handler for "key-press-event" of GtkTreeView to decide if focus switches to GtkSearchEntry
 gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry);
 
@@ -456,8 +465,10 @@ void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget);
 
 // create a collapsible section, insert in parent, return the container
 void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
-                                    const char *confname, const char *label,
-                                    GtkBox *parent);
+                                    const char *confname,
+                                    const char *label,
+                                    GtkBox *parent,
+                                    struct dt_action_t *module);
 // routine to be called from gui_update
 void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs);
 

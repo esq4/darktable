@@ -14,7 +14,7 @@
 
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <https://www.gnu.org/licenses/>.
- */
+*/
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
@@ -120,7 +120,7 @@ void cleanup(dt_imageio_module_format_t *self)
 
 int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void *in_tmp,
                 dt_colorspaces_color_profile_type_t over_type, const char *over_filename,
-                void *exif, int exif_len, int imgid, int num, int total, struct dt_dev_pixelpipe_t *pipe,
+                void *exif, int exif_len, dt_imgid_t imgid, int num, int total, struct dt_dev_pixelpipe_t *pipe,
                 const gboolean export_masks)
 {
   const dt_imageio_exr_t *exr = (dt_imageio_exr_t *)tmp;
@@ -214,7 +214,7 @@ int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void 
   goto icc_end;
 
 icc_error:
-  dt_control_log("%s", _("the selected output profile doesn't work well with exr"));
+  dt_control_log("%s", _("the selected output profile doesn't work well with EXR"));
   dt_print(DT_DEBUG_ALWAYS, "[exr export] warning: exporting with anything but linear matrix profiles might lead to wrong "
                   "results when opening the image\n");
 icc_end:
@@ -248,7 +248,7 @@ icc_end:
     const size_t width = exr->global.width;
     const size_t height = exr->global.height;
     stride = 3 * sizeof(unsigned short);
-    out_image = dt_alloc_align(64, stride * width * height);
+    out_image = dt_alloc_aligned(stride * width * height);
     if(out_image == NULL)
     {
       dt_print(DT_DEBUG_ALWAYS, "[exr export] error allocating image conversion buffer\n");
@@ -310,15 +310,11 @@ icc_end:
 
         header.channels().insert(layername, Imf::Channel(pixel_type, 1, 1, true));
 
-        gboolean free_mask = TRUE;
-        float *raster_mask = dt_dev_get_raster_mask(pipe, piece->module, GPOINTER_TO_INT(key), NULL, &free_mask);
+        gboolean free_mask;
+        float *raster_mask = dt_dev_get_raster_mask(piece, piece->module, GPOINTER_TO_INT(key), NULL, &free_mask);
 
         if(!raster_mask)
-        {
-          // this should never happen
-          dt_print(DT_DEBUG_ALWAYS, "[exr export] error: can't get raster mask from `%s'\n", piece->module->name());
           return 1;
-        }
 
         if(pixel_type == Imf::PixelType::FLOAT)
         {
@@ -333,7 +329,7 @@ icc_end:
           const size_t width = exr->global.width;
           const size_t height = exr->global.height;
           stride = sizeof(unsigned short);
-          void *out_mask = dt_alloc_align(64, stride * width * height);
+          void *out_mask = dt_alloc_aligned(stride * width * height);
           if(out_mask == NULL)
           {
             dt_print(DT_DEBUG_ALWAYS, "[exr export] error allocating mask conversion buffer\n");
@@ -388,21 +384,31 @@ size_t params_size(dt_imageio_module_format_t *self)
   return sizeof(dt_imageio_exr_t);
 }
 
-void *legacy_params(dt_imageio_module_format_t *self, const void *const old_params,
-                    const size_t old_params_size, const int old_version, const int new_version,
+void *legacy_params(dt_imageio_module_format_t *self,
+                    const void *const old_params,
+                    const size_t old_params_size,
+                    const int old_version,
+                    int *new_version,
                     size_t *new_size)
 {
-  if(old_version == 1 && new_version == 5)
+  typedef struct _imageio_exr_v5_t
   {
-    struct dt_imageio_exr_v1_t
+    dt_imageio_module_data_t global;
+    dt_imageio_exr_compression_t compression;
+    dt_imageio_exr_pixeltype_t pixel_type;
+  } dt_imageio_exr_v5_t;
+
+  if(old_version == 1)
+  {
+    typedef struct _imageio_exr_v1_t
     {
       int max_width, max_height;
       int width, height;
       char style[128];
-    };
+    } dt_imageio_exr_v1_t;
 
     const dt_imageio_exr_v1_t *o = (dt_imageio_exr_v1_t *)old_params;
-    dt_imageio_exr_t *n = (dt_imageio_exr_t *)malloc(sizeof(dt_imageio_exr_t));
+    dt_imageio_exr_v5_t *n = (dt_imageio_exr_v5_t *)malloc(sizeof(dt_imageio_exr_v5_t));
 
     n->global.max_width = o->max_width;
     n->global.max_height = o->max_height;
@@ -412,22 +418,24 @@ void *legacy_params(dt_imageio_module_format_t *self, const void *const old_para
     n->global.style_append = FALSE;
     n->compression = PIZ_COMPRESSION;
     n->pixel_type = EXR_PT_FLOAT;
-    *new_size = self->params_size(self);
+
+    *new_version = 5;
+    *new_size = sizeof(dt_imageio_exr_v5_t);
     return n;
   }
-  if(old_version == 2 && new_version == 5)
+  if(old_version == 2)
   {
-    struct dt_imageio_exr_v2_t
+    typedef struct _imageio_exr_v2_t
     {
       int max_width, max_height;
       int width, height;
       char style[128];
       dt_imageio_exr_compression_t compression;
       dt_imageio_exr_pixeltype_t pixel_type;
-    };
+    } dt_imageio_exr_v2_t;
 
     const dt_imageio_exr_v2_t *o = (dt_imageio_exr_v2_t *)old_params;
-    dt_imageio_exr_t *n = (dt_imageio_exr_t *)malloc(sizeof(dt_imageio_exr_t));
+    dt_imageio_exr_v5_t *n = (dt_imageio_exr_v5_t *)malloc(sizeof(dt_imageio_exr_v5_t));
 
     // last param was dropped (pixel type)
     n->global.max_width = o->max_width;
@@ -438,21 +446,23 @@ void *legacy_params(dt_imageio_module_format_t *self, const void *const old_para
     n->global.style_append = FALSE;
     n->compression = o->compression;
     n->pixel_type = o->pixel_type >= EXR_PT_HALF ? o->pixel_type : EXR_PT_FLOAT;
-    *new_size = self->params_size(self);
+
+    *new_version = 5;
+    *new_size = sizeof(dt_imageio_exr_v5_t);
     return n;
   }
-  if(old_version == 3 && new_version == 5)
+  if(old_version == 3)
   {
-    struct dt_imageio_exr_v3_t
+    typedef struct _imageio_exr_v3_t
     {
       int max_width, max_height;
       int width, height;
       char style[128];
       dt_imageio_exr_compression_t compression;
-    };
+    } dt_imageio_exr_v3_t;
 
     const dt_imageio_exr_v3_t *o = (dt_imageio_exr_v3_t *)old_params;
-    dt_imageio_exr_t *n = (dt_imageio_exr_t *)malloc(sizeof(dt_imageio_exr_t));
+    dt_imageio_exr_v5_t *n = (dt_imageio_exr_v5_t *)malloc(sizeof(dt_imageio_exr_v5_t));
 
     n->global.max_width = o->max_width;
     n->global.max_height = o->max_height;
@@ -462,19 +472,21 @@ void *legacy_params(dt_imageio_module_format_t *self, const void *const old_para
     n->global.style_append = FALSE;
     n->compression = o->compression;
     n->pixel_type = EXR_PT_FLOAT;
-    *new_size = self->params_size(self);
+
+    *new_version = 5;
+    *new_size = sizeof(dt_imageio_exr_v5_t);
     return n;
   }
-  if(old_version == 4 && new_version == 5)
+  if(old_version == 4)
   {
-    struct dt_imageio_exr_v4_t
+    typedef struct _imageio_exr_v4_t
     {
       dt_imageio_module_data_t global;
       dt_imageio_exr_compression_t compression;
-    };
+    } dt_imageio_exr_v4_t;
 
     const dt_imageio_exr_v4_t *o = (dt_imageio_exr_v4_t *)old_params;
-    dt_imageio_exr_t *n = (dt_imageio_exr_t *)malloc(sizeof(dt_imageio_exr_t));
+    dt_imageio_exr_v5_t *n = (dt_imageio_exr_v5_t *)malloc(sizeof(dt_imageio_exr_v5_t));
 
     n->global.max_width = o->global.max_width;
     n->global.max_height = o->global.max_height;
@@ -484,9 +496,29 @@ void *legacy_params(dt_imageio_module_format_t *self, const void *const old_para
     n->global.style_append = o->global.style_append;
     n->compression = o->compression;
     n->pixel_type = EXR_PT_FLOAT;
-    *new_size = self->params_size(self);
+
+    *new_version = 5;
+    *new_size = sizeof(dt_imageio_exr_v5_t);
     return n;
   }
+
+  // incremental update supported:
+  /*
+  typedef struct dt_imageio_exr_v6_t
+  {
+    ...
+  } dt_imageio_exr_v6_t;
+
+  if(old_version == 5)
+  {
+    // let's update from 5 to 6
+
+    ...
+    *new_size = sizeof(dt_imageio_exr_v6_t);
+    *new_version = 6;
+    return n;
+  }
+  */
   return NULL;
 }
 

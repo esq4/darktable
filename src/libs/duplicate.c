@@ -40,11 +40,15 @@ DT_MODULE(1)
 typedef struct dt_lib_duplicate_t
 {
   GtkWidget *duplicate_box;
-  int imgid;
+  dt_imgid_t imgid;
 
-  cairo_surface_t *preview_surf;
-  size_t processed_width;
-  size_t processed_height;
+  uint8_t *buf;
+  float scale;
+  size_t buf_width;
+  size_t buf_height;
+  float zoom_x;
+  float zoom_y;
+
   dt_view_context_t view_ctx;
   int preview_id;
 
@@ -56,10 +60,9 @@ const char *name(dt_lib_module_t *self)
   return _("duplicate manager");
 }
 
-const char **views(dt_lib_module_t *self)
+dt_view_type_flags_t views(dt_lib_module_t *self)
 {
-  static const char *v[] = {"darkroom", NULL};
-  return v;
+  return DT_VIEW_DARKROOM;
 }
 
 uint32_t container(dt_lib_module_t *self)
@@ -78,7 +81,7 @@ static gboolean _lib_duplicate_caption_out_callback(GtkWidget *widget,
                                                     GdkEvent *event,
                                                     dt_lib_module_t *self)
 {
-  const int imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"imgid"));
+  const dt_imgid_t imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"imgid"));
 
   // we write the content of the textbox to the caption field
   dt_metadata_set(imgid, "Xmp.darktable.version_name",
@@ -92,9 +95,10 @@ static void _lib_duplicate_new_clicked_callback(GtkWidget *widget,
                                                 GdkEventButton *event,
                                                 dt_lib_module_t *self)
 {
-  const int imgid = darktable.develop->image_storage.id;
-  const int newid = dt_image_duplicate(imgid);
-  if(newid <= 0) return;
+  const dt_imgid_t imgid = darktable.develop->image_storage.id;
+  const dt_imgid_t newid = dt_image_duplicate(imgid);
+  if(!dt_is_valid_imgid(newid))
+    return;
   dt_history_delete_on_image(newid);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
   dt_collection_update_query(darktable.collection,
@@ -106,9 +110,10 @@ static void _lib_duplicate_duplicate_clicked_callback(GtkWidget *widget,
                                                       GdkEventButton *event,
                                                       dt_lib_module_t *self)
 {
-  const int imgid = darktable.develop->image_storage.id;
-  const int newid = dt_image_duplicate(imgid);
-  if(newid <= 0) return;
+  const dt_imgid_t imgid = darktable.develop->image_storage.id;
+  const dt_imgid_t newid = dt_image_duplicate(imgid);
+  if(!dt_is_valid_imgid(newid))
+    return;
   dt_history_copy_and_paste_on_image(imgid, newid, FALSE, NULL, TRUE, TRUE);
   dt_collection_update_query(darktable.collection,
                              DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
@@ -119,7 +124,7 @@ static void _lib_duplicate_duplicate_clicked_callback(GtkWidget *widget,
 static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
-  const int imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "imgid"));
+  const dt_imgid_t imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "imgid"));
 
   if(imgid == darktable.develop->image_storage.id)
   {
@@ -156,7 +161,7 @@ static void _lib_duplicate_thumb_press_callback(GtkWidget *widget,
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)g_object_get_data(G_OBJECT(widget), "thumb");
-  const int imgid = thumb->imgid;
+  const dt_imgid_t imgid = thumb->imgid;
 
   if(event->button == 1)
   {
@@ -180,7 +185,7 @@ static void _lib_duplicate_thumb_release_callback(GtkWidget *widget,
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
-  d->imgid = 0;
+  d->imgid = NO_IMGID;
   dt_control_queue_redraw_center();
 }
 
@@ -190,10 +195,10 @@ void view_leave(struct dt_lib_module_t *self,
 {
   // we leave the view. Let's destroy preview surf if any
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
-  if(d->preview_surf)
+  if(d->buf)
   {
-    cairo_surface_destroy(d->preview_surf);
-    d->preview_surf = NULL;
+    dt_free_align(d->buf);
+    d->buf = NULL;
   }
 }
 void gui_post_expose(dt_lib_module_t *self,
@@ -205,30 +210,29 @@ void gui_post_expose(dt_lib_module_t *self,
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
-  if(d->imgid == 0) return;
+  if(!dt_is_valid_imgid(d->imgid))
+    return;
 
-  const gboolean view_ok = dt_view_check_view_context(&d->view_ctx);
+  const gboolean view_ok = dt_view_check_context_hash(&d->view_ctx);
 
   if(!view_ok || d->preview_id != d->imgid)
   {
-    uint8_t *buf = NULL;
-    size_t processed_width;
-    size_t processed_height;
+    if(d->buf)
+      dt_free_align(d->buf);
 
-    dt_dev_image(d->imgid, width, height, -1, &buf, &processed_width, &processed_height);
+    dt_dev_image(d->imgid, width, height, -1,
+                 &d->buf, &d->scale,
+                 &d->buf_width, &d->buf_height,
+                 &d->zoom_x, &d->zoom_y, -1);
 
     d->preview_id = d->imgid;
-    d->processed_width = processed_width;
-    d->processed_height = processed_height;
-
-    if(d->preview_surf)
-      cairo_surface_destroy(d->preview_surf);
-    d->preview_surf = dt_view_create_surface(buf, processed_width, processed_height);
   }
 
-  if(d->preview_surf)
-    dt_view_paint_surface(cri, width, height, d->preview_surf,
-                          d->processed_width, d->processed_height, DT_WINDOW_MAIN);
+  if(d->buf)
+    dt_view_paint_surface(cri, width, height, &darktable.develop->full, DT_WINDOW_MAIN,
+                          d->buf, d->scale,
+                          d->buf_width, d->buf_height,
+                          d->zoom_x, d->zoom_y);
 }
 
 static void _thumb_remove(gpointer user_data)
@@ -246,12 +250,12 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
 
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
-  d->imgid = 0;
+  d->imgid = NO_IMGID;
   // we drop the preview if any
-  if(d->preview_surf)
+  if(d->buf)
   {
-    cairo_surface_destroy(d->preview_surf);
-    d->preview_surf = NULL;
+    dt_free_align(d->buf);
+    d->buf = NULL;
   }
   // we drop all the thumbs
   g_list_free_full(d->thumbs, _thumb_remove);
@@ -283,11 +287,17 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     GtkWidget *hb = gtk_grid_new();
-    const int imgid = sqlite3_column_int(stmt, 1);
+    const dt_imgid_t imgid = sqlite3_column_int(stmt, 1);
     dt_gui_add_class(hb, "dt_overlays_always");
-    dt_thumbnail_t *thumb = dt_thumbnail_new(100, 100, IMG_TO_FIT, imgid, -1,
+    dt_thumbnail_t *thumb = dt_thumbnail_new(100,
+                                             100,
+                                             IMG_TO_FIT,
+                                             imgid,
+                                             -1,
                                              DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL,
-                                             DT_THUMBNAIL_CONTAINER_LIGHTTABLE, TRUE);
+                                             DT_THUMBNAIL_CONTAINER_LIGHTTABLE,
+                                             TRUE,
+                                             DT_THUMBNAIL_SELECTION_UNSELECTED);
     thumb->sel_mode = DT_THUMBNAIL_SEL_MODE_DISABLED;
     thumb->disable_mouseover = TRUE;
     thumb->disable_actions = TRUE;
@@ -358,7 +368,7 @@ static void _lib_duplicate_collection_changed(gpointer instance,
 }
 
 static void _lib_duplicate_mipmap_updated_callback(gpointer instance,
-                                                   const int imgid,
+                                                   const dt_imgid_t imgid,
                                                    dt_lib_module_t *self)
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
@@ -381,10 +391,8 @@ void gui_init(dt_lib_module_t *self)
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)g_malloc0(sizeof(dt_lib_duplicate_t));
   self->data = (void *)d;
 
-  d->imgid = 0;
-  d->preview_surf = NULL;
-  d->processed_width = 0;
-  d->processed_height = 0;
+  d->imgid = NO_IMGID;
+  d->buf = NULL;
   d->view_ctx = 0;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

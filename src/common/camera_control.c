@@ -344,7 +344,7 @@ static void _camera_process_job(const dt_camctl_t *c, const dt_camera_t *camera,
           // dt_colorspaces_color_profile_type_t color_space = dt_imageio_jpeg_read_color_space(&jpg);
           //if(color_space == DT_COLORSPACE_DISPLAY)
           //  color_space = DT_COLORSPACE_SRGB;            // no embedded colorspace, assume is sRGB
-          uint8_t *const buffer = (uint8_t *)dt_alloc_align(64, sizeof(uint8_t) * 4 * jpg.width * jpg.height);
+          uint8_t *const buffer = (uint8_t *)dt_alloc_align_uint8(4 * jpg.width * jpg.height);
           if(!buffer)
           {
             dt_print(DT_DEBUG_CAMCTL, "[camera_control] live view could not allocate image buffer\n");
@@ -1003,23 +1003,26 @@ void *dt_update_cameras_thread(void *ptr)
   }
   while(dt_control_running())
   {
-    g_usleep(100000);
+    g_usleep(250000);  // 1/4 second
     dt_camctl_t *camctl = (dt_camctl_t *)darktable.camctl;
-
-    const dt_view_t *cv = (darktable.view_manager)
-      ? dt_view_manager_get_current_view(darktable.view_manager)
-      : NULL;
 
     if(camctl)
     {
-      if((camctl->import_ui == FALSE) && (cv && (cv->view(cv) == DT_VIEW_LIGHTTABLE)))
+      if(camctl->import_ui == FALSE && dt_view_get_current() == DT_VIEW_LIGHTTABLE)
+//TODO:  && import module is expanded and visible
       {
         camctl->ticker += 1;
         if((camctl->ticker & camctl->tickmask) == 0)
+        {
+          // we've rolled over the current scan interval, so check for
+          // new/removed cameras and decide how long to wait until the
+          // next scan based on the result: one second if there was a
+          // change, eight seconds if not
           camctl->tickmask = (dt_camctl_update_cameras(camctl)) ? 0x03 : 0x1F;
+        }
       }
       else
-        camctl->tickmask = 3; // want to be responsive right after other modes are done
+        camctl->tickmask = 3; // want to be responsive right after other modes are done - scan in one second
     }
   }
   return 0;

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.18)
 cmake_policy(SET CMP0011 NEW)
 cmake_policy(SET CMP0025 NEW)
 cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0067 NEW)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
@@ -147,6 +148,14 @@ if(APPLE)
 	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/usr/lib")
 	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L/usr/lib")
 
+  if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+    # request classic linker for Xcode 15 for Apple Silicon Macs
+    message("-- Xcode >= 15 on arm64 detected, requesting classic linker")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ld_classic")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -ld_classic")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -ld_classic")
+  endif()
+
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_DARWIN_C_SOURCE")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DARWIN_C_SOURCE")
 	add_definitions("-DOS_OBJECT_USE_OBJC=0")
@@ -156,7 +165,6 @@ include(compiler-versions)
 
 if(WIN32)
   message("-- Win32 build detected, setting default features")
-  set(CMAKE_FIND_LIBRARY_SUFFIXES .dll ${CMAKE_FIND_LIBRARY_SUFFIXES})
   set(USE_COLORD OFF)
   set(USE_KWALLET OFF)
   set(BUILD_CMSTEST OFF)
@@ -268,25 +276,14 @@ include(windows-macros)
 
 # we need some external programs for building darktable
 message(STATUS "Looking for external programs")
-set(EXTERNAL_PROGRAMS_FOUND 1)
 
 # we need perl for introspection
-find_program(perl_BIN perl)
-if(${perl_BIN} STREQUAL "perl_BIN-NOTFOUND")
-  message(STATUS "Missing perl")
-  set(EXTERNAL_PROGRAMS_FOUND 0)
-else(${perl_BIN} STREQUAL "perl_BIN-NOTFOUND")
-  message(STATUS "Found perl")
-endif(${perl_BIN} STREQUAL "perl_BIN-NOTFOUND")
+find_program(perl_BIN perl REQUIRED)
+message(STATUS "Found perl")
 
 # we need intltool-merge for org.darktable.darktable.desktop
-find_program(intltool_merge_BIN intltool-merge)
-if(${intltool_merge_BIN} STREQUAL "intltool_merge_BIN-NOTFOUND")
-  message(STATUS "Missing intltool-merge")
-  set(EXTERNAL_PROGRAMS_FOUND 0)
-else(${intltool_merge_BIN} STREQUAL "intltool_merge_BIN-NOTFOUND")
-  message(STATUS "Found intltool-merge")
-endif(${intltool_merge_BIN} STREQUAL "intltool_merge_BIN-NOTFOUND")
+find_program(intltool_merge_BIN intltool-merge REQUIRED)
+message(STATUS "Found intltool-merge")
 
 # we need desktop-file-validate to check org.darktable.darktable.desktop
 find_program(desktop_file_validate_BIN desktop-file-validate)
@@ -332,7 +329,7 @@ if(TESTBUILD_OPENCL_PROGRAMS)
 
       find_path(CLANG_OPENCL_INCLUDE_DIR opencl-c.h
         HINTS ${LLVM_INSTALL_PREFIX}/lib/clang ${LLVM_INSTALL_PREFIX}/lib64/clang
-        PATH_SUFFIXES include ${LLVM_PACKAGE_VERSION}/include
+        PATH_SUFFIXES include ${LLVM_PACKAGE_VERSION}/include ${LLVM_VERSION_MAJOR}/include
         NO_DEFAULT_PATH
       )
 
@@ -375,11 +372,10 @@ if(${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
   message(STATUS "Missing xsltproc")
   find_program(Saxon_BIN saxon-xslt)
   if(${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
-    message(STATUS "Missing Saxon-XSLT")
-    message(STATUS "No XSLT interpreter found")
-    set(EXTERNAL_PROGRAMS_FOUND 0)
+    message(STATUS "Missing saxon-xslt")
+    message(FATAL_ERROR "No XSLT interpreter found")
   else(${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
-    message(STATUS "Found Saxon-XSLT")
+    message(STATUS "Found saxon-xslt")
   endif(${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
 else(${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
   message(STATUS "Found xsltproc")
@@ -406,11 +402,7 @@ else()
 endif()
 
 # done with looking for programs
-if(NOT EXTERNAL_PROGRAMS_FOUND)
-  message(FATAL_ERROR "Some external programs couldn't be found")
-else(NOT EXTERNAL_PROGRAMS_FOUND)
-  message(STATUS "All external programs found")
-endif(NOT EXTERNAL_PROGRAMS_FOUND)
+message(STATUS "All external programs found")
 
 # The path can be modified by setting CMAKE_INSTALL_LOCALEDIR
 if(USE_NLS)

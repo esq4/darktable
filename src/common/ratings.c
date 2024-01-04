@@ -35,7 +35,7 @@
 
 typedef struct dt_undo_ratings_t
 {
-  int imgid;
+  dt_imgid_t imgid;
   int before;
   int after;
 } dt_undo_ratings_t;
@@ -88,7 +88,7 @@ gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
 }
 //ba
 
-int dt_ratings_get(const int imgid)
+int dt_ratings_get(const dt_imgid_t imgid)
 {
   int stars = 0;
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
@@ -103,7 +103,7 @@ int dt_ratings_get(const int imgid)
   return stars;
 }
 
-static void _ratings_apply_to_image(const int imgid, const int rating)
+static void _ratings_apply_to_image(const dt_imgid_t imgid, const int rating)
 {
   int new_rating = rating;
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
@@ -184,7 +184,7 @@ static void _ratings_apply(const GList *imgs, const int rating, GList **undo, co
 
   for(const GList *images = imgs; images; images = g_list_next(images))
   {
-    const int image_id = GPOINTER_TO_INT(images->data);
+    const dt_imgid_t image_id = GPOINTER_TO_INT(images->data);
     const int old_rating = dt_ratings_get(image_id);
     if(undo_on)
     {
@@ -216,6 +216,16 @@ static void _ratings_apply(const GList *imgs, const int rating, GList **undo, co
       _ratings_event_rating_release(darktable.develop, image_id);
     } //ba
   }
+
+  if(!g_list_shorter_than(imgs, 2)) // pop up a toast if rating multiple images at once
+  {
+    const guint count = g_list_length((GList *) imgs);
+    if(rating == DT_VIEW_REJECT)
+      dt_control_log(ngettext("rejecting %d image", "rejecting %d images", count), count);
+    else
+      dt_control_log(ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
+                     rating, count);
+  }
 }
 
 void dt_ratings_apply_on_list(const GList *img, const int rating, const gboolean undo_on)
@@ -236,29 +246,19 @@ void dt_ratings_apply_on_list(const GList *img, const int rating, const gboolean
   }
 }
 
-void dt_ratings_apply_on_image(const int imgid, const int rating, const gboolean single_star_toggle,
+void dt_ratings_apply_on_image(const dt_imgid_t imgid, const int rating, const gboolean single_star_toggle,
                                const gboolean undo_on, const gboolean group_on)
 {
   GList *imgs = NULL;
   int new_rating = rating;
 
-  if(imgid > 0) imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
+  if(dt_is_valid_imgid(imgid)) imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
 
   if(imgs)
   {
     GList *undo = NULL;
     if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_RATINGS);
     if(group_on) dt_grouping_add_grouped_images(&imgs);
-
-    if(!g_list_shorter_than(imgs, 2)) // pop up a toast if rating multiple images at once
-    {
-      const guint count = g_list_length(imgs);
-      if(new_rating == DT_VIEW_REJECT)
-        dt_control_log(ngettext("rejecting %d image", "rejecting %d images", count), count);
-      else
-        dt_control_log(ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
-                       new_rating, count);
-    }
 
     _ratings_apply(imgs, new_rating, &undo, undo_on);
 
@@ -282,9 +282,9 @@ enum
 
 static float _action_process_rating(gpointer target, dt_action_element_t element, dt_action_effect_t effect, float move_size)
 {
-  float return_value = NAN;
+  float return_value = DT_ACTION_NOT_VALID;
 
-  if(!isnan(move_size))
+  if(DT_PERFORM_ACTION(move_size))
   {
     if(element != DT_VIEW_REJECT)
     {
@@ -309,8 +309,7 @@ static float _action_process_rating(gpointer target, dt_action_element_t element
     dt_ratings_apply_on_list(imgs, element, TRUE);
 
     // if we are in darkroom we show a message as there might be no other indication
-    const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
-    if(v->view(v) == DT_VIEW_DARKROOM && g_list_is_singleton(imgs) && darktable.develop->preview_pipe)
+    if(dt_view_get_current() == DT_VIEW_DARKROOM && g_list_is_singleton(imgs) && darktable.develop->preview_pipe)
     {
       // we verify that the image is the active one
       const int id = GPOINTER_TO_INT(imgs->data);
@@ -343,8 +342,8 @@ static float _action_process_rating(gpointer target, dt_action_element_t element
   }
   else if(darktable.develop)
   {
-    const int image_id = darktable.develop->image_storage.id;
-    if(image_id != -1)
+    const dt_imgid_t image_id = darktable.develop->image_storage.id;
+    if(dt_is_valid_imgid(image_id))
     {
       int rating = dt_ratings_get(image_id);
       return_value = - rating + (rating >= element ? DT_VALUE_PATTERN_ACTIVE : 0);

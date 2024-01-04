@@ -26,6 +26,7 @@
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/math.h"
+#include "common/matrices.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -152,13 +153,13 @@ int operation_tags()
 
 int operation_tags_filter()
 {
-  // switch off clipping and decoration, we want to see the full image.
-  return IOP_TAG_DECORATION | IOP_TAG_CLIPPING;
+  // switch off cropping and decoration, we want to see the full image.
+  return IOP_TAG_DECORATION | IOP_TAG_CROPPING;
 }
 
-int default_colorspace(dt_iop_module_t *self,
-                       dt_dev_pixelpipe_t *pipe,
-                       dt_dev_pixelpipe_iop_t *piece)
+dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
+                                            dt_dev_pixelpipe_t *pipe,
+                                            dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -286,10 +287,10 @@ typedef struct dt_iop_ashift_params_t
   float aspect;      // $MIN: 0.5 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "aspect adjust"
   dt_iop_ashift_mode_t mode;     // $DEFAULT: ASHIFT_MODE_GENERIC $DESCRIPTION: "lens model"
   dt_iop_ashift_crop_t cropmode; // $DEFAULT: ASHIFT_CROP_LARGEST $DESCRIPTION: "automatic cropping"
-  float cl;          // $DEFAULT: 0.0
-  float cr;          // $DEFAULT: 1.0
-  float ct;          // $DEFAULT: 0.0
-  float cb;          // $DEFAULT: 1.0
+  float cl;          // $DEFAULT: 0.0 $MIN: 0.0 $MAX: 1.0
+  float cr;          // $DEFAULT: 1.0 $MIN: 0.0 $MAX: 1.0
+  float ct;          // $DEFAULT: 0.0 $MIN: 0.0 $MAX: 1.0
+  float cb;          // $DEFAULT: 1.0 $MIN: 0.0 $MAX: 1.0
   float last_drawn_lines[MAX_SAVED_LINES * 4];
   int last_drawn_lines_count;
   float last_quad_lines[8];
@@ -407,9 +408,9 @@ typedef struct dt_iop_ashift_gui_data_t
   int buf_x_off;
   int buf_y_off;
   float buf_scale;
-  uint64_t lines_hash;
-  uint64_t grid_hash;
-  uint64_t buf_hash;
+  dt_hash_t lines_hash;
+  dt_hash_t grid_hash;
+  dt_hash_t buf_hash;
   dt_iop_ashift_fitaxis_t lastfit;
   float lastx;
   float lasty;
@@ -459,43 +460,70 @@ typedef struct dt_iop_ashift_global_data_t
 int legacy_params(dt_iop_module_t *self,
                   const void *const old_params,
                   const int old_version,
-                  void *new_params,
-                  const int new_version)
+                  void **new_params,
+                  int32_t *new_params_size,
+                  int *new_version)
 {
-  if(old_version == 1 && new_version == 5)
+  typedef struct dt_iop_ashift_params_v5_t
   {
-    typedef struct dt_iop_ashift_params1_t
+    float rotation;
+    float lensshift_v;
+    float lensshift_h;
+    float shear;
+    float f_length;
+    float crop_factor;
+    float orthocorr;
+    float aspect;
+    dt_iop_ashift_mode_t mode;
+    dt_iop_ashift_crop_t cropmode;
+    float cl;
+    float cr;
+    float ct;
+    float cb;
+    float last_drawn_lines[MAX_SAVED_LINES * 4];
+    int last_drawn_lines_count;
+    float last_quad_lines[8];
+  } dt_iop_ashift_params_v5_t;
+
+  if(old_version == 1)
+  {
+    typedef struct dt_iop_ashift_params_v1_t
     {
       float rotation;
       float lensshift_v;
       float lensshift_h;
       int toggle;
-    } dt_iop_ashift_params1_t;
+    } dt_iop_ashift_params_v1_t;
 
-    const dt_iop_ashift_params1_t *old = old_params;
-    dt_iop_ashift_params_t *new = new_params;
-    new->rotation = old->rotation;
-    new->lensshift_v = old->lensshift_v;
-    new->lensshift_h = old->lensshift_h;
-    new->shear = 0.0f;
-    new->f_length = DEFAULT_F_LENGTH;
-    new->crop_factor = 1.0f;
-    new->orthocorr = 100.0f;
-    new->aspect = 1.0f;
-    new->mode = ASHIFT_MODE_GENERIC;
-    new->cropmode = ASHIFT_CROP_OFF;
-    new->cl = 0.0f;
-    new->cr = 1.0f;
-    new->ct = 0.0f;
-    new->cb = 1.0f;
-    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) new->last_drawn_lines[i] = 0.0f;
-    for(int i = 0; i < 8; i++) new->last_quad_lines[i] = 0.0f;
-    new->last_drawn_lines_count = 0;
+    const dt_iop_ashift_params_v1_t *o = old_params;
+    dt_iop_ashift_params_v5_t *n =
+      (dt_iop_ashift_params_v5_t *)malloc(sizeof(dt_iop_ashift_params_v5_t));
+    n->rotation = o->rotation;
+    n->lensshift_v = o->lensshift_v;
+    n->lensshift_h = o->lensshift_h;
+    n->shear = 0.0f;
+    n->f_length = DEFAULT_F_LENGTH;
+    n->crop_factor = 1.0f;
+    n->orthocorr = 100.0f;
+    n->aspect = 1.0f;
+    n->mode = ASHIFT_MODE_GENERIC;
+    n->cropmode = ASHIFT_CROP_OFF;
+    n->cl = 0.0f;
+    n->cr = 1.0f;
+    n->ct = 0.0f;
+    n->cb = 1.0f;
+    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) n->last_drawn_lines[i] = 0.0f;
+    for(int i = 0; i < 8; i++) n->last_quad_lines[i] = 0.0f;
+    n->last_drawn_lines_count = 0;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_ashift_params_v5_t);
+    *new_version = 5;
     return 0;
   }
-  if(old_version == 2 && new_version == 5)
+  if(old_version == 2)
   {
-    typedef struct dt_iop_ashift_params2_t
+    typedef struct dt_iop_ashift_params_v2_t
     {
       float rotation;
       float lensshift_v;
@@ -506,32 +534,37 @@ int legacy_params(dt_iop_module_t *self,
       float aspect;
       dt_iop_ashift_mode_t mode;
       int toggle;
-    } dt_iop_ashift_params2_t;
+    } dt_iop_ashift_params_v2_t;
 
-    const dt_iop_ashift_params2_t *old = old_params;
-    dt_iop_ashift_params_t *new = new_params;
-    new->rotation = old->rotation;
-    new->lensshift_v = old->lensshift_v;
-    new->lensshift_h = old->lensshift_h;
-    new->shear = 0.0f;
-    new->f_length = old->f_length;
-    new->crop_factor = old->crop_factor;
-    new->orthocorr = old->orthocorr;
-    new->aspect = old->aspect;
-    new->mode = old->mode;
-    new->cropmode = ASHIFT_CROP_OFF;
-    new->cl = 0.0f;
-    new->cr = 1.0f;
-    new->ct = 0.0f;
-    new->cb = 1.0f;
-    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) new->last_drawn_lines[i] = 0.0f;
-    for(int i = 0; i < 8; i++) new->last_quad_lines[i] = 0.0f;
-    new->last_drawn_lines_count = 0;
+    const dt_iop_ashift_params_v2_t *o = old_params;
+    dt_iop_ashift_params_v5_t *n =
+      (dt_iop_ashift_params_v5_t *)malloc(sizeof(dt_iop_ashift_params_v5_t));
+    n->rotation = o->rotation;
+    n->lensshift_v = o->lensshift_v;
+    n->lensshift_h = o->lensshift_h;
+    n->shear = 0.0f;
+    n->f_length = o->f_length;
+    n->crop_factor = o->crop_factor;
+    n->orthocorr = o->orthocorr;
+    n->aspect = o->aspect;
+    n->mode = o->mode;
+    n->cropmode = ASHIFT_CROP_OFF;
+    n->cl = 0.0f;
+    n->cr = 1.0f;
+    n->ct = 0.0f;
+    n->cb = 1.0f;
+    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) n->last_drawn_lines[i] = 0.0f;
+    for(int i = 0; i < 8; i++) n->last_quad_lines[i] = 0.0f;
+    n->last_drawn_lines_count = 0;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_ashift_params_v5_t);
+    *new_version = 5;
     return 0;
   }
-  if(old_version == 3 && new_version == 5)
+  if(old_version == 3)
   {
-    typedef struct dt_iop_ashift_params3_t
+    typedef struct dt_iop_ashift_params_v3_t
     {
       float rotation;
       float lensshift_v;
@@ -547,32 +580,37 @@ int legacy_params(dt_iop_module_t *self,
       float cr;
       float ct;
       float cb;
-    } dt_iop_ashift_params3_t;
+    } dt_iop_ashift_params_v3_t;
 
-    const dt_iop_ashift_params3_t *old = old_params;
-    dt_iop_ashift_params_t *new = new_params;
-    new->rotation = old->rotation;
-    new->lensshift_v = old->lensshift_v;
-    new->lensshift_h = old->lensshift_h;
-    new->shear = 0.0f;
-    new->f_length = old->f_length;
-    new->crop_factor = old->crop_factor;
-    new->orthocorr = old->orthocorr;
-    new->aspect = old->aspect;
-    new->mode = old->mode;
-    new->cropmode = old->cropmode;
-    new->cl = old->cl;
-    new->cr = old->cr;
-    new->ct = old->ct;
-    new->cb = old->cb;
-    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) new->last_drawn_lines[i] = 0.0f;
-    for(int i = 0; i < 8; i++) new->last_quad_lines[i] = 0.0f;
-    new->last_drawn_lines_count = 0;
+    const dt_iop_ashift_params_v3_t *o = old_params;
+    dt_iop_ashift_params_v5_t *n =
+      (dt_iop_ashift_params_v5_t *)malloc(sizeof(dt_iop_ashift_params_v5_t));
+    n->rotation = o->rotation;
+    n->lensshift_v = o->lensshift_v;
+    n->lensshift_h = o->lensshift_h;
+    n->shear = 0.0f;
+    n->f_length = o->f_length;
+    n->crop_factor = o->crop_factor;
+    n->orthocorr = o->orthocorr;
+    n->aspect = o->aspect;
+    n->mode = o->mode;
+    n->cropmode = o->cropmode;
+    n->cl = o->cl;
+    n->cr = o->cr;
+    n->ct = o->ct;
+    n->cb = o->cb;
+    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) n->last_drawn_lines[i] = 0.0f;
+    for(int i = 0; i < 8; i++) n->last_quad_lines[i] = 0.0f;
+    n->last_drawn_lines_count = 0;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_ashift_params_v5_t);
+    *new_version = 5;
     return 0;
   }
-  if(old_version == 4 && new_version == 5)
+  if(old_version == 4)
   {
-    typedef struct dt_iop_ashift_params4_t
+    typedef struct dt_iop_ashift_params_v4_t
     {
       float rotation;
       float lensshift_v;
@@ -589,27 +627,32 @@ int legacy_params(dt_iop_module_t *self,
       float cr;
       float ct;
       float cb;
-    } dt_iop_ashift_params4_t;
+    } dt_iop_ashift_params_v4_t;
 
-    const dt_iop_ashift_params4_t *old = old_params;
-    dt_iop_ashift_params_t *new = new_params;
-    new->rotation = old->rotation;
-    new->lensshift_v = old->lensshift_v;
-    new->lensshift_h = old->lensshift_h;
-    new->shear = old->shear;
-    new->f_length = old->f_length;
-    new->crop_factor = old->crop_factor;
-    new->orthocorr = old->orthocorr;
-    new->aspect = old->aspect;
-    new->mode = old->mode;
-    new->cropmode = old->cropmode;
-    new->cl = old->cl;
-    new->cr = old->cr;
-    new->ct = old->ct;
-    new->cb = old->cb;
-    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) new->last_drawn_lines[i] = 0.0f;
-    for(int i = 0; i < 8; i++) new->last_quad_lines[i] = 0.0f;
-    new->last_drawn_lines_count = 0;
+    const dt_iop_ashift_params_v4_t *o = old_params;
+    dt_iop_ashift_params_v5_t *n =
+      (dt_iop_ashift_params_v5_t *)malloc(sizeof(dt_iop_ashift_params_v5_t));
+    n->rotation = o->rotation;
+    n->lensshift_v = o->lensshift_v;
+    n->lensshift_h = o->lensshift_h;
+    n->shear = o->shear;
+    n->f_length = o->f_length;
+    n->crop_factor = o->crop_factor;
+    n->orthocorr = o->orthocorr;
+    n->aspect = o->aspect;
+    n->mode = o->mode;
+    n->cropmode = o->cropmode;
+    n->cl = o->cl;
+    n->cr = o->cr;
+    n->ct = o->ct;
+    n->cb = o->cb;
+    for(int i = 0; i < MAX_SAVED_LINES * 4; i++) n->last_drawn_lines[i] = 0.0f;
+    for(int i = 0; i < 8; i++) n->last_quad_lines[i] = 0.0f;
+    n->last_drawn_lines_count = 0;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_ashift_params_v5_t);
+    *new_version = 5;
     return 0;
   }
 
@@ -676,14 +719,6 @@ static inline int vec3isnull(const float *const v)
   const float eps = 1e-10f;
   return (fabsf(v[0]) < eps && fabsf(v[1]) < eps && fabsf(v[2]) < eps);
 }
-
-#ifdef ASHIFT_DEBUG
-static void print_roi(const dt_iop_roi_t *roi, const char *label)
-{
-  printf("{ %5d  %5d  %5d  %5d  %.6f } %s\n",
-         roi->x, roi->y, roi->width, roi->height, roi->scale, label);
-}
-#endif
 
 static inline void _shadow_crop_box(dt_iop_ashift_params_t *p,
                                     dt_iop_ashift_gui_data_t *g)
@@ -972,15 +1007,15 @@ static inline int isneutral(const dt_iop_ashift_data_t *data)
 }
 
 
-int distort_transform(dt_iop_module_t *self,
-                      dt_dev_pixelpipe_iop_t *piece,
-                      float *const restrict points,
-                      const size_t points_count)
+gboolean distort_transform(dt_iop_module_t *self,
+                           dt_dev_pixelpipe_iop_t *piece,
+                           float *const restrict points,
+                           const size_t points_count)
 {
   const dt_iop_ashift_data_t *const data = (dt_iop_ashift_data_t *)piece->data;
 
   // nothing to be done if parameters are set to neutral values
-  if(isneutral(data)) return 1;
+  if(isneutral(data)) return TRUE;
 
   float DT_ALIGNED_ARRAY homograph[3][3];
   _homography((float *)homograph, data->rotation, data->lensshift_v, data->lensshift_h,
@@ -1008,19 +1043,19 @@ int distort_transform(dt_iop_module_t *self,
     points[i + 1] = po[1] / po[2] - cy;
   }
 
-  return 1;
+  return TRUE;
 }
 
 
-int distort_backtransform(dt_iop_module_t *self,
-                          dt_dev_pixelpipe_iop_t *piece,
-                          float *points,
-                          const size_t points_count)
+gboolean distort_backtransform(dt_iop_module_t *self,
+                               dt_dev_pixelpipe_iop_t *piece,
+                               float *points,
+                               const size_t points_count)
 {
   const dt_iop_ashift_data_t *const data = (dt_iop_ashift_data_t *)piece->data;
 
   // nothing to be done if parameters are set to neutral values
-  if(isneutral(data)) return 1;
+  if(isneutral(data)) return TRUE;
 
   float DT_ALIGNED_ARRAY ihomograph[3][3];
   _homography((float *)ihomograph, data->rotation, data->lensshift_v, data->lensshift_h,
@@ -1048,7 +1083,7 @@ int distort_backtransform(dt_iop_module_t *self,
     points[i + 1] = po[1] / po[2];
   }
 
-  return 1;
+  return TRUE;
 }
 
 void distort_mask(struct dt_iop_module_t *self,
@@ -1115,9 +1150,10 @@ void distort_mask(struct dt_iop_module_t *self,
       pin[1] -= roi_in->y;
 
       // get output values by interpolation from input image
-      dt_interpolation_compute_pixel1c
-        (interpolation, in, _out + i, pin[0], pin[1], roi_in->width,
-         roi_in->height, roi_in->width);
+      _out[i] = dt_interpolation_compute_sample(interpolation, in,
+                                                pin[0], pin[1],
+                                                roi_in->width, roi_in->height,
+                                                1, roi_in->width);
     }
   }
 }
@@ -1179,11 +1215,6 @@ void modify_roi_out(struct dt_iop_module_t *self,
 
   roi_out->width = floorf(width);
   roi_out->height = floorf(height);
-
-#ifdef ASHIFT_DEBUG
-  print_roi(roi_in, "roi_in (going into modify_roi_out)");
-  print_roi(roi_out, "roi_out (after modify_roi_out)");
-#endif
 }
 
 void modify_roi_in(struct dt_iop_module_t *self,
@@ -1257,10 +1288,6 @@ void modify_roi_in(struct dt_iop_module_t *self,
   roi_in->y = CLAMP(roi_in->y, 0, (int)floorf(orig_h));
   roi_in->width = CLAMP(roi_in->width, 1, (int)floorf(orig_w) - roi_in->x);
   roi_in->height = CLAMP(roi_in->height, 1, (int)floorf(orig_h) - roi_in->y);
-#ifdef ASHIFT_DEBUG
-  print_roi(roi_out, "roi_out (going into modify_roi_in)");
-  print_roi(roi_in, "roi_in (after modify_roi_in)");
-#endif
 }
 
 // simple conversion of rgb image into greyscale variant suitable for
@@ -1365,7 +1392,7 @@ static void edge_enhance_1d(const double *in, double *out,
 }
 
 // edge enhancement in both directions
-static int edge_enhance(const double *in,
+static gboolean edge_enhance(const double *in,
                         double *out,
                         const int width,
                         const int height)
@@ -1407,7 +1434,7 @@ error:
 
 // detail enhancement via bilateral grid (function arguments in and
 // out may represent identical buffers)
-static int detail_enhance(const float *const in,
+static gboolean detail_enhance(const float *const in,
                           float *const out,
                           const int width,
                           const int height)
@@ -1416,7 +1443,7 @@ static int detail_enhance(const float *const in,
   const float sigma_s = fminf(width, height) * 0.02f;
   const float detail = 10.0f;
   const size_t npixels = (size_t)width * height;
-  int success = TRUE;
+  gboolean success = TRUE;
 
   // we need to convert from RGB to Lab first;
   // as colors don't matter we are safe to assume data to be sRGB
@@ -1488,7 +1515,7 @@ static void gamma_correct(const float *const in,
 
 // do actual line_detection based on LSD algorithm and return results according
 // to this module's conventions
-static int line_detect(float *in,
+static gboolean line_detect(float *in,
                        const int width,
                        const int height,
                        const int x_off,
@@ -1709,7 +1736,7 @@ static int _get_structure(dt_iop_module_t *module,
     scale = g->buf_scale;
 
     // create a temporary buffer to hold image data
-    buffer = malloc(sizeof(float) * 4 * (size_t)width * height);
+    buffer = dt_alloc_align_float((size_t)4 * width * height);
     if(buffer != NULL)
       dt_iop_image_copy_by_size(buffer, g->buf, width, height, 4);
   }
@@ -1750,11 +1777,11 @@ static int _get_structure(dt_iop_module_t *module,
   g->lines_version++;
   g->lines = lines;
 
-  free(buffer);
+  dt_free_align(buffer);
   return TRUE;
 
 error:
-  free(buffer);
+  dt_free_align(buffer);
   return FALSE;
 }
 
@@ -1768,7 +1795,7 @@ static inline void swap(int *a, int *b)
 }
 
 // do complete permutations
-static int quickperm(int *a, int *p, const int N, int *i)
+static gboolean quickperm(int *a, int *p, const int N, int *i)
 {
   if(*i >= N) return FALSE;
 
@@ -2008,7 +2035,7 @@ static void ransac(const dt_iop_ashift_line_t *lines,
 
 // try to clean up structural data by eliminating outliers and thereby increasing
 // the chance of a convergent fitting
-static int _remove_outliers(dt_iop_module_t *module)
+static gboolean _remove_outliers(dt_iop_module_t *module)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)module->gui_data;
 
@@ -2019,11 +2046,15 @@ static int _remove_outliers(dt_iop_module_t *module)
   const int xmax = xmin + width;
   const int ymax = ymin + height;
 
+  if(g->lines_count < 1)
+    return TRUE;
   // holds the index set of lines we want to work on
   int *lines_set = malloc(sizeof(int) * g->lines_count);
   // holds the result of ransac
   int *inout_set = malloc(sizeof(int) * g->lines_count);
 
+  if(!lines_set || !inout_set)
+    goto error;
   // some accounting variables
   int vnb = 0, vcount = 0;
   int hnb = 0, hcount = 0;
@@ -2160,25 +2191,25 @@ static double model_fitness(double *params, void *data)
   int pcount = 0;
 
   // fill in fit parameters from params[]. Attention: order matters!!!
-  if(isnan(rotation))
+  if(dt_isnan(rotation))
   {
     rotation = ilogit(params[pcount], -rotation_range, rotation_range);
     pcount++;
   }
 
-  if(isnan(lensshift_v))
+  if(dt_isnan(lensshift_v))
   {
     lensshift_v = ilogit(params[pcount], -lensshift_v_range, lensshift_v_range);
     pcount++;
   }
 
-  if(isnan(lensshift_h))
+  if(dt_isnan(lensshift_h))
   {
     lensshift_h = ilogit(params[pcount], -lensshift_h_range, lensshift_h_range);
     pcount++;
   }
 
-  if(isnan(shear))
+  if(dt_isnan(shear))
   {
     shear = ilogit(params[pcount], -shear_range, shear_range);
     pcount++;
@@ -2405,19 +2436,19 @@ static dt_iop_ashift_nmsresult_t nmsfit(dt_iop_module_t *module,
 
   // fit was successful: now consolidate the results (order matters!!!)
   pcount = 0;
-  fit.rotation = isnan(fit.rotation)
+  fit.rotation = dt_isnan(fit.rotation)
     ? ilogit(params[pcount++], -fit.rotation_range, fit.rotation_range)
     : fit.rotation;
 
-  fit.lensshift_v = isnan(fit.lensshift_v)
+  fit.lensshift_v = dt_isnan(fit.lensshift_v)
     ? ilogit(params[pcount++], -fit.lensshift_v_range, fit.lensshift_v_range)
     : fit.lensshift_v;
 
-  fit.lensshift_h = isnan(fit.lensshift_h)
+  fit.lensshift_h = dt_isnan(fit.lensshift_h)
     ? ilogit(params[pcount++], -fit.lensshift_h_range, fit.lensshift_h_range)
     : fit.lensshift_h;
 
-  fit.shear = isnan(fit.shear)
+  fit.shear = dt_isnan(fit.shear)
     ? ilogit(params[pcount++], -fit.shear_range, fit.shear_range)
     : fit.shear;
 
@@ -2577,9 +2608,9 @@ static double crop_fitness(double *params, void *data)
   const float ht = cropfit->height;
 
   // get variable and constant parameters, respectively
-  const float x = isnan(cropfit->x) ? params[0] : cropfit->x;
-  const float y = isnan(cropfit->y) ? params[1] : cropfit->y;
-  const float alpha = isnan(cropfit->alpha) ? params[2] : cropfit->alpha;
+  const float x = dt_isnan(cropfit->x) ? params[0] : cropfit->x;
+  const float y = dt_isnan(cropfit->y) ? params[1] : cropfit->y;
+  const float alpha = dt_isnan(cropfit->alpha) ? params[2] : cropfit->alpha;
 
   // the center of the rectangle in input image coordinates
   const float Pc[3] = { x * wd, y * ht, 1.0f };
@@ -2764,9 +2795,9 @@ static void do_crop(dt_iop_module_t *module, dt_iop_ashift_params_t *p)
   if(iter >= NMS_CROP_ITERATIONS) goto failed;
 
   // the fit did converge -> get clipping margins out of params:
-  cropfit.x = isnan(cropfit.x) ? params[0] : cropfit.x;
-  cropfit.y = isnan(cropfit.y) ? params[1] : cropfit.y;
-  cropfit.alpha = isnan(cropfit.alpha) ? params[2] : cropfit.alpha;
+  cropfit.x = dt_isnan(cropfit.x) ? params[0] : cropfit.x;
+  cropfit.y = dt_isnan(cropfit.y) ? params[1] : cropfit.y;
+  cropfit.alpha = dt_isnan(cropfit.alpha) ? params[2] : cropfit.alpha;
 
   // the area of the best fitting rectangle
   const float A = fabs(crop_fitness(params, (void*)&cropfit));
@@ -3029,14 +3060,14 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
   if(!g || !p) return;
 
-  const float pr_d = self->dev->preview_downsampling;
   // save quad lines (we only handle the 2 vertical lines)
   if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines && g->lines_count >= 4)
   {
     float pts[8] =
-      { g->lines[0].p1[0] / pr_d, g->lines[0].p1[1] / pr_d, g->lines[0].p2[0] / pr_d,
-        g->lines[0].p2[1] / pr_d, g->lines[1].p1[0] / pr_d, g->lines[1].p1[1] / pr_d,
-        g->lines[1].p2[0] / pr_d, g->lines[1].p2[1] / pr_d };
+      { g->lines[0].p1[0], g->lines[0].p1[1],
+        g->lines[0].p2[0], g->lines[0].p2[1],
+        g->lines[1].p1[0], g->lines[1].p1[1],
+        g->lines[1].p2[0], g->lines[1].p2[1] };
 
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe,
                                          self->iop_order,
@@ -3090,8 +3121,6 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
 
   dt_dev_pixelpipe_iop_t *piece =
     dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-  const float pr_d = self->dev->preview_downsampling;
-
   if(method == ASHIFT_METHOD_QUAD
      && p->last_quad_lines[0] > 0.0f && p->last_quad_lines[1] > 0.0f
      && p->last_quad_lines[2] > 0.0f && p->last_quad_lines[3] > 0.0f)
@@ -3104,29 +3133,27 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines) free(g->lines);
-      g->lines = (dt_iop_ashift_line_t *)g_malloc0(sizeof(dt_iop_ashift_line_t) * 4);
+      g->lines = (dt_iop_ashift_line_t *)calloc(4, sizeof(dt_iop_ashift_line_t));
       // vertical lines
       _draw_basic_line
         (&g->lines[0],
-         pts[0] * pr_d,
-         pts[1] * pr_d, pts[2] * pr_d, pts[3] * pr_d,
+         pts[0], pts[1], pts[2], pts[3],
          ASHIFT_LINE_VERTICAL_SELECTED);
       _draw_basic_line
         (&g->lines[1],
-         pts[4] * pr_d,
-         pts[5] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+         pts[4], pts[5], pts[6], pts[7],
          ASHIFT_LINE_VERTICAL_SELECTED);
 
       // horizontal lines
       _draw_basic_line
         (&g->lines[2],
-         pts[0] * pr_d,
-         pts[1] * pr_d, pts[4] * pr_d, pts[5] * pr_d,
+         pts[0],
+         pts[1], pts[4], pts[5],
          ASHIFT_LINE_HORIZONTAL_SELECTED);
       _draw_basic_line
         (&g->lines[3],
-         pts[2] * pr_d,
-         pts[3] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+         pts[2],
+         pts[3], pts[6], pts[7],
          ASHIFT_LINE_HORIZONTAL_SELECTED);
 
       g->lines_count = 4;
@@ -3134,8 +3161,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
       g->horizontal_count = 2;
       g->vertical_weight = 2.0;
       g->horizontal_weight = 2.0;
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -3153,7 +3180,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
                                      p->last_drawn_lines_count * 2))
     {
       if(g->lines) free(g->lines);
-      g->lines = (dt_iop_ashift_line_t *)g_malloc0(sizeof(dt_iop_ashift_line_t) * p->last_drawn_lines_count);
+      g->lines = (dt_iop_ashift_line_t *)calloc(p->last_drawn_lines_count, sizeof(dt_iop_ashift_line_t));
 
       int vnb = 0; // number of vertical lines
       int hnb = 0; // number of horizontal lines
@@ -3179,8 +3206,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
       g->horizontal_count = hnb;
       g->vertical_weight = (float)vnb;
       g->horizontal_weight = (float)hnb;
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -3189,7 +3216,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self,
 }
 
 // helper function to clean structural data
-static int _do_clean_structure(dt_iop_module_t *module,
+static gboolean _do_clean_structure(dt_iop_module_t *module,
                                dt_iop_ashift_params_t *p,
                                const gboolean save_drawn)
 {
@@ -3213,7 +3240,7 @@ static int _do_clean_structure(dt_iop_module_t *module,
 }
 
 // helper function to start analysis for structural data and report about errors
-static int _do_get_structure_auto(dt_iop_module_t *module,
+static gboolean _do_get_structure_auto(dt_iop_module_t *module,
                                   dt_iop_ashift_params_t *p,
                                   const dt_iop_ashift_enhance_t enhance)
 {
@@ -3231,7 +3258,7 @@ static int _do_get_structure_auto(dt_iop_module_t *module,
   {
     dt_control_log(_("data pending - please repeat"));
     // force to reprocess the preview, otherwise the buffer is ko
-    dt_dev_pixelpipe_flush_caches(module->dev->preview_pipe);
+    dt_dev_pixelpipe_cache_flush(module->dev->preview_pipe);
     dt_dev_reprocess_preview(module->dev);
     goto error;
   }
@@ -3283,7 +3310,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   {
     dt_control_log(_("data pending - please repeat"));
     // force to reprocess the preview, otherwise the buffer is ko
-    dt_dev_pixelpipe_flush_caches(self->dev->preview_pipe);
+    dt_dev_pixelpipe_cache_flush(self->dev->preview_pipe);
     dt_dev_reprocess_preview(self->dev);
     return;
   }
@@ -3304,9 +3331,8 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
 
   g->current_structure_method = ASHIFT_METHOD_LINES;
 
-  const float pr_d = self->dev->preview_downsampling;
-  g->lines_in_width = piece->iwidth * pr_d;
-  g->lines_in_height = piece->iheight * pr_d;
+  g->lines_in_width = piece->iwidth;
+  g->lines_in_height = piece->iheight;
   g->lines_x_off = 0;
   g->lines_y_off = 0;
 
@@ -3331,7 +3357,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   {
     dt_control_log(_("data pending - please repeat"));
     // force to reprocess the preview, otherwise the buffer is ko
-    dt_dev_pixelpipe_flush_caches(self->dev->preview_pipe);
+    dt_dev_pixelpipe_cache_flush(self->dev->preview_pipe);
     dt_dev_reprocess_preview(self->dev);
     return;
   }
@@ -3356,9 +3382,8 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   }
   else
   {
-    const float pr_d = self->dev->preview_downsampling;
-    const float wd = self->dev->preview_pipe->backbuf_width;
-    const float ht = self->dev->preview_pipe->backbuf_height;
+    float wd, ht;
+    dt_dev_get_preview_size(self->dev, &wd, &ht);
     float pts[8] =
       { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8,
         wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
@@ -3368,31 +3393,31 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
-      g->lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * 4);
+      g->lines = (dt_iop_ashift_line_t *)calloc(4, sizeof(dt_iop_ashift_line_t));
       g->lines_count = 4;
 
       _draw_basic_line(&g->lines[0],
-                       pts[0] * pr_d, pts[1] * pr_d,
-                       pts[2] * pr_d, pts[3] * pr_d,
+                       pts[0], pts[1],
+                       pts[2], pts[3],
                        ASHIFT_LINE_VERTICAL_SELECTED);
       _draw_basic_line(&g->lines[1],
-                       pts[4] * pr_d,
-                       pts[5] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+                       pts[4],
+                       pts[5], pts[6], pts[7],
                        ASHIFT_LINE_VERTICAL_SELECTED);
       _draw_basic_line(&g->lines[2],
-                       pts[0] * pr_d, pts[1] * pr_d, pts[4] * pr_d,
-                       pts[5] * pr_d,
+                       pts[0], pts[1], pts[4],
+                       pts[5],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
       _draw_basic_line(&g->lines[3],
-                       pts[2] * pr_d,
-                       pts[3] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+                       pts[2],
+                       pts[3], pts[6], pts[7],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
 
       // get real line type (they may be wrong due to image rotation)
       for(int i = 0; i < 4; i++) _draw_retrieve_line_type(&g->lines[i]);
 
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->lines_x_off = 0;
       g->lines_y_off = 0;
       g->vertical_count = 2;
@@ -3472,12 +3497,11 @@ void process(struct dt_iop_module_t *self,
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
-    const float pr_d = self->dev->preview_downsampling;
     const int width = roi_in->width;
     const int height = roi_in->height;
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale / pr_d;
+    const float scale = roi_in->scale;
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f,
@@ -3505,7 +3529,7 @@ void process(struct dt_iop_module_t *self,
       ? 1 : 0;
 
     // did modules prior to this one in pixelpipe have changed? -> check via hash value
-    const uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe,
+    const dt_hash_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe,
                                            self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
 
     dt_iop_gui_enter_critical_section(self);
@@ -3516,10 +3540,10 @@ void process(struct dt_iop_module_t *self,
        || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
     {
       // if needed allocate buffer
-      free(g->buf); // a no-op if g->buf is NULL
+      dt_free_align(g->buf);
       // only get new buffer if no old buffer available or old buffer
       // does not fit in terms of size
-      g->buf = malloc(sizeof(float) * 4 * width * height);
+      g->buf = dt_alloc_align_float(4 * width * height);
     }
 
     if(g->buf /* && hash != g->buf_hash */)
@@ -3626,10 +3650,9 @@ int process_cl(struct dt_iop_module_t *self,
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
-    const float pr_d = self->dev->preview_downsampling;
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale / pr_d;
+    const float scale = roi_in->scale;
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f,
@@ -3657,7 +3680,7 @@ int process_cl(struct dt_iop_module_t *self,
       fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // do modules coming before this one in pixelpipe have changed? -> check via hash value
-    const uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe,
+    const dt_hash_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe,
                                            self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
 
     dt_iop_gui_enter_critical_section(self);
@@ -3667,9 +3690,9 @@ int process_cl(struct dt_iop_module_t *self,
     if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)iwidth * iheight)
     {
       // if needed allocate buffer
-      free(g->buf); // a no-op if g->buf is NULL
+      dt_free_align(g->buf);
       // only get new buffer if no old buffer or old buffer does not fit in terms of size
-      g->buf = malloc(sizeof(float) * 4 * iwidth * iheight);
+      g->buf = dt_alloc_align_float(4 * iwidth * iheight);
     }
 
     if(g->buf /* && hash != g->buf_hash */)
@@ -3696,7 +3719,7 @@ int process_cl(struct dt_iop_module_t *self,
     size_t region[] = { width, height, 1 };
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
     if(err != CL_SUCCESS) goto error;
-    return TRUE;
+    return CL_SUCCESS;
   }
 
   float ihomograph[3][3];
@@ -3711,6 +3734,7 @@ int process_cl(struct dt_iop_module_t *self,
   const float cx = roi_out->scale * fullwidth * d->cl;
   const float cy = roi_out->scale * fullheight * d->ct;
 
+  err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
   dev_homo = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, ihomograph);
   if(dev_homo == NULL) goto error;
 
@@ -3741,6 +3765,7 @@ int process_cl(struct dt_iop_module_t *self,
       ldkernel = gd->kernel_ashift_lanczos3;
       break;
     default:
+      err = DT_OPENCL_DEFAULT_ERROR;
       goto error;
   }
 
@@ -3750,16 +3775,10 @@ int process_cl(struct dt_iop_module_t *self,
      CLARG(iwidth), CLARG(iheight), CLARRAY(2, iroi),
      CLARRAY(2, oroi),
      CLARG(in_scale), CLARG(out_scale), CLARRAY(2, clip), CLARG(dev_homo));
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_homo);
-  return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_homo);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_ashift] couldn't enqueue kernel! %s\n",
-           cl_errstr(err));
-  return FALSE;
+  return err;
 }
 #endif
 
@@ -3774,10 +3793,13 @@ static void _get_near(const float *points,
 {
   const float delta2 = delta * delta;
 
+  if(lines_count < 1 || points_idx == NULL)
+    return;
+
+  for(int n = 0; n < lines_count; n++)
+    points_idx[n].near = 0;
   for(int n = 0; n < lines_count; n++)
   {
-    points_idx[n].near = 0;
-
     // skip irrelevant lines
     if(points_idx[n].type == ASHIFT_LINE_IRRELEVANT)
       continue;
@@ -3873,25 +3895,17 @@ static void _get_bounded_inside(const float *points,
 }
 
 // generate hash value for lines taking into account only the end point coordinates
-static uint64_t _get_lines_hash(const dt_iop_ashift_line_t *lines,
+static dt_hash_t _get_lines_hash(const dt_iop_ashift_line_t *lines,
                                 const int lines_count)
 {
-  uint64_t hash = 5381;
+  dt_hash_t hash = DT_INITHASH;
   for(int n = 0; n < lines_count; n++)
   {
-    const dt_boundingbox_t v = { lines[n].p1[0],
-                                 lines[n].p1[1],
-                                 lines[n].p2[0],
-                                 lines[n].p2[1] };
-    union {
-        float f;
-        uint32_t u;
-    } x;
-
-    for(size_t i = 0; i < 4; i++) {
-      x.f = v[i];
-      hash = ((hash << 5) + hash) ^ x.u;
-    }
+    const uint32_t v[4] = { (uint32_t)lines[n].p1[0],
+                            (uint32_t)lines[n].p1[1],
+                            (uint32_t)lines[n].p2[0],
+                            (uint32_t)lines[n].p2[1] };
+    hash = dt_hash(hash, &v, sizeof(v));
   }
   return hash;
 }
@@ -3899,14 +3913,14 @@ static uint64_t _get_lines_hash(const dt_iop_ashift_line_t *lines,
 // update color information in points_idx if lines have changed in
 // terms of type (but not in terms of number or position)
 
-static int update_colors(struct dt_iop_module_t *self,
+static gboolean _update_colors(struct dt_iop_module_t *self,
                          dt_iop_ashift_points_idx_t *points_idx,
                          const int points_lines_count)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
   // is the display flipped relative to the original image?
-  const int isflipped = g->isflipped;
+  const gboolean isflipped = g->isflipped;
 
   // go through all lines
   for(int n = 0; n < points_lines_count; n++)
@@ -3932,7 +3946,7 @@ static int update_colors(struct dt_iop_module_t *self,
 }
 
 // get all the points to display lines in the gui
-static int get_points(struct dt_iop_module_t *self,
+static gboolean _get_points(struct dt_iop_module_t *self,
                       const dt_iop_ashift_line_t *lines,
                       const int lines_count,
                       const int lines_version,
@@ -3945,6 +3959,8 @@ static int get_points(struct dt_iop_module_t *self,
   dt_develop_t *dev = self->dev;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
+  if(lines_count < 1)
+    return FALSE;
   dt_iop_ashift_points_idx_t *my_points_idx = NULL;
   float *my_points = NULL;
   float *my_extremas = NULL;
@@ -3991,7 +4007,7 @@ static int get_points(struct dt_iop_module_t *self,
   // now allocate new points buffer
   my_points = (float *)malloc(sizeof(float) * 2 * total_points);
   my_extremas = (float *)malloc(sizeof(float) * 2 * 2 * lines_count);
-  if(my_points == NULL) goto error;
+  if(my_points == NULL || my_extremas == NULL) goto error;
 
   // second step: generate points for each line
   for(int n = 0, offset = 0; n < lines_count; n++)
@@ -4086,7 +4102,7 @@ error:
 }
 
 // does this gui have focus?
-static int gui_has_focus(struct dt_iop_module_t *self)
+static gboolean _gui_has_focus(struct dt_iop_module_t *self)
 {
   return (self->dev->gui_module == self
           && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS);
@@ -4108,8 +4124,10 @@ static int call_distort_transform(dt_develop_t *dev,
   dt_dev_pixelpipe_iop_t *piece =
     dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
   if(!piece) return ret;
-  if(piece->module == self && /*piece->enabled && */  //see note below
-     !(dev->gui_module && dev->gui_module->operation_tags_filter() & piece->module->operation_tags()))
+  if(piece->module == self
+      // && *piece->enabled see note below
+      && !(dt_iop_module_is_skipped(dev, piece->module)
+            && (pipe->type & DT_DEV_PIXELPIPE_BASIC)))
   {
     ret = piece->module->distort_transform(piece->module, piece, points, points_count);
   }
@@ -4123,38 +4141,74 @@ static int call_distort_transform(dt_develop_t *dev,
   //  eliminates the glitch.
 }
 
-void gui_post_expose(struct dt_iop_module_t *self,
+static float _calculate_straightening(dt_iop_module_t *self,
+                                      float pzx, float pzy,
+                                      float bzx, float bzy,
+                                      float wd, float ht,
+                                      float zoom_scale)
+{
+  float dx = (pzx - bzx) * wd, dy = (pzy - bzy) * ht;
+  if(sqrt(dx * dx + dy * dy) * zoom_scale < DT_PIXEL_APPLY_DPI(25))
+    return 0.0f;
+
+  // adjust the line with possible current angle and flip on this module
+  float pts[4] = { 0, 0, dx, dy };
+  dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe,
+                                    self->iop_order,
+                                    DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
+  dx = pts[0] - pts[2];
+  dy = pts[1] - pts[3];
+
+  if(dx < 0)
+  {
+    dx = -dx;
+    dy = -dy;
+  }
+
+  float angle = atan2f(dy, dx);
+  if(!(angle >= -M_PI / 2.0 && angle <= M_PI / 2.0))
+    return 0.0f;
+  float close = angle;
+  if(close > M_PI / 4.0)
+    close = M_PI / 2.0 - close;
+  else if(close < -M_PI / 4.0)
+    close = -M_PI / 2.0 - close;
+  else
+    close = -close;
+
+  float a = 180.0 / M_PI * close;
+  if(a < -180.0) a += 360.0;
+  if(a > 180.0) a -= 360.0;
+
+  return a;
+}
+
+void gui_post_expose(dt_iop_module_t *self,
                      cairo_t *cr,
-                     const int32_t width,
-                     const int32_t height,
-                     const int32_t pointerx,
-                     const int32_t pointery)
+                     const float wd,
+                     const float ht,
+                     const float pzx,
+                     const float pzy,
+                     const float zoom_scale)
 {
   dt_develop_t *dev = self->dev;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
 
-  // the usual rescaling stuff
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
-  if(wd < 1.0 || ht < 1.0) return;
-  const float pr_d = dev->preview_downsampling;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
+  const gboolean dimmed = dt_iop_canvas_not_sensitive(dev);
+  const double lwidth = (dimmed ? 0.5 : 1.0) / zoom_scale;
+  const double fillc = dimmed ? 0.9 : 0.2;
 
   // we draw the cropping area; we need x_off/y_off/width/height which is only available
   // after g->buf has been processed
-  if(g->buf && self->enabled && gui_has_focus(self))
+  if(g->buf && self->enabled && _gui_has_focus(self))
   {
     // roi data of the preview pipe input buffer
 
-    const float iwd = g->buf_width / pr_d;
-    const float iht = g->buf_height / pr_d;
-    const float ixo = g->buf_x_off / pr_d;
-    const float iyo = g->buf_y_off / pr_d;
+    const float iwd = g->buf_width;
+    const float iht = g->buf_height;
+    const float ixo = g->buf_x_off;
+    const float iyo = g->buf_y_off;
 
     // the four corners of the input buffer of this module
     float V[4][2] = { { ixo,        iyo       },
@@ -4194,35 +4248,11 @@ void gui_post_expose(struct dt_iop_module_t *self,
     double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
     cairo_set_dash(cr, &dashes, 0, 0);
 
-    float cl_x = 0.0f, cl_y = 0.0f, cl_width = 0.0f, cl_height = 0.0f;
-
-    if(wd / (float)width > ht / (float)height)
-    {
-      // more spaces top/bottom
-      cl_x      = self->dev->border_size;
-      cl_y      = ((float)height - (ht * zoom_scale)) / 2.0f;
-      cl_width  = width - 2.0f * self->dev->border_size;
-      cl_height = ht * zoom_scale;
-    }
-    else
-    {
-      // more spaces left/right
-      cl_y      = self->dev->border_size;
-      cl_x      = ((float)width - (wd * zoom_scale)) / 2.0f;
-      cl_height = height - (2.0f * self->dev->border_size);
-      cl_width  = wd * zoom_scale;
-    }
-
-    cairo_rectangle(cr, cl_x, cl_y, cl_width, cl_height);
-    cairo_clip(cr);
-
     // mask parts of image outside of clipping area in dark grey
-    cairo_set_source_rgba(cr, .2, .2, .2, .8);
+    cairo_set_source_rgba(cr, fillc, fillc, fillc, 1.0 - fillc);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
-    cairo_rectangle(cr, 0, 0, width, height);
-    cairo_translate(cr, width / 2.0, height / 2.0);
-    cairo_scale(cr, zoom_scale, zoom_scale);
-    cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
+
+    cairo_rectangle(cr, 0, 0, wd, ht);
 
     cairo_move_to(cr, C[0][0], C[0][1]);
     cairo_line_to(cr, C[1][0], C[1][1]);
@@ -4233,7 +4263,7 @@ void gui_post_expose(struct dt_iop_module_t *self,
 
     // draw white outline around clipping area
     dt_draw_set_color_overlay(cr, TRUE, 1.0);
-    cairo_set_line_width(cr, 2.0 / zoom_scale);
+    cairo_set_line_width(cr, 2.0 *lwidth);
     cairo_move_to(cr, C[0][0], C[0][1]);
     cairo_line_to(cr, C[1][0], C[1][1]);
     cairo_line_to(cr, C[2][0], C[2][1]);
@@ -4265,13 +4295,13 @@ void gui_post_expose(struct dt_iop_module_t *self,
       const double size_line = base_size / 5.0f;
       const double size_arrow = base_size / 25.0f;
 
-      cairo_set_line_width(cr, 2.0 / zoom_scale);
+      cairo_set_line_width(cr, 2.0 * lwidth);
       dt_draw_set_color_overlay(cr, TRUE, 1.0);
       cairo_arc (cr, xpos, ypos, size_circle, 0, 2.0 * M_PI);
       cairo_stroke(cr);
       cairo_fill(cr);
 
-      cairo_set_line_width(cr, 2.0 / zoom_scale);
+      cairo_set_line_width(cr, 2.0 * lwidth);
       dt_draw_set_color_overlay(cr, TRUE, 1.0);
 
       // horizontal line
@@ -4307,47 +4337,30 @@ void gui_post_expose(struct dt_iop_module_t *self,
 
     cairo_restore(cr);
   }
+  else
+    dt_guides_draw(cr, 0.0f, 0.0f, wd, ht, zoom_scale);
 
   // we draw the straightening line
   if(g->straightening)
   {
     cairo_save(cr);
-    cairo_translate(cr, width / 2.0, height / 2.0);
-    cairo_scale(cr, zoom_scale, zoom_scale);
-    cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) * lwidth);
     dt_draw_set_color_overlay(cr, FALSE, 1.0);
 
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
-
-    const float bzx = g->straighten_x + .5f, bzy = g->straighten_y + .5f;
+    const float bzx = g->straighten_x, bzy = g->straighten_y;
     cairo_arc(cr, bzx * wd, bzy * ht,
-              DT_PIXEL_APPLY_DPI(3) * pr_d / zoom_scale, 0, 2.0 * M_PI);
+              DT_PIXEL_APPLY_DPI(3) / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
     cairo_arc(cr, pzx * wd, pzy * ht,
-              DT_PIXEL_APPLY_DPI(3) * pr_d / zoom_scale, 0, 2.0 * M_PI);
+              DT_PIXEL_APPLY_DPI(3) / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
     cairo_move_to(cr, bzx * wd, bzy * ht);
     cairo_line_to(cr, pzx * wd, pzy * ht);
     cairo_stroke(cr);
 
-    float dx = pzx * wd - bzx * wd, dy = pzy * ht - bzy * ht;
-    if(sqrt(dx * dx + dy * dy) * zoom_scale >= DT_PIXEL_APPLY_DPI(25))
+    float angle = _calculate_straightening(self, pzx, pzy, bzx, bzy, wd, ht, zoom_scale);
+    if(angle != 0.0f)
     {
-      // show rotation angle
-      if(dx < 0)
-      {
-        dx = -dx;
-        dy = -dy;
-      }
-      float angle = atan2f(dy, dx);
-      angle = angle * 180 / M_PI;
-      if(angle > 45.0) angle -= 90;
-      if(angle < -45.0) angle += 90;
-
       PangoRectangle ink;
       PangoLayout *layout;
       PangoFontDescription *desc =
@@ -4386,13 +4399,13 @@ void gui_post_expose(struct dt_iop_module_t *self,
   if(g->fitting) return;
 
   // no structural data or visibility switched off? -> stop here
-  if(g->lines == NULL || !gui_has_focus(self)) return;
+  if(g->lines == NULL || !_gui_has_focus(self)) return;
 
   // get hash value that changes if distortions from here to the end
   // of the pixelpipe changed
-  const uint64_t hash = dt_dev_hash_distort(dev);
+  const dt_hash_t hash = dt_dev_hash_distort(dev);
   // get hash value that changes if coordinates of lines have changed
-  const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
+  const dt_hash_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 
   // points data are missing or outdated, or distortion has changed?
   if(g->points == NULL || g->points_idx == NULL || hash != g->grid_hash
@@ -4408,9 +4421,9 @@ void gui_post_expose(struct dt_iop_module_t *self,
     g->draw_points = NULL;
     g->points_lines_count = 0;
 
-    if(!get_points(self, g->lines, g->lines_count, g->lines_version,
+    if(!_get_points(self, g->lines, g->lines_count, g->lines_version,
                    &g->points, &g->draw_points, &g->points_idx,
-                   &g->points_lines_count, pr_d))
+                   &g->points_lines_count, 1.0f))
       return;
 
     g->points_version = g->lines_version;
@@ -4424,7 +4437,7 @@ void gui_post_expose(struct dt_iop_module_t *self,
       g->points_idx[n].type = g->lines[n].type;
 
     // coordinates of lines are unchanged -> we only need to update colors
-    if(!update_colors(self, g->points_idx, g->points_lines_count))
+    if(!_update_colors(self, g->points_idx, g->points_lines_count))
       return;
 
     g->points_version = g->lines_version;
@@ -4434,11 +4447,6 @@ void gui_post_expose(struct dt_iop_module_t *self,
   if(g->points == NULL || g->points_idx == NULL) return;
 
   cairo_save(cr);
-  cairo_rectangle(cr, 0, 0, width, height);
-  cairo_clip(cr);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   // this must match the sequence of enum dt_iop_ashift_linecolor_t!
   const float line_colors[5][4] =
@@ -4461,9 +4469,9 @@ void gui_post_expose(struct dt_iop_module_t *self,
       continue;
     // is the near flag set? -> draw line a bit thicker
     if(g->points_idx[n].near)
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) * lwidth);
     else
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) * lwidth);
 
     // the color of this line
     const float *color = line_colors[g->points_idx[n].color];
@@ -4506,9 +4514,9 @@ void gui_post_expose(struct dt_iop_module_t *self,
          && g->lines[i / 2].type != ASHIFT_LINE_VERTICAL_SELECTED)
         continue;
       if(g->draw_near_point == i)
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(4.0) / zoom_scale);
+        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(4.0) * lwidth);
       else
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
+        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) * lwidth);
       cairo_arc(cr,
                 g->draw_points[i * 2],
                 g->draw_points[i * 2 + 1],
@@ -4521,11 +4529,6 @@ void gui_post_expose(struct dt_iop_module_t *self,
   // and we draw the selection box if any
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
-
     double dashed[] = { 4.0, 4.0 };
     dashed[0] /= zoom_scale;
     dashed[1] /= zoom_scale;
@@ -4545,11 +4548,6 @@ void gui_post_expose(struct dt_iop_module_t *self,
   // indicate which area is used for "near"-ness detection when selecting/deselecting lines
   if(g->near_delta > 0)
   {
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
-
     double dashed[] = { 4.0, 4.0 };
     dashed[0] /= zoom_scale;
     dashed[1] /= zoom_scale;
@@ -4558,7 +4556,7 @@ void gui_post_expose(struct dt_iop_module_t *self,
     cairo_arc(cr, pzx * wd, pzy * ht, g->near_delta, 0, 2.0 * M_PI);
 
     cairo_set_source_rgba(cr, .3, .3, .3, .8);
-    cairo_set_line_width(cr, 1.0 / zoom_scale);
+    cairo_set_line_width(cr, 1.0 * lwidth);
     cairo_set_dash(cr, dashed, len, 0);
     cairo_stroke_preserve(cr);
     cairo_set_source_rgba(cr, .8, .8, .8, .8);
@@ -4578,7 +4576,7 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines,
   int vlines = 0;
   int hlines = 0;
 
-  for(int n = 0; n < lines_count; n++)
+  for(int n = 0; n < lines_count && lines; n++)
   {
     if((lines[n].type & ASHIFT_LINE_MASK) == ASHIFT_LINE_VERTICAL_SELECTED)
       vlines++;
@@ -4593,12 +4591,10 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines,
 // determine if we are near a drawn line extrema
 static int _draw_near_point(const float x,
                             const float y,
+                            const float zoom_scale,
                             const float *points,
                             const int limit)
 {
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1 << closeup, 1);
   const float delta = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
 
   for(int i = 0; i < limit; i++)
@@ -4618,11 +4614,12 @@ static void _draw_recompute_line_length(dt_iop_ashift_line_t *line)
                       + (line->p2[1] - line->p1[1]) * (line->p2[1] - line->p1[1]));
 }
 
-int mouse_moved(struct dt_iop_module_t *self,
-                double x,
-                double y,
-                double pressure,
-                int which)
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
 
@@ -4634,15 +4631,8 @@ int mouse_moved(struct dt_iop_module_t *self,
 
   gboolean handled = FALSE;
 
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
-  const float pr_d = self->dev->preview_downsampling;
-  if(wd < 1.0 || ht < 1.0) return 1;
-
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float wd, ht;
+  dt_dev_get_preview_size(self->dev, &wd, &ht);
 
   if(g->adjust_crop)
   {
@@ -4651,11 +4641,6 @@ int mouse_moved(struct dt_iop_module_t *self,
     dt_boundingbox_t pts = { pzx, pzy, 1.0f, 1.0f };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
-
-    pts[0] *= pr_d;
-    pts[1] *= pr_d;
-    pts[2] *= pr_d;
-    pts[3] *= pr_d;
 
     const float newx = g->crop_cx + (pts[0] - pts[2]) - g->lastx;
     const float newy = g->crop_cy + (pts[1] - pts[3]) - g->lasty;
@@ -4678,8 +4663,6 @@ int mouse_moved(struct dt_iop_module_t *self,
                                          self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
-      pts[0] *= pr_d;
-      pts[1] *= pr_d;
       // first we move the point
       if(g->draw_near_point >= 0)
       {
@@ -4740,8 +4723,8 @@ int mouse_moved(struct dt_iop_module_t *self,
                                          self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
-      const float dx = (pts[0] - g->draw_pointmove_x) * pr_d;
-      const float dy = (pts[1] - g->draw_pointmove_y) * pr_d;
+      const float dx = (pts[0] - g->draw_pointmove_x);
+      const float dy = (pts[1] - g->draw_pointmove_y);
       const int n = g->draw_line_move;
       g->draw_pointmove_x = pts[0];
       g->draw_pointmove_y = pts[1];
@@ -4816,7 +4799,7 @@ int mouse_moved(struct dt_iop_module_t *self,
       ? g->lines_count * 2
       : 4;
 
-    g->draw_near_point = _draw_near_point(pzx * wd, pzy * ht, g->draw_points, limit);
+    g->draw_near_point = _draw_near_point(pzx * wd, pzy * ht, zoom_scale, g->draw_points, limit);
   }
 
   // if in rectangle selecting mode adjust "near"-ness of lines according to
@@ -4881,13 +4864,14 @@ int mouse_moved(struct dt_iop_module_t *self,
   return (g->isdeselecting || g->isselecting);
 }
 
-int button_pressed(struct dt_iop_module_t *self,
-                   const double x,
-                   const double y,
+int button_pressed(dt_iop_module_t *self,
+                   const float pzx,
+                   const float pzy,
                    const double pressure,
                    const int which,
                    const int type,
-                   const uint32_t state)
+                   const uint32_t state,
+                   const float zoom_scale)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   gboolean handled = FALSE;
@@ -4896,24 +4880,16 @@ int button_pressed(struct dt_iop_module_t *self,
   if(type == GDK_2BUTTON_PRESS && which == 1)
     return TRUE;
 
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
-
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
-  if(wd < 1.0 || ht < 1.0) return 1;
+  float wd, ht;
+  if(!dt_dev_get_preview_size(self->dev, &wd, &ht)) return 1;
 
   // if we start to draw a straightening line
   if(!g->lines && which == 3)
   {
     dt_control_change_cursor(GDK_CROSSHAIR);
     g->straightening = TRUE;
-    g->lastx = x;
-    g->lasty = y;
-    g->straighten_x = pzx - 0.5f;
-    g->straighten_y = pzy - 0.5f;
+    g->straighten_x = pzx;
+    g->straighten_y = pzy;
     return TRUE;
   }
 
@@ -4923,18 +4899,12 @@ int button_pressed(struct dt_iop_module_t *self,
     dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
     if(p->cropmode == ASHIFT_CROP_ASPECT)
     {
-      const float pr_d = self->dev->preview_downsampling;
       dt_control_change_cursor(GDK_HAND1);
       g->adjust_crop = TRUE;
 
       dt_boundingbox_t pts = { pzx, pzy, 1.0f, 1.0f };
       dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                         DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
-
-      pts[0] *= pr_d;
-      pts[1] *= pr_d;
-      pts[2] *= pr_d;
-      pts[3] *= pr_d;
 
       g->lastx = pts[0] - pts[2];
       g->lasty = pts[1] - pts[3];
@@ -4952,8 +4922,8 @@ int button_pressed(struct dt_iop_module_t *self,
      && g->draw_near_point >= 0)
   {
     g->draw_point_move = TRUE;
-    g->lastx = x;
-    g->lasty = y;
+    g->lastx = pzx;
+    g->lasty = pzy;
     return TRUE;
   }
 
@@ -4974,13 +4944,8 @@ int button_pressed(struct dt_iop_module_t *self,
     return TRUE;
   }
 
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float min_scale = dt_dev_get_zoom_scale(self->dev, DT_ZOOM_FIT, 1<<closeup, 0);
-  const float cur_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 0);
-
   // if we are zoomed out (no panning possible) and we have lines to display we take control
-  const int take_control = (cur_scale == min_scale) && (g->points_lines_count > 0);
+  const int take_control = (dt_dev_get_zoomed_in() == 1.0f) && (g->points_lines_count > 0);
 
   if(g->current_structure_method == ASHIFT_METHOD_QUAD
      || g->current_structure_method == ASHIFT_METHOD_LINES)
@@ -5045,9 +5010,9 @@ int button_pressed(struct dt_iop_module_t *self,
 
           const int count = g->lines_count - 1;
           dt_iop_ashift_line_t *lines =
-            (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * count);
+            (dt_iop_ashift_line_t *)calloc(count, sizeof(dt_iop_ashift_line_t));
           int pos = 0;
-          for(int i = 0; i < g->lines_count; i++)
+          for(int i = 0; i < count; i++)
           {
             if(i != n)
             {
@@ -5074,18 +5039,15 @@ int button_pressed(struct dt_iop_module_t *self,
   {
     // start to draw a manual line
     g->draw_point_move = TRUE;
-    g->lastx = x;
-    g->lasty = y;
+    g->lastx = pzx;
+    g->lasty = pzy;
 
     // we instantiate a new line with both extrema at the current position
     // and enable the "move point" mode with the second extrema
-    const float pr_d = self->dev->preview_downsampling;
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
 
-    pts[0] *= pr_d;
-    pts[1] *= pr_d;
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't
     // be saved in params but they still may be used for the current
@@ -5139,15 +5101,16 @@ int button_pressed(struct dt_iop_module_t *self,
   return (take_control || handled);
 }
 
-int button_released(struct dt_iop_module_t *self,
-                    const double x,
-                    const double y,
+int button_released(dt_iop_module_t *self,
+                    const float pzx,
+                    const float pzy,
                     const int which,
-                    const uint32_t state)
+                    const uint32_t state,
+                    const float zoom_scale)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
+  float wd, ht;
+  dt_dev_get_preview_size(self->dev, &wd, &ht);
 
   dt_control_change_cursor(GDK_LEFT_PTR);
 
@@ -5163,40 +5126,14 @@ int button_released(struct dt_iop_module_t *self,
   if(g->straightening)
   {
     g->straightening = FALSE;
-    // adjust the line with possible current angle and flip on this module
-    float pts[4] = { x, y, g->lastx, g->lasty };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe,
-                                      self->iop_order,
-                                      DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 
-    float dx = pts[0] - pts[2];
-    float dy = pts[1] - pts[3];
-    if(sqrt(dx * dx + dy * dy) /* zoom_scale */ < DT_PIXEL_APPLY_DPI(25))
-      return TRUE;
+    float bzx = g->straighten_x, bzy = g->straighten_y;
+    float angle = _calculate_straightening(self, pzx, pzy, bzx, bzy, wd, ht, zoom_scale);
+    if(angle == 0.0f) return TRUE;
 
-    if(dx < 0)
-    {
-      dx = -dx;
-      dy = -dy;
-    }
-
-    float angle = atan2f(dy, dx);
-    if(!(angle >= -M_PI / 2.0 && angle <= M_PI / 2.0)) angle = 0.0f;
-    float close = angle;
-    if(close > M_PI / 4.0)
-      close = M_PI / 2.0 - close;
-    else if(close < -M_PI / 4.0)
-      close = -M_PI / 2.0 - close;
-    else
-      close = -close;
-
-    float a = 180.0 / M_PI * close;
-    if(a < -180.0) a += 360.0;
-    if(a > 180.0) a -= 360.0;
-
-    float n = dt_bauhaus_slider_get(g->rotation) - a;
+    float n = dt_bauhaus_slider_get(g->rotation) - angle;
     dt_bauhaus_slider_set(g->rotation, n);
-    dt_toast_log(_("rotation adjusted by %3.1f° to %3.1f°"), -a, n);
+    dt_toast_log(_("rotation adjusted by %3.2f° to %3.2f°"), - angle, n);
     return TRUE;
   }
 
@@ -5256,12 +5193,6 @@ int button_released(struct dt_iop_module_t *self,
     gboolean handled = FALSE;
 
     // we compute the rectangle selection
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-
-    pzx += 0.5f;
-    pzy += 0.5f;
-
     if(wd >= 1.0 && ht >= 1.0)
     {
       // mark lines inside the rectangle
@@ -5320,8 +5251,8 @@ int button_released(struct dt_iop_module_t *self,
 }
 
 int scrolled(struct dt_iop_module_t *self,
-             const double x,
-             const double y,
+             const float pzx,
+             const float pzy,
              const int up,
              const uint32_t state)
 {
@@ -5334,13 +5265,8 @@ int scrolled(struct dt_iop_module_t *self,
   {
     gboolean handled = FALSE;
 
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
-
-    const float wd = self->dev->preview_pipe->backbuf_width;
-    const float ht = self->dev->preview_pipe->backbuf_height;
+    float wd, ht;
+    dt_dev_get_preview_size(self->dev, &wd, &ht);
 
     float near_delta = 5.0f;
     if(g->current_structure_method == ASHIFT_METHOD_QUAD
@@ -5444,7 +5370,7 @@ void gui_reset(struct dt_iop_module_t *self)
   _gui_update_structure_states(self, NULL);
   // force to reprocess the preview, otherwise the buffer is ko
   dt_dev_invalidate_all(self->dev);
-  dt_dev_pixelpipe_flush_caches(self->dev->preview_pipe);
+  dt_dev_pixelpipe_cache_flush(self->dev->preview_pipe);
 }
 
 static void cropmode_callback(GtkWidget *widget, gpointer user_data)
@@ -5753,7 +5679,11 @@ void commit_params(struct dt_iop_module_t *self,
   d->orthocorr = (p->mode == ASHIFT_MODE_GENERIC) ? 0.0f : p->orthocorr;
   d->aspect = (p->mode == ASHIFT_MODE_GENERIC) ? 1.0f : p->aspect;
 
-  if(gui_has_focus(self))
+  if(_gui_has_focus(self)
+     || dt_isnan(p->cl)
+     || dt_isnan(p->cr)
+     || dt_isnan(p->ct)
+     || dt_isnan(p->cb))
   {
     // if gui has focus we want to see the full uncropped image
     d->cl = 0.0f;
@@ -5802,7 +5732,7 @@ void gui_update(struct dt_iop_module_t *self)
 void reload_defaults(dt_iop_module_t *module)
 {
   // our module is disabled by default
-  module->default_enabled = 0;
+  module->default_enabled = FALSE;
 
   int isflipped = 0;
   float f_length = DEFAULT_F_LENGTH;
@@ -5821,12 +5751,11 @@ void reload_defaults(dt_iop_module_t *module)
 
     // focal length should be available in exif data if lens is
     // electronically coupled to the camera
-    f_length = isfinite(img->exif_focal_length)
-      && img->exif_focal_length > 0.0f ? img->exif_focal_length : f_length;
+    f_length = (img->exif_focal_length > 0.0f && img->exif_focal_length <= 1000000.0f)
+      ? img->exif_focal_length : f_length;
     // crop factor of the camera is often not available and user will
     // need to set it manually in the gui
-    crop_factor = isfinite(img->exif_crop)
-      && img->exif_crop > 0.0f ? img->exif_crop : crop_factor;
+    crop_factor = (img->exif_crop > 0.0f && img->exif_crop <= 1000.0f) ? img->exif_crop : crop_factor;
   }
 
   // init defaults:
@@ -5855,7 +5784,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_bauhaus_slider_set_default(g->crop_factor, crop_factor);
 
     dt_iop_gui_enter_critical_section(module);
-    free(g->buf);
+    dt_free_align(g->buf);
     g->buf = NULL;
     g->buf_width = 0;
     g->buf_height = 0;
@@ -5980,22 +5909,10 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     else
     {
       _commit_crop_box(p, g);
+      _gui_update_structure_states(self, NULL);
+      _do_clean_structure(self, p, TRUE);
     }
   }
-}
-
-static float log10_curve(float inval, dt_bauhaus_curve_t dir)
-{
-  float outval;
-  if(dir == DT_BAUHAUS_SET)
-  {
-    outval = log10f(inval * 999.0f + 1.0f) / 3.0f;
-  }
-  else
-  {
-    outval = (expf(M_LN10 * inval * 3.0f) - 1.0f) / 999.0f;
-  }
-  return outval;
 }
 
 static float log2_curve(float inval, dt_bauhaus_curve_t dir)
@@ -6132,7 +6049,8 @@ void gui_init(struct dt_iop_module_t *self)
     (&g->cs,
      "plugins/darkroom/ashift/expand_values",
      _("manual perspective"),
-     GTK_BOX(main_box));
+     GTK_BOX(main_box),
+     DT_ACTION(self));
 
   self->widget = GTK_WIDGET(g->cs.container);
 
@@ -6152,7 +6070,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->f_length = dt_bauhaus_slider_from_params(self, "f_length");
   dt_bauhaus_slider_set_soft_range(g->f_length, 10.0f, 1000.0f);
-  dt_bauhaus_slider_set_curve(g->f_length, log10_curve);
+  dt_bauhaus_slider_set_log_curve(g->f_length);
   dt_bauhaus_slider_set_digits(g->f_length, 0);
   dt_bauhaus_slider_set_format(g->f_length, " mm");
 
@@ -6317,7 +6235,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   if(g->lines) free(g->lines);
-  if(g->buf) free(g->buf);
+  dt_free_align(g->buf);
   if(g->points) free(g->points);
   if(g->points_idx) free(g->points_idx);
 

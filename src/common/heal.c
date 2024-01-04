@@ -327,8 +327,8 @@ static void _heal_laplace_loop(float *const restrict red_pixels, float *const re
   // a handful of runs in each row of pixels.
   // Note that using `unsigned` instead of size_t, the stamp is limited to ~8 gigapixels (the main image can be larger)
   const size_t subwidth = (width+1)/2;  // round up to be able to handle odd widths
-  unsigned *const restrict red_runs = dt_alloc_align(64, sizeof(unsigned) * subwidth * (height + 2));
-  unsigned *const restrict black_runs = dt_alloc_align(64, sizeof(unsigned) * subwidth * (height + 2));
+  unsigned *const restrict red_runs = dt_alloc_align_type(unsigned, subwidth * (height + 2));
+  unsigned *const restrict black_runs = dt_alloc_align_type(unsigned, subwidth * (height + 2));
   if(!red_runs || !black_runs)
   {
     dt_print(DT_DEBUG_ALWAYS, "_heal_laplace_loop: error allocating memory for healing\n");
@@ -387,7 +387,7 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
 {
   if(ch != 4)
   {
-    dt_print(DT_DEBUG_ALWAYS,"dt_heal: full-color image required\n");
+    dt_print(DT_DEBUG_ALWAYS, "dt_heal: full-color image required\n");
     return;
   }
   const size_t subwidth = 4 * ((width+1)/2);  // round up to be able to handle odd widths
@@ -453,7 +453,7 @@ void dt_heal_free_cl(heal_params_cl_t *p)
 cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const float *const mask_buffer,
                   const int width, const int height, const int max_iter)
 {
-  cl_int err = CL_SUCCESS;
+  cl_int err = DT_OPENCL_SYSMEM_ALLOCATION;
 
   const int ch = 4;
 
@@ -461,43 +461,23 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   float *dest_buffer = NULL;
 
   src_buffer = dt_alloc_align_float((size_t)ch * width * height);
-  if(src_buffer == NULL)
-  {
-    dt_print(DT_DEBUG_ALWAYS, "dt_heal_cl: error allocating memory for healing\n");
-    err = DT_OPENCL_SYSMEM_ALLOCATION;
-    goto cleanup;
-  }
+  if(src_buffer == NULL) goto cleanup;
 
   dest_buffer = dt_alloc_align_float((size_t)ch * width * height);
-  if(dest_buffer == NULL)
-  {
-    dt_print(DT_DEBUG_ALWAYS, "dt_heal_cl: error allocating memory for healing\n");
-    err = DT_OPENCL_SYSMEM_ALLOCATION;
-    goto cleanup;
-  }
+  if(dest_buffer == NULL) goto cleanup;
 
   err = dt_opencl_read_buffer_from_device(p->devid, (void *)src_buffer, dev_src, 0,
                                           (size_t)width * height * ch * sizeof(float), CL_TRUE);
-  if(err != CL_SUCCESS)
-  {
-    goto cleanup;
-  }
+  if(err != CL_SUCCESS) goto cleanup;
 
   err = dt_opencl_read_buffer_from_device(p->devid, (void *)dest_buffer, dev_dest, 0,
                                           (size_t)width * height * ch * sizeof(float), CL_TRUE);
-  if(err != CL_SUCCESS)
-  {
-    goto cleanup;
-  }
+  if(err != CL_SUCCESS) goto cleanup;
 
   // I couldn't make it run fast on opencl (the reduction takes forever), so just call the cpu version
   dt_heal(src_buffer, dest_buffer, mask_buffer, width, height, ch, max_iter);
 
   err = dt_opencl_write_buffer_to_device(p->devid, dest_buffer, dev_dest, 0, sizeof(float) * width * height * ch, CL_TRUE);
-  if(err != CL_SUCCESS)
-  {
-    goto cleanup;
-  }
 
 cleanup:
   if(src_buffer) dt_free_align(src_buffer);

@@ -50,10 +50,10 @@ typedef struct dt_iop_blurs_params_t
   int blades;              // $MIN: 3 $MAX: 11 $DEFAULT: 5 $DESCRIPTION: "diaphragm blades"
   float concavity;         // $MIN: 1. $MAX: 9.  $DEFAULT: 1. $DESCRIPTION: "concavity"
   float linearity;         // $MIN: 0. $MAX: 1.  $DEFAULT: 1. $DESCRIPTION: "linearity"
-  float rotation;          // $MIN: -1.57 $MAX: 1.57 $DEFAULT: 0. $DESCRIPTION: "rotation"
+  float rotation;          // $MIN: -M_PI_F/2. $MAX: M_PI_F/2. $DEFAULT: 0. $DESCRIPTION: "rotation"
 
   // motion blur params
-  float angle;             // $MIN: -3.14 $MAX: 3.14 $DEFAULT: 0. $DESCRIPTION: "direction"
+  float angle;             // $MIN: -M_PI_F $MAX: M_PI_F $DEFAULT: 0. $DESCRIPTION: "direction"
   float curvature;         // $MIN: -2.   $MAX: 2.   $DEFAULT: 0. $DESCRIPTION: "curvature"
   float offset;            // $MIN: -1.   $MAX: 1.   $DEFAULT: 0  $DESCRIPTION: "offset"
 
@@ -106,7 +106,9 @@ int default_group()
 }
 
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
+                                            dt_dev_pixelpipe_t *pipe,
+                                            dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
 }
@@ -647,8 +649,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
   dt_iop_blurs_global_data_t *const gd = (dt_iop_blurs_global_data_t *)self->global_data;
 
-  cl_int err = DT_OPENCL_DEFAULT_ERROR;
-
+  cl_int err = DT_OPENCL_SYSMEM_ALLOCATION;
+  cl_mem kernel_cl = NULL;
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -660,25 +662,18 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const size_t kernel_width = 2 * radius + 1;
 
   float *const restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
-  build_pixel_kernel(kernel, kernel_width, kernel_width, p);
-
-  cl_mem kernel_cl = dt_opencl_copy_host_to_device(devid, kernel, kernel_width, kernel_width, sizeof(float));
-
-  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_blurs_convolve, width, height,
-    CLARG(dev_in), CLARG(kernel_cl), CLARG(dev_out), CLARG(roi_out->width), CLARG(roi_out->height),
-    CLARG(radius));
-  if(err != CL_SUCCESS) goto error;
-
-  // cleanup and exit on success
+  if(kernel)
+  {
+    build_pixel_kernel(kernel, kernel_width, kernel_width, p);
+    kernel_cl = dt_opencl_copy_host_to_device(devid, kernel, kernel_width, kernel_width, sizeof(float));
+    if(kernel_cl)
+      err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_blurs_convolve, width, height,
+        CLARG(dev_in), CLARG(kernel_cl), CLARG(dev_out), CLARG(roi_out->width), CLARG(roi_out->height),
+        CLARG(radius));
+  }
   dt_free_align(kernel);
   dt_opencl_release_mem_object(kernel_cl);
-  return TRUE;
-
-error:
-  if(kernel) dt_free_align(kernel);
-  if(kernel_cl) dt_opencl_release_mem_object(kernel_cl);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_blurs] couldn't enqueue kernel! %s\n", cl_errstr(err));
-  return FALSE;
+  return err;
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -770,7 +765,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
   if(!g->img_cached)
   {
-    g->img = dt_alloc_align(64, sizeof(unsigned char) * 4 * allocation.width * allocation.width);
+    g->img = dt_alloc_align_type(unsigned char, 4 * allocation.width * allocation.width);
     g->img_width = allocation.width;
     g->img_cached = TRUE;
     build_gui_kernel(g->img, g->img_width, g->img_width, p);

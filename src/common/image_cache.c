@@ -28,7 +28,8 @@
 #include <sqlite3.h>
 #include <inttypes.h>
 
-void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
+void dt_image_cache_allocate(void *data,
+                             dt_cache_entry_t *entry)
 {
   entry->cost = sizeof(dt_image_t);
 
@@ -40,16 +41,24 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
       dt_database_get(darktable.db),
-      "SELECT id, group_id, film_id, width, height, filename, maker, model, lens, exposure,"
-      "       aperture, iso, focal_length, datetime_taken, flags, crop, orientation,"
-      "       focus_distance, raw_parameters, longitude, latitude, altitude, color_matrix,"
-      "       colorspace, version, raw_black, raw_maximum, aspect_ratio, exposure_bias,"
-      "       import_timestamp, change_timestamp, export_timestamp, print_timestamp, output_width, output_height"
-      "  FROM main.images"
-      "  WHERE id = ?1",
+      "SELECT mi.id, group_id, film_id, width, height, filename,"
+      "       mk.name, md.name, ln.name,"
+      "       exposure, aperture, iso, focal_length, datetime_taken, flags,"
+      "       crop, orientation, focus_distance, raw_parameters,"
+      "       longitude, latitude, altitude, color_matrix, colorspace, version,"
+      "       raw_black, raw_maximum, aspect_ratio, exposure_bias,"
+      "       import_timestamp, change_timestamp, export_timestamp, print_timestamp,"
+      "       output_width, output_height, cm.maker, cm.model, cm.alias"
+      "  FROM main.images AS mi"
+      "       LEFT JOIN main.cameras AS cm ON cm.id = mi.camera_id"
+      "       LEFT JOIN main.makers AS mk ON mk.id = mi.maker_id"
+      "       LEFT JOIN main.models AS md ON md.id = mi.model_id"
+      "       LEFT JOIN main.lens AS ln ON ln.id = mi.lens_id"
+      "  WHERE mi.id = ?1",
       -1, &stmt, NULL);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, entry->key);
+
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     img->id = sqlite3_column_int(stmt, 0);
@@ -79,7 +88,7 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
     img->exif_crop = sqlite3_column_double(stmt, 15);
     img->orientation = sqlite3_column_int(stmt, 16);
     img->exif_focus_distance = sqlite3_column_double(stmt, 17);
-    if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = 1;
+    if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = TRUE;
     uint32_t tmp = sqlite3_column_int(stmt, 18);
     memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
     if(sqlite3_column_type(stmt, 19) == SQLITE_FLOAT)
@@ -98,7 +107,7 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
     if(color_matrix)
       memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
     else
-      img->d65_color_matrix[0] = NAN;
+      dt_mark_colormatrix_invalid(&img->d65_color_matrix[0]);
     g_free(img->profile);
     img->profile = NULL;
     img->profile_size = 0;
@@ -114,13 +123,24 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
     if(sqlite3_column_type(stmt, 28) == SQLITE_FLOAT)
       img->exif_exposure_bias = sqlite3_column_double(stmt, 28);
     else
-      img->exif_exposure_bias = NAN;
+      img->exif_exposure_bias = DT_EXIF_TAG_UNINITIALIZED;
     img->import_timestamp = sqlite3_column_int64(stmt, 29);
     img->change_timestamp = sqlite3_column_int64(stmt, 30);
     img->export_timestamp = sqlite3_column_int64(stmt, 31);
     img->print_timestamp = sqlite3_column_int64(stmt, 32);
     img->final_width = sqlite3_column_int(stmt, 33);
     img->final_height = sqlite3_column_int(stmt, 34);
+
+    // normalized camera names
+    str = (char *)sqlite3_column_text(stmt, 35);
+    if(str) g_strlcpy(img->camera_maker, str, sizeof(img->camera_maker));
+    char *str2 = (char *)sqlite3_column_text(stmt, 36);
+    if(str2) g_strlcpy(img->camera_model, str2, sizeof(img->camera_model));
+    g_snprintf(img->camera_makermodel, sizeof(img->camera_makermodel), "%s %s", str, str2);
+    str = (char *)sqlite3_column_text(stmt, 37);
+    if(str) g_strlcpy(img->camera_alias, str, sizeof(img->camera_alias));
+
+    dt_color_harmony_get(entry->key, &img->color_harmony_guide);
 
     // buffer size? colorspace?
     if(img->flags & DT_IMAGE_LDR)
@@ -154,15 +174,15 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   }
   else
   {
-    img->id = -1;
+    img->id = NO_IMGID;
     dt_print(DT_DEBUG_ALWAYS,
              "[image_cache_allocate] failed to open image %" PRIu32 " from database: %s\n",
              entry->key, sqlite3_errmsg(dt_database_get(darktable.db)));
   }
   sqlite3_finalize(stmt);
   img->cache_entry = entry; // init backref
-  // could downgrade lock write->read on entry->lock if we were using concurrencykit..
-  dt_image_refresh_makermodel(img);
+  // could downgrade lock write->read on entry->lock if we were using
+  // concurrencykit..
 }
 
 void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
@@ -197,25 +217,31 @@ void dt_image_cache_cleanup(dt_image_cache_t *cache)
 
 void dt_image_cache_print(dt_image_cache_t *cache)
 {
-  printf("[image cache] fill %.2f/%.2f MB (%.2f%%)\n", cache->cache.cost / (1024.0 * 1024.0),
-         cache->cache.cost_quota / (1024.0 * 1024.0),
-         (float)cache->cache.cost / (float)cache->cache.cost_quota);
+  dt_print(DT_DEBUG_ALWAYS,
+           "[image cache] fill %.2f/%.2f MB (%.2f%%)\n",
+           cache->cache.cost / (1024.0 * 1024.0),
+           cache->cache.cost_quota / (1024.0 * 1024.0),
+           (float)cache->cache.cost / (float)cache->cache.cost_quota);
 }
 
-dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, char mode)
+dt_image_t *dt_image_cache_get(dt_image_cache_t *cache,
+                               const dt_imgid_t imgid,
+                               const char mode)
 {
-  if(imgid <= 0) return NULL;
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, mode);
+  if(!dt_is_valid_imgid(imgid)) return NULL;
+  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, mode);
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
   return img;
 }
 
-dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid, char mode)
+dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache,
+                                   const dt_imgid_t imgid,
+                                   const char mode)
 {
-  if(imgid <= 0) return NULL;
-  dt_cache_entry_t *entry = dt_cache_testget(&cache->cache, (uint32_t)imgid, mode);
+  if(!dt_is_valid_imgid(imgid)) return NULL;
+  dt_cache_entry_t *entry = dt_cache_testget(&cache->cache, imgid, mode);
   if(!entry) return 0;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
@@ -224,7 +250,8 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
 }
 
 // drops the read lock on an image struct
-void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
+void dt_image_cache_read_release(dt_image_cache_t *cache,
+                                 const dt_image_t *img)
 {
   if(!img || img->id <= 0) return;
   // just force the dt_image_t struct to make sure it has been locked before.
@@ -234,7 +261,9 @@ void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 // drops the write privileges on an image struct.
 // this triggers a write-through to sql, and if the setting
 // is present, also to xmp sidecar files (safe setting).
-void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_image_cache_write_mode_t mode)
+void dt_image_cache_write_release(dt_image_cache_t *cache,
+                                  dt_image_t *img,
+                                  const dt_image_cache_write_mode_t mode)
 {
   union {
       struct dt_image_raw_parameters_t s;
@@ -247,30 +276,50 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
     else
       img->aspect_ratio = (float )img->height / (float )img->width;
   }
-  if(img->id <= 0) return;
+  if(!dt_is_valid_imgid(img->id))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[image_cache_write_release] FATAL invalid image id %d\n", img->id);
+    return;
+  }
 
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images"
-                              " SET width = ?1, height = ?2, filename = ?3, maker = ?4, model = ?5,"
-                              "     lens = ?6, exposure = ?7, aperture = ?8, iso = ?9, focal_length = ?10,"
-                              "     focus_distance = ?11, film_id = ?12, datetime_taken = ?13, flags = ?14,"
-                              "     crop = ?15, orientation = ?16, raw_parameters = ?17, group_id = ?18,"
-                              "     longitude = ?19, latitude = ?20, altitude = ?21, color_matrix = ?22,"
-                              "     colorspace = ?23, raw_black = ?24, raw_maximum = ?25,"
-                              "     aspect_ratio = ROUND(?26,1), exposure_bias = ?27,"
-                              "     import_timestamp = ?28, change_timestamp = ?29, export_timestamp = ?30,"
-                              "     print_timestamp = ?31, output_width = ?32, output_height = ?33"
-                              " WHERE id = ?34",
-                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2
+    (dt_database_get(darktable.db),
+     "UPDATE main.images"
+     " SET width = ?1, height = ?2, filename = ?3,"
+     "     maker_id = ?4, model_id = ?5, lens_id = ?6, camera_id = ?35,"
+     "     exposure = ?7, aperture = ?8, iso = ?9, focal_length = ?10,"
+     "     focus_distance = ?11, film_id = ?12, datetime_taken = ?13, flags = ?14,"
+     "     crop = ?15, orientation = ?16, raw_parameters = ?17, group_id = ?18,"
+     "     longitude = ?19, latitude = ?20, altitude = ?21, color_matrix = ?22,"
+     "     colorspace = ?23, raw_black = ?24, raw_maximum = ?25,"
+     "     aspect_ratio = ROUND(?26,1), exposure_bias = ?27,"
+     "     import_timestamp = ?28, change_timestamp = ?29, export_timestamp = ?30,"
+     "     print_timestamp = ?31, output_width = ?32, output_height = ?33"
+     " WHERE id = ?34",
+     -1, &stmt, NULL);
+
+  const int32_t maker_id = dt_image_get_camera_maker_id(img->exif_maker);
+  const int32_t model_id = dt_image_get_camera_model_id(img->exif_model);
+  const int32_t lens_id = dt_image_get_camera_lens_id(img->exif_lens);
+
+  // also make sure we update the camera_id and possibly the associated data
+  // in cameras table.
+
+  const int32_t camera_id = dt_image_get_camera_id(img->exif_maker, img->exif_model);
+
+  dt_color_harmony_set(img->id, img->color_harmony_guide);
+
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->width);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, img->height);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, img->filename, -1, SQLITE_STATIC);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, img->exif_maker, -1, SQLITE_STATIC);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, img->exif_model, -1, SQLITE_STATIC);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, img->exif_lens, -1, SQLITE_STATIC);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, maker_id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, model_id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 6, lens_id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 35, camera_id);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, img->exif_exposure);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, img->exif_aperture);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, img->exif_iso);
@@ -288,7 +337,8 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 19, img->geoloc.longitude);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 20, img->geoloc.latitude);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 21, img->geoloc.elevation);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 22, &img->d65_color_matrix, sizeof(img->d65_color_matrix), SQLITE_STATIC);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 22, &img->d65_color_matrix,
+                             sizeof(img->d65_color_matrix), SQLITE_STATIC);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 23, img->colorspace);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 24, img->raw_black_level);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 25, img->raw_white_point);
@@ -305,9 +355,14 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 32, img->final_width);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 33, img->final_height);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 34, img->id);
+
   const int rc = sqlite3_step(stmt);
   if(rc != SQLITE_DONE)
-    dt_print(DT_DEBUG_ALWAYS, "[image_cache_write_release] sqlite3 error %d\n", rc);
+    dt_print(DT_DEBUG_ALWAYS,
+             "[image_cache_write_release] sqlite3 error %d (%s) for imgid %d\n",
+             rc,
+             sqlite3_errmsg(dt_database_get(darktable.db)),
+             img->id);
   sqlite3_finalize(stmt);
 
   // TODO: make this work in relaxed mode, too.
@@ -322,15 +377,17 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
 
 // remove the image from the cache
-void dt_image_cache_remove(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_remove(dt_image_cache_t *cache,
+                           const dt_imgid_t imgid)
 {
   dt_cache_remove(&cache->cache, imgid);
 }
 
 /* set timestamps */
-void dt_image_cache_set_change_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_set_change_timestamp(dt_image_cache_t *cache,
+                                         const dt_imgid_t imgid)
 {
-  if(imgid <= 0) return;
+  if(!dt_is_valid_imgid(imgid)) return;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
   if(!entry) return;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
@@ -340,9 +397,11 @@ void dt_image_cache_set_change_timestamp(dt_image_cache_t *cache, const int32_t 
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
 
-void dt_image_cache_set_change_timestamp_from_image(dt_image_cache_t *cache, const int32_t imgid, const int32_t sourceid)
+void dt_image_cache_set_change_timestamp_from_image(dt_image_cache_t *cache,
+                                                    const dt_imgid_t imgid,
+                                                    const dt_imgid_t sourceid)
 {
-  if(imgid <= 0 || sourceid <= 0) return;
+  if(!dt_is_valid_imgid(imgid) || !dt_is_valid_imgid(sourceid)) return;
 
   // get source timestamp
   const dt_image_t *simg = dt_image_cache_get(cache, sourceid, 'r');
@@ -358,9 +417,10 @@ void dt_image_cache_set_change_timestamp_from_image(dt_image_cache_t *cache, con
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
 
-void dt_image_cache_unset_change_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_unset_change_timestamp(dt_image_cache_t *cache,
+                                           const dt_imgid_t imgid)
 {
-  if(imgid <= 0) return;
+  if(!dt_is_valid_imgid(imgid)) return;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
   if(!entry) return;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
@@ -370,9 +430,10 @@ void dt_image_cache_unset_change_timestamp(dt_image_cache_t *cache, const int32_
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
 
-void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache,
+                                         const dt_imgid_t imgid)
 {
-  if(imgid <= 0) return;
+  if(!dt_is_valid_imgid(imgid)) return;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
   if(!entry) return;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
@@ -382,9 +443,10 @@ void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t 
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
 
-void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache,
+                                        const dt_imgid_t imgid)
 {
-  if(imgid <= 0) return;
+  if(!dt_is_valid_imgid(imgid)) return;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
   if(!entry) return;
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));

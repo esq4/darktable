@@ -23,7 +23,6 @@
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/dttypes.h"
-#include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
@@ -104,19 +103,23 @@ int flags()
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE;
 }
 
-int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
+                                            dt_dev_pixelpipe_t *pipe,
+                                            dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_LAB;
 }
 
-int input_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                     dt_dev_pixelpipe_iop_t *piece)
+dt_iop_colorspace_type_t input_colorspace(dt_iop_module_t *self,
+                                          dt_dev_pixelpipe_t *pipe,
+                                          dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_LAB;
 }
 
-int output_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                      dt_dev_pixelpipe_iop_t *piece)
+dt_iop_colorspace_type_t output_colorspace(dt_iop_module_t *self,
+                                           dt_dev_pixelpipe_t *pipe,
+                                           dt_dev_pixelpipe_iop_t *piece)
 {
   int cst = IOP_CS_RGB;
   if(piece)
@@ -132,9 +135,20 @@ int output_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
   return cst;
 }
 
-int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
-                  void *new_params, const int new_version)
+int legacy_params(dt_iop_module_t *self,
+                  const void *const old_params,
+                  const int old_version,
+                  void **new_params,
+                  int32_t *new_params_size,
+                  int *new_version)
 {
+  typedef struct dt_iop_colorout_params_v5_t
+  {
+    dt_colorspaces_color_profile_type_t type; // $DEFAULT: DT_COLORSPACE_SRGB
+    char filename[DT_IOP_COLOR_ICC_LEN];
+    dt_iop_color_intent_t intent; // $DEFAULT: DT_INTENT_PERCEPTUAL
+  } dt_iop_colorout_params_v5_t;
+
 #define DT_IOP_COLOR_ICC_LEN_V4 100
   /*  if(old_version == 1 && new_version == 2)
   {
@@ -144,7 +158,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     n->seq = 0;
     return 0;
     }*/
-  if((old_version == 2 || old_version == 3) && new_version == 5)
+  if(old_version == 2 || old_version == 3)
   {
     typedef struct dt_iop_colorout_params_v3_t
     {
@@ -158,13 +172,15 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     } dt_iop_colorout_params_v3_t;
 
 
-    dt_iop_colorout_params_v3_t *o = (dt_iop_colorout_params_v3_t *)old_params;
-    dt_iop_colorout_params_t *n = (dt_iop_colorout_params_t *)new_params;
-    memset(n, 0, sizeof(dt_iop_colorout_params_t));
+    const dt_iop_colorout_params_v3_t *o = (dt_iop_colorout_params_v3_t *)old_params;
+    dt_iop_colorout_params_v5_t *n =
+      (dt_iop_colorout_params_v5_t *)malloc(sizeof(dt_iop_colorout_params_v5_t));
+    memset(n, 0, sizeof(dt_iop_colorout_params_v5_t));
 
     if(!strcmp(o->iccprofile, "sRGB"))
       n->type = DT_COLORSPACE_SRGB;
-    else if(!strcmp(o->iccprofile, "linear_rec709_rgb") || !strcmp(o->iccprofile, "linear_rgb"))
+    else if(!strcmp(o->iccprofile, "linear_rec709_rgb")
+            || !strcmp(o->iccprofile, "linear_rgb"))
       n->type = DT_COLORSPACE_LIN_REC709;
     else if(!strcmp(o->iccprofile, "linear_rec2020_rgb"))
       n->type = DT_COLORSPACE_LIN_REC2020;
@@ -180,9 +196,12 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
     n->intent = o->intent;
 
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_colorout_params_v5_t);
+    *new_version = 5;
     return 0;
   }
-  if(old_version == 4 && new_version == 5)
+  if(old_version == 4)
   {
     typedef struct dt_iop_colorout_params_v4_t
     {
@@ -192,14 +211,18 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     } dt_iop_colorout_params_v4_t;
 
 
-    dt_iop_colorout_params_v4_t *o = (dt_iop_colorout_params_v4_t *)old_params;
-    dt_iop_colorout_params_t *n = (dt_iop_colorout_params_t *)new_params;
-    memset(n, 0, sizeof(dt_iop_colorout_params_t));
+    const dt_iop_colorout_params_v4_t *o = (dt_iop_colorout_params_v4_t *)old_params;
+    dt_iop_colorout_params_v5_t *n =
+      (dt_iop_colorout_params_v5_t *)malloc(sizeof(dt_iop_colorout_params_v5_t));
+    memset(n, 0, sizeof(dt_iop_colorout_params_v5_t));
 
     n->type = o->type;
     g_strlcpy(n->filename, o->filename, sizeof(n->filename));
     n->intent = o->intent;
 
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_colorout_params_v5_t);
+    *new_version = 5;
     return 0;
   }
 
@@ -313,7 +336,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     size_t region[] = { roi_in->width, roi_in->height, 1 };
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
     if(err != CL_SUCCESS) goto error;
-    return TRUE;
+    return CL_SUCCESS;
   }
 
 
@@ -333,14 +356,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_colorout, width, height,
     CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(dev_m), CLARG(dev_r), CLARG(dev_g),
     CLARG(dev_b), CLARG(dev_coeffs));
-  if(err != CL_SUCCESS) goto error;
-  dt_opencl_release_mem_object(dev_m);
-  dt_opencl_release_mem_object(dev_r);
-  dt_opencl_release_mem_object(dev_g);
-  dt_opencl_release_mem_object(dev_b);
-  dt_opencl_release_mem_object(dev_coeffs);
-
-  return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_m);
@@ -348,8 +363,7 @@ error:
   dt_opencl_release_mem_object(dev_g);
   dt_opencl_release_mem_object(dev_b);
   dt_opencl_release_mem_object(dev_coeffs);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_colorout] couldn't enqueue kernel! %s\n", cl_errstr(err));
-  return FALSE;
+  return err;
 }
 #endif
 
@@ -360,7 +374,7 @@ static void process_fastpath_apply_tonecurves(struct dt_iop_module_t *self,
 {
   const dt_iop_colorout_data_t *const d = (dt_iop_colorout_data_t *)piece->data;
 
-  if(!isnan(d->cmatrix[0][0]))
+  if(dt_is_valid_colormatrix(d->cmatrix[0][0]))
   {
     const size_t npixels = (size_t)roi_out->width * roi_out->height;
     float *const restrict out = (float *const)ovoid;
@@ -501,27 +515,28 @@ static void _transform_lcms(const dt_iop_colorout_data_t *const d,
                             const size_t npixels)
 {
   const int gamutcheck = (d->mode == DT_PROFILE_GAMUTCHECK);
-  // figure out the number of pixels each thread needs to process
-  // round up to a multiple of 4 pixels so that each chunk starts aligned(64)
+  // figure out the number of pixels each thread needs to process,
+  // rounded up to a multiple of the CPU's cache line size
   const size_t nthreads = dt_get_num_threads();
-  const size_t chunksize = 4 * (((npixels / nthreads) + 3) / 4);
+  const size_t chunksize = dt_cacheline_chunks(npixels, nthreads);
+#ifdef _OPENMP
 #pragma omp parallel for default(none)                                  \
-    dt_omp_firstprivate(in, out, npixels, chunksize, nthreads, d, gamutcheck) \
+    dt_omp_firstprivate(in, out, npixels, chunksize, d, gamutcheck) \
     schedule(static)
-  for(size_t chunk = 0; chunk < nthreads; chunk++)
+#endif
+  for(size_t chunkstart = 0; chunkstart < npixels; chunkstart += chunksize)
   {
-    size_t start = chunksize * dt_get_thread_num();
-    size_t count = MIN(start + chunksize, npixels) - start;
-    float *const outp = out + 4 * start;
+    size_t count = MIN(chunkstart + chunksize, npixels) - chunkstart;
+    float *const outp = out + 4 * chunkstart;
 
-    cmsDoTransform(d->xform, in + 4*start, outp, count);
+    cmsDoTransform(d->xform, in + 4*chunkstart, outp, count);
 
     if(gamutcheck)
     {
       static const dt_aligned_pixel_t cyan = { 0.0f, 1.0f, 1.0f, 0.0f };
       for(int j = 0; j < count; j++)
       {
-        if(outp[4*j+0] < 0.0f || outp[4*j+1] < 0.0f || out[4*j+2] < 0.0f)
+        if(outp[4*j+0] < 0.0f || outp[4*j+1] < 0.0f || outp[4*j+2] < 0.0f)
         {
           copy_pixel_nontemporal(outp + 4*j, cyan);
         }
@@ -547,7 +562,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->colors);
   }
-  else if(!isnan(d->cmatrix[0][0]))
+  else if(dt_is_valid_colormatrix(d->cmatrix[0][0]))
   {
     if (!_transform_cmatrix(d, out, (float*)ivoid, npixels))
       process_fastpath_apply_tonecurves(self, piece, ovoid, roi_out);
@@ -604,11 +619,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     cmsDeleteTransform(d->xform);
     d->xform = NULL;
   }
-  d->cmatrix[0][0] = NAN;
+  dt_mark_colormatrix_invalid(&d->cmatrix[0][0]);
   d->lut[0][0] = -1.0f;
   d->lut[1][0] = -1.0f;
   d->lut[2][0] = -1.0f;
-  piece->process_cl_ready = 1;
+  piece->process_cl_ready = TRUE;
 
   /* if we are exporting then check and set usage of override profile */
   if(pipe->type & DT_DEV_PIXELPIPE_EXPORT)
@@ -730,17 +745,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   /* get matrix from profile, if softproofing or high quality exporting always go xform codepath */
   if(d->mode != DT_PROFILE_NORMAL || force_lcms2
-     || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1], d->lut[2],
-                                                      LUT_SAMPLES))
+     || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix,
+                                                      d->lut[0], d->lut[1], d->lut[2], LUT_SAMPLES))
   {
-    d->cmatrix[0][0] = NAN;
-    piece->process_cl_ready = 0;
+    dt_mark_colormatrix_invalid(&d->cmatrix[0][0]);
+    piece->process_cl_ready = FALSE;
     d->xform = cmsCreateProofingTransform(Lab, TYPE_LabA_FLT, output, output_format, softproof,
                                           out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
   }
 
   // user selected a non-supported output profile, check that:
-  if(!d->xform && isnan(d->cmatrix[0][0]))
+  if(!d->xform && !dt_is_valid_colormatrix(d->cmatrix[0][0]))
   {
     dt_control_log(_("unsupported output profile has been replaced by sRGB!"));
     dt_print(DT_DEBUG_ALWAYS,
@@ -749,11 +764,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT)->profile;
 
     if(d->mode != DT_PROFILE_NORMAL
-       || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix, d->lut[0], d->lut[1], d->lut[2],
-                                                        LUT_SAMPLES))
+       || dt_colorspaces_get_matrix_from_output_profile(output, d->cmatrix,
+                                                        d->lut[0], d->lut[1], d->lut[2], LUT_SAMPLES))
     {
-      d->cmatrix[0][0] = NAN;
-      piece->process_cl_ready = 0;
+      dt_mark_colormatrix_invalid(&d->cmatrix[0][0]);
+      piece->process_cl_ready = FALSE;
 
       d->xform = cmsCreateProofingTransform(Lab, TYPE_LabA_FLT, output, output_format, softproof,
                                             out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
@@ -837,8 +852,8 @@ void init(dt_iop_module_t *module)
 {
   dt_iop_default_init(module);
 
-  module->hide_enable_button = 1;
-  module->default_enabled = 1;
+  module->hide_enable_button = TRUE;
+  module->default_enabled = TRUE;
 }
 
 static void _preference_changed(gpointer instance, gpointer user_data)
@@ -864,11 +879,6 @@ void gui_init(struct dt_iop_module_t *self)
   const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
 
   dt_iop_colorout_gui_data_t *g = IOP_GUI_ALLOC(colorout);
-
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
-  dt_loc_get_datadir(datadir, sizeof(datadir));
-  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
@@ -896,15 +906,12 @@ void gui_init(struct dt_iop_module_t *self)
     if(prof->out_pos > -1) dt_bauhaus_combobox_add(g->output_profile, prof->name);
   }
 
-  char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
-  char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
-  char *tooltip = g_strdup_printf(_("ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
-  gtk_widget_set_tooltip_text(g->output_profile, tooltip);
-  g_free(system_profile_dir);
-  g_free(user_profile_dir);
+  char *tooltip = dt_ioppr_get_location_tooltip("out", _("export ICC profiles"));
+  gtk_widget_set_tooltip_markup(g->output_profile, tooltip);
   g_free(tooltip);
 
-  g_signal_connect(G_OBJECT(g->output_profile), "value-changed", G_CALLBACK(output_profile_changed), (gpointer)self);
+  g_signal_connect(G_OBJECT(g->output_profile), "value-changed",
+                   G_CALLBACK(output_profile_changed), (gpointer)self);
 
   // reload the profiles when the display or softproof profile changed!
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_CHANGED,
@@ -927,4 +934,3 @@ void gui_cleanup(struct dt_iop_module_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
