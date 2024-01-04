@@ -1,0 +1,10 @@
+ # для отладки
+bash ../build.sh --prefix /opt/dbg/darktable --build-type Debug
+
+ ##  релиз
+bash ../build.sh --prefix /opt/darktable-dev --build-type Release
+~/darktable/tools/get_git_version_string.sh
+
+cmake --build "/home/a/darktable/build" --target install -- -j16
+||
+checkinstall -D --install=no
