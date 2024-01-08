@@ -584,17 +584,11 @@ void expose(
   {
     dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose livesamples FALSE",
-         port->pipe, NULL, NULL, NULL, "%dx%d, px=%d py=%d\n",
+         port->pipe, NULL, DT_DEVICE_NONE, NULL, NULL, "%dx%d, px=%d py=%d\n",
          width, height, pointerx, pointery);
     _darkroom_pickers_draw(self, cri, wd, ht, zoom_scale,
                            darktable.lib->proxy.colorpicker.live_samples, FALSE);
   }
-
-  const gboolean special_draw = dev->gui_module
-                             && dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW;
-  // draw guide lines if there is no active gui_module doing it via post_expose
-  if(!special_draw)
-    dt_guides_draw(cri, 0.0f, 0.0f, wd, ht, zoom_scale);
 
   // draw colorpicker for in focus module or execute module callback hook
   // FIXME: draw picker in gui_post_expose() hook in
@@ -605,7 +599,7 @@ void expose(
   {
     dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose livesample TRUE",
-         port->pipe, NULL, NULL, NULL, "%dx%d, px=%d py=%d\n",
+         port->pipe, NULL, DT_DEVICE_NONE, NULL, NULL, "%dx%d, px=%d py=%d\n",
          width, height, pointerx, pointery);
     GSList samples = { .data = darktable.lib->proxy.colorpicker.primary_sample,
                        .next = NULL };
@@ -626,11 +620,12 @@ void expose(
   {
     dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose masks",
-         port->pipe, dev->gui_module, NULL, NULL, "%dx%d, px=%d py=%d\n",
+         port->pipe, dev->gui_module, DT_DEVICE_NONE, NULL, NULL, "%dx%d, px=%d py=%d\n",
          width, height, pointerx, pointery);
     dt_masks_events_post_expose(dev->gui_module, cri, width, height, pzx, pzy, zoom_scale);
   }
 
+  gboolean guides = FALSE;
   // true if anything could be exposed
   if(dev->gui_module && dev->gui_module != dev->proxy.rotate)
   {
@@ -640,9 +635,10 @@ void expose(
     {
       dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose cropper",
-         port->pipe, dev->cropping.exposer, NULL, NULL, "%dx%d, px=%d py=%d\n",
+         port->pipe, dev->cropping.exposer, DT_DEVICE_NONE, NULL, NULL, "%dx%d, px=%d py=%d\n",
          width, height, pointerx, pointery);
       _module_gui_post_expose(dev->cropping.exposer, cri, wd, ht, pzx, pzy, zoom_scale);
+      guides = TRUE;
     }
 
     // gui active module
@@ -650,17 +646,22 @@ void expose(
     {
       dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose module",
-         port->pipe, dev->gui_module, NULL, NULL, "%dx%d, px=%d py=%d\n",
+         port->pipe, dev->gui_module, DT_DEVICE_NONE, NULL, NULL, "%dx%d, px=%d py=%d\n",
          width, height, pointerx, pointery);
       _module_gui_post_expose(dev->gui_module, cri, wd, ht, pzx, pzy, zoom_scale);
+      guides = TRUE;
     }
   }
 
-  if(dev->proxy.rotate)
+  if(!guides && dev->proxy.rotate)
   {
     // reminder, we want this to be exposed always for guidings
     _module_gui_post_expose(dev->proxy.rotate, cri, wd, ht, pzx, pzy, zoom_scale);
+    guides = TRUE;
   }
+
+  if(!guides)
+    dt_guides_draw(cri, 0.0f, 0.0f, wd, ht, zoom_scale);
 
   cairo_restore(cri);
 
@@ -670,7 +671,7 @@ void expose(
     gchar *label = darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
     dt_print_pipe(DT_DEBUG_EXPOSE,
         "expose profile",
-         port->pipe, NULL, NULL, NULL, "%dx%d, px=%d py=%d. proof: %s\n",
+         port->pipe, NULL, port->pipe->devid, NULL, NULL, "%dx%d, px=%d py=%d. proof: %s\n",
          width, height, pointerx, pointery, label);
 
     cairo_set_source_rgba(cri, 0.5, 0.5, 0.5, 0.5);
