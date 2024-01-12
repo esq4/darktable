@@ -82,6 +82,9 @@ changes (where available).
   for safety. This setting has been proved to be unsafe in many
   cases. It can still be enabled via the resource file if needed.
 
+- Add buttons next to the snapshots to allow restoring it as the new
+  history.
+
 ## Bug Fixes
 
 ## Lua
@@ -93,6 +96,9 @@ changes (where available).
 ### Bug Fixes
 
 - Fixed `scripts_installer` to handle user names with spaces on Windows.
+
+- Fixed a wrong behaviour when double-clicking on the navigation menu
+  in the map module.
 
 ### Add action support for Lua
 
