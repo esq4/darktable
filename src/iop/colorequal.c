@@ -291,16 +291,21 @@ void _prefilter_chromaticity(float *const restrict UV,
   const float sigma = csigma * roi->scale;
   const size_t width = roi->width;
   const size_t height = roi->height;
-  // Downsample for speed-up
+  // possibly downsample for speed-up
   const size_t pixels = width * height;
-  const float scaling = fmaxf(fminf(sigma, 4.0f), 1.0f);
-  const float gsigma = fmaxf(0.1f, 0.5f * sigma / scaling);
+  const float scaling = MAX(MIN(sigma, 4.0f), 1.0f);
+  const float gsigma = MAX(0.0f, 0.5f * sigma / scaling);
   const size_t ds_height = height / scaling;
   const size_t ds_width = width / scaling;
   const size_t ds_pixels = ds_width * ds_height;
+  const gboolean resized = width != ds_width || height != ds_height;
 
-  float *const restrict ds_UV = dt_alloc_align_float(ds_pixels * 2);
-  interpolate_bilinear(UV, width, height, ds_UV, ds_width, ds_height, 2);
+  float *ds_UV = UV;
+  if(resized)
+  {
+    ds_UV = dt_alloc_align_float(ds_pixels * 2);
+    interpolate_bilinear(UV, width, height, ds_UV, ds_width, ds_height, 2);
+  }
 
   // Init the symmetric covariance matrix of the guide (4 elements by pixel) :
   // covar = [[ covar(U, U), covar(U, V)],
@@ -408,19 +413,22 @@ void _prefilter_chromaticity(float *const restrict UV,
   }
 
   dt_free_align(covariance);
-  dt_free_align(ds_UV);
+  if(ds_UV != UV) dt_free_align(ds_UV);
 
   // Compute the averages of a and b for each filter
   _mean_gaussian(a, ds_width, ds_height, 4, gsigma);
   _mean_gaussian(b, ds_width, ds_height, 2, gsigma);
 
   // Upsample a and b to real-size image
-  float *const restrict a_full = dt_alloc_align_float(pixels * 4);
-  float *const restrict b_full = dt_alloc_align_float(pixels * 2);
-  interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
-  interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
-  dt_free_align(a);
-  dt_free_align(b);
+  float *a_full = a;
+  float *b_full = b;
+  if(resized)
+  {
+    a_full = dt_alloc_align_float(pixels * 4);
+    b_full = dt_alloc_align_float(pixels * 2);
+    interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
+    interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
+  }
 
   // Apply the guided filter
 #ifdef _OPENMP
@@ -438,8 +446,13 @@ void _prefilter_chromaticity(float *const restrict UV,
       + a_full[4 * k + 3] * uv[1] + b_full[2 * k + 1];
   }
 
-  dt_free_align(a_full);
-  dt_free_align(b_full);
+  dt_free_align(a);
+  dt_free_align(b);
+  if(resized)
+  {
+    dt_free_align(a_full);
+    dt_free_align(b_full);
+  }
 }
 
 void _guide_with_chromaticity(float *const restrict UV,
@@ -465,17 +478,22 @@ void _guide_with_chromaticity(float *const restrict UV,
   const size_t height = roi->height;
   // Downsample for speed-up
   const size_t pixels = width * height;
-  const float scaling = fmaxf(fminf(sigma, 4.0f), 1.0f);
-  const float gsigma = fmaxf(0.1f, 0.5f * sigma / scaling);
+  const float scaling = MAX(MIN(sigma, 4.0f), 1.0f);
+  const float gsigma = MAX(0.0f, 0.5f * sigma / scaling);
   const size_t ds_height = height / scaling;
   const size_t ds_width = width / scaling;
   const size_t ds_pixels = ds_width * ds_height;
+  const gboolean resized = width != ds_width || height != ds_height;
 
-  float *const restrict ds_UV = dt_alloc_align_float(ds_pixels * 2);
-  interpolate_bilinear(UV, width, height, ds_UV, ds_width, ds_height, 2);
-
-  float *const restrict ds_corrections = dt_alloc_align_float(ds_pixels * 4);
-  interpolate_bilinear(corrections, width, height, ds_corrections, ds_width, ds_height, 4);
+  float *ds_UV = UV;
+  float *ds_corrections = corrections;
+  if(resized)
+  {
+    ds_UV = dt_alloc_align_float(ds_pixels * 2);
+    interpolate_bilinear(UV, width, height, ds_UV, ds_width, ds_height, 2);
+    ds_corrections = dt_alloc_align_float(ds_pixels * 4);
+    interpolate_bilinear(corrections, width, height, ds_corrections, ds_width, ds_height, 4);
+  }
 
   // Init the symmetric covariance matrix of the guide (4 elements by pixel) :
   // covar = [[ covar(U, U), covar(U, V)],
@@ -635,8 +653,11 @@ void _guide_with_chromaticity(float *const restrict UV,
       - a[4 * k + 3] * ds_UV[2 * k + 1];
   }
 
-  dt_free_align(ds_corrections);
-  dt_free_align(ds_UV);
+  if(resized)
+  {
+    dt_free_align(ds_corrections);
+    dt_free_align(ds_UV);
+  }
   dt_free_align(correlations);
   dt_free_align(covariance);
 
@@ -645,13 +666,15 @@ void _guide_with_chromaticity(float *const restrict UV,
   _mean_gaussian(b, ds_width, ds_height, 2, 4.0f * gsigma);
 
   // Upsample a and b to real-size image
-  float *const restrict a_full = dt_alloc_align_float(pixels * 4);
-  float *const restrict b_full = dt_alloc_align_float(pixels * 2);
-  interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
-  interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
-  dt_free_align(a);
-  dt_free_align(b);
-
+  float *a_full = a;
+  float *b_full = b;
+  if(resized)
+  {
+    a_full = dt_alloc_align_float(pixels * 4);
+    b_full = dt_alloc_align_float(pixels * 2);
+    interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
+    interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
+  }
 
   // Apply the guided filter
 #ifdef _OPENMP
@@ -670,8 +693,13 @@ void _guide_with_chromaticity(float *const restrict UV,
       + a_full[4 * k + 3] * uv[1] + b_full[2 * k + 1];
   }
 
-  dt_free_align(a_full);
-  dt_free_align(b_full);
+  dt_free_align(a);
+  dt_free_align(b);
+  if(resized)
+  {
+    dt_free_align(a_full);
+    dt_free_align(b_full);
+  }
 }
 
 void process(struct dt_iop_module_t *self,
@@ -1366,7 +1394,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
 
   // Build the curve LUT and plotting params for the current channel
   g->LUT = dt_alloc_align_float(LUT_ELEM);
-  float values[NODES];
+  float DT_ALIGNED_ARRAY values[NODES];
   float smoothing;
   float offset;
   float factor;
@@ -1538,22 +1566,26 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook,
 
 static GtkWidget *_get_selected(dt_iop_colorequal_gui_data_t *g)
 {
-  GtkWidget **w = NULL;
-  switch(g->channel)
+  GtkWidget *w = NULL;
+
+  if(g->selected >= 0)
   {
-     case(SATURATION):
-       w = g->sat_sliders;
-       break;
-     case(HUE):
-       w = g->hue_sliders;
-       break;
-     case(BRIGHTNESS):
-     default:
-       w = g->bright_sliders;
-       break;
+    switch(g->channel)
+    {
+       case(SATURATION):
+         w = g->sat_sliders[g->selected];
+         break;
+       case(HUE):
+         w = g->hue_sliders[g->selected];
+         break;
+       case(BRIGHTNESS):
+       default:
+         w = g->bright_sliders[g->selected];
+         break;
+    }
   }
 
-  return w[g->selected];
+  return w;
 }
 
 static void _area_set_value(dt_iop_colorequal_gui_data_t *g,
@@ -1563,27 +1595,30 @@ static void _area_set_value(dt_iop_colorequal_gui_data_t *g,
   float factor = .0f;
   float max = .0f;
 
-  switch(g->channel)
-  {
-     case(SATURATION):
-       factor = 0.5f;
-       max = 100.0f;
-       break;
-     case(HUE):
-       factor = 1.f / (2.f * M_PI_F);
-       max = (100.0f / 180.0f) * 100.0f;
-       break;
-     case(BRIGHTNESS):
-     default:
-       factor = 0.5f;
-       max = 100.0f;
-       break;
-  }
-
   GtkWidget *w = _get_selected(g);
 
-  const float val = (0.5f - (pos / graph_height)) * max / factor;
-  dt_bauhaus_slider_set_val(w, val);
+  if(w)
+  {
+    switch(g->channel)
+    {
+       case(SATURATION):
+         factor = 0.5f;
+         max = 100.0f;
+         break;
+       case(HUE):
+         factor = 1.f / (2.f * M_PI_F);
+         max = (100.0f / 180.0f) * 100.0f;
+         break;
+       case(BRIGHTNESS):
+       default:
+         factor = 0.5f;
+         max = 100.0f;
+         break;
+    }
+
+    const float val = (0.5f - (pos / graph_height)) * max / factor;
+    dt_bauhaus_slider_set_val(w, val);
+  }
 }
 
 static void _area_set_pos(dt_iop_colorequal_gui_data_t *g,
@@ -1634,10 +1669,13 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
   {
     GtkWidget *w = _get_selected(g);
 
-    const float val = dt_bauhaus_slider_get_val(w) - delta_y;
-    dt_bauhaus_slider_set_val(w, val);
+    if(w)
+    {
+      const float val = dt_bauhaus_slider_get_val(w) - delta_y;
+      dt_bauhaus_slider_set_val(w, val);
 
-    redraw = TRUE;
+      redraw = TRUE;
+    }
   }
 
   if(redraw)
@@ -1963,7 +2001,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->bright_sliders[6], N_("brightness"), N_("lavender"));
   dt_bauhaus_widget_set_label(g->bright_sliders[7], N_("brightness"), N_("purple"));
 
-  self->widget = dt_ui_notebook_page(g->notebook, N_("options"), _(""));
+  self->widget = dt_ui_notebook_page(g->notebook, N_("options"), NULL);
   g->white_level = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
                                        dt_bauhaus_slider_from_params(self, "white_level"));
   dt_bauhaus_slider_set_soft_range(g->white_level, -2., +2.);
@@ -1973,7 +2011,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->chroma_size = dt_bauhaus_slider_from_params(self, "chroma_size");
   dt_bauhaus_slider_set_digits(g->chroma_size, 1);
-  dt_bauhaus_slider_set_format(g->chroma_size, _(" pix"));
+  dt_bauhaus_slider_set_format(g->chroma_size, _(" px"));
   gtk_widget_set_tooltip_text(g->chroma_size,
                               _("blurring radius of chroma prefilter analysis"));
 
@@ -1982,7 +2020,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->param_size = dt_bauhaus_slider_from_params(self, "param_size");
   dt_bauhaus_slider_set_digits(g->param_size, 1);
-  dt_bauhaus_slider_set_format(g->param_size, _(" pix"));
+  dt_bauhaus_slider_set_format(g->param_size, _(" px"));
   gtk_widget_set_tooltip_text(g->param_size, _("blurring radius of applied parameters"));
 
   g->param_feathering = dt_bauhaus_slider_from_params(self, "param_feathering");
