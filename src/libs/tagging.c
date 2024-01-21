@@ -2665,13 +2665,14 @@ static gint _sort_tree_count_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIt
 
 static inline gint _compare_utf8_no_case(const char *a, const char *b)
 {
-  char *a_nc_nat = g_utf8_collate_key_for_filename(a, -1);
+  /* //ab такая сортировка нам не нужна! char *a_nc_nat = g_utf8_collate_key_for_filename(a, -1);
   char *b_nc_nat = g_utf8_collate_key_for_filename(b, -1);
 
   const gint sort = g_strcmp0(a_nc_nat, b_nc_nat);
 
   g_free(a_nc_nat);
-  g_free(b_nc_nat);
+  g_free(b_nc_nat);*/
+  const gint sort = g_strcmp0(a, b);
   return sort;
 }
 
