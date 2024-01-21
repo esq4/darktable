@@ -2044,10 +2044,24 @@ static void _event_dnd_get(GtkWidget *widget,
       {
         dt_imgid_t *imgs = malloc(sizeof(uint32_t) * imgs_nb);
         GList *l = table->drag_list;
-        for(int i = 0; i < imgs_nb; i++)
+
+        int start = 0;
+        // make sure that imgs[0] is the last selected imgid, that is the
+        // one clicked when starting the d&d.
+        if(dt_is_valid_imgid(darktable.control->last_clicked_filmstrip_id))
         {
-          imgs[i] = GPOINTER_TO_INT(l->data);
-          l = g_list_next(l);
+          imgs[0] = darktable.control->last_clicked_filmstrip_id;
+          start = 1;
+        }
+
+        for(int i = start; i < imgs_nb; i++)
+        {
+          const dt_imgid_t id = GPOINTER_TO_INT(l->data);
+          if(i > 0 && id != imgs[0])
+          {
+            imgs[i] = GPOINTER_TO_INT(l->data);
+            l = g_list_next(l);
+          }
         }
         gtk_selection_data_set(selection_data,
                                gtk_selection_data_get_target(selection_data),
@@ -2108,6 +2122,8 @@ static void _event_dnd_begin(GtkWidget *widget,
 
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
 
+  darktable.control->last_clicked_filmstrip_id =
+    dt_control_get_mouse_over_id();
   table->drag_list = dt_act_on_get_images(FALSE, TRUE, TRUE);
 
 #ifdef HAVE_MAP

@@ -91,8 +91,8 @@ None;midi:CC24=iop/colorequal/brightness/purple
 // sRGB primary red records at 20° of hue in darktable UCS 22, so we offset the whole hue range
 // such that red is the origin hues in the GUI. This is consistent with HSV/HSL color wheels UI.
 #define ANGLE_SHIFT +20.f
-#define DEG_TO_RAD(x) ((x + ANGLE_SHIFT) * M_PI / 180.f)
-#define RAD_TO_DEG(x) (x * 180.f / M_PI - ANGLE_SHIFT)
+#define DEG_TO_RAD(x) (((x) + ANGLE_SHIFT) * M_PI / 180.f)
+#define RAD_TO_DEG(x) ((x) * 180.f / M_PI - ANGLE_SHIFT)
 
 #define NODES 8
 
@@ -110,11 +110,7 @@ typedef struct dt_iop_colorequal_params_t
 
   float white_level;        // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "white level"
   float chroma_size;        // $MIN: 1.0 $MAX: 10. $DEFAULT: 3.0 $DESCRIPTION: "analysis radius"
-  float chroma_feathering;  // $MIN: 1.0 $MAX: 10. $DEFAULT: 5.0 $DESCRIPTION: "analysis feathering"
-
-  float param_size;        // $MIN: 3 $MAX: 128 $DEFAULT: 50 $DESCRIPTION: "effect radius"
-  float param_feathering;  // $MIN: 1.0 $MAX: 10. $DEFAULT: 6.0 $DESCRIPTION: "effect feathering"
-
+  float param_size;        // $MIN: 3 $MAX: 128 $DEFAULT: 3.0 $DESCRIPTION: "effect radius"
   gboolean use_filter; // $DEFAULT: TRUE $DESCRIPTION: "use guided filter"
 
   // Note: what follows is tedious because each param needs to be declared separately.
@@ -226,7 +222,7 @@ typedef struct dt_iop_colorequal_gui_data_t
   GtkWidget *bright_turquoise, *bright_blue, *bright_lavender, *bright_purple;
 
   GtkWidget *smoothing_saturation, *smoothing_bright, *smoothing_hue;
-  GtkWidget *chroma_size, *chroma_feathering, *param_size, *param_feathering, *use_filter;
+  GtkWidget *chroma_size, *param_size, *use_filter;
 
   // Array-like re-indexing of the above for efficient uniform
   // handling in loops Populate the array in gui_init()
@@ -272,6 +268,11 @@ void _mean_gaussian(float *const buf,
   dt_gaussian_free(g);
 }
 
+static inline float _get_scaling(const float sigma)
+{
+  return MAX(1.0f, MIN(4.0f, floorf(sigma - 1.5f)));
+}
+
 void _prefilter_chromaticity(float *const restrict UV,
                              const dt_iop_roi_t *const roi,
                              const float csigma,
@@ -293,8 +294,8 @@ void _prefilter_chromaticity(float *const restrict UV,
   const size_t height = roi->height;
   // possibly downsample for speed-up
   const size_t pixels = width * height;
-  const float scaling = MAX(MIN(sigma, 4.0f), 1.0f);
-  const float gsigma = MAX(0.0f, 0.5f * sigma / scaling);
+  const float scaling = _get_scaling(sigma);
+  const float gsigma = MAX(0.5f, 0.5f * sigma / scaling);
   const size_t ds_height = height / scaling;
   const size_t ds_width = width / scaling;
   const size_t ds_pixels = ds_width * ds_height;
@@ -388,15 +389,15 @@ void _prefilter_chromaticity(float *const restrict UV,
     {
       // find a_1, a_2 s.t. U' = a_1 * U + a_2 * V
       a[4 * k + 0] = (covariance[4 * k + 0] * sigma_inv[0]
-                      + covariance[4 * k + 1] * sigma_inv[1]);
+                    + covariance[4 * k + 1] * sigma_inv[1]);
       a[4 * k + 1] = (covariance[4 * k + 0] * sigma_inv[2]
-                      + covariance[4 * k + 1] * sigma_inv[3]);
+                    + covariance[4 * k + 1] * sigma_inv[3]);
 
       // find a_3, a_4 s.t. V' = a_3 * U + a_4 V
       a[4 * k + 2] = (covariance[4 * k + 2] * sigma_inv[0]
-                      + covariance[4 * k + 3] * sigma_inv[1]);
+                    + covariance[4 * k + 3] * sigma_inv[1]);
       a[4 * k + 3] = (covariance[4 * k + 2] * sigma_inv[2]
-                      + covariance[4 * k + 3] * sigma_inv[3]);
+                    + covariance[4 * k + 3] * sigma_inv[3]);
     }
     else
     {
@@ -441,9 +442,11 @@ void _prefilter_chromaticity(float *const restrict UV,
     // For each correction factor, we re-express it as a[0] * U + a[1] * V + b
     float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
     UV[2 * k + 0] = a_full[4 * k + 0] * uv[0]
-      + a_full[4 * k + 1] * uv[1] + b_full[2 * k + 0];
+                  + a_full[4 * k + 1] * uv[1]
+                  + b_full[2 * k + 0];
     UV[2 * k + 1] = a_full[4 * k + 2] * uv[0]
-      + a_full[4 * k + 3] * uv[1] + b_full[2 * k + 1];
+                  + a_full[4 * k + 3] * uv[1]
+                  + b_full[2 * k + 1];
   }
 
   dt_free_align(a);
@@ -478,8 +481,8 @@ void _guide_with_chromaticity(float *const restrict UV,
   const size_t height = roi->height;
   // Downsample for speed-up
   const size_t pixels = width * height;
-  const float scaling = MAX(MIN(sigma, 4.0f), 1.0f);
-  const float gsigma = MAX(0.0f, 0.5f * sigma / scaling);
+  const float scaling = _get_scaling(sigma);
+  const float gsigma = MAX(0.5f, 0.5f * sigma / scaling);
   const size_t ds_height = height / scaling;
   const size_t ds_width = width / scaling;
   const size_t ds_pixels = ds_width * ds_height;
@@ -609,8 +612,10 @@ void _guide_with_chromaticity(float *const restrict UV,
   {
     // Extract the 2×2 covariance matrix sigma = cov(U, V) at current pixel
     dt_aligned_pixel_t Sigma
-        = { covariance[4 * k + 0], covariance[4 * k + 1],
-            covariance[4 * k + 2], covariance[4 * k + 3] };
+        = { covariance[4 * k + 0],
+            covariance[4 * k + 1],
+            covariance[4 * k + 2],
+            covariance[4 * k + 3] };
 
     // Add the covariance threshold : sigma' = sigma + epsilon * Identity
     Sigma[0] += epsilon;
@@ -619,8 +624,11 @@ void _guide_with_chromaticity(float *const restrict UV,
     // Invert the 2×2 sigma matrix algebraically
     // see https://www.mathcentre.ac.uk/resources/uploaded/sigma-matrices7-2009-1.pdf
     const float det = fmax((Sigma[0] * Sigma[3] - Sigma[1] * Sigma[2]), 1e-15f);
-    dt_aligned_pixel_t sigma_inv = { Sigma[3] / det, -Sigma[1] / det,
-                                    -Sigma[2] / det,  Sigma[0] / det };
+    dt_aligned_pixel_t sigma_inv
+        = { Sigma[3] / det,
+           -Sigma[1] / det,
+           -Sigma[2] / det,
+            Sigma[0] / det };
     // Note : epsilon prevents determinant == 0 so the invert exists all the time
 
     // a(chan) = dot_product(cov(chan, uv), sigma_inv)
@@ -631,14 +639,14 @@ void _guide_with_chromaticity(float *const restrict UV,
     if(fabsf(det) > 4.f * FLT_EPSILON)
     {
       a[4 * k + 0] = (correlations[4 * k + 0] * sigma_inv[0]
-                      + correlations[4 * k + 1] * sigma_inv[1]);
+                    + correlations[4 * k + 1] * sigma_inv[1]);
       a[4 * k + 1] = (correlations[4 * k + 0] * sigma_inv[2]
-                      + correlations[4 * k + 1] * sigma_inv[3]);
+                    + correlations[4 * k + 1] * sigma_inv[3]);
 
       a[4 * k + 2] = (correlations[4 * k + 2] * sigma_inv[0]
-                      + correlations[4 * k + 3] * sigma_inv[1]);
+                    + correlations[4 * k + 3] * sigma_inv[1]);
       a[4 * k + 3] = (correlations[4 * k + 2] * sigma_inv[2]
-                      + correlations[4 * k + 3] * sigma_inv[3]);
+                    + correlations[4 * k + 3] * sigma_inv[3]);
     }
     else
     {
@@ -674,6 +682,8 @@ void _guide_with_chromaticity(float *const restrict UV,
     b_full = dt_alloc_align_float(pixels * 2);
     interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
     interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
+    dt_free_align(a);
+    dt_free_align(b);
   }
 
   // Apply the guided filter
@@ -685,21 +695,18 @@ void _guide_with_chromaticity(float *const restrict UV,
   for(size_t k = 0; k < pixels; k++)
   {
     // For each correction factor, we re-express it as a[0] * U + a[1] * V + b
-    float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
+    const float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
     // corrections[4 * k + 0] = a_full[6 * k + 0] * uv[0] + a_full[6 * k + 1] * uv[1] + b_full[4 * k + 0];
     corrections[4 * k + 1] = a_full[4 * k + 0] * uv[0]
-      + a_full[4 * k + 1] * uv[1] + b_full[2 * k + 0];
+                           + a_full[4 * k + 1] * uv[1]
+                           + b_full[2 * k + 0];
     corrections[4 * k + 2] = a_full[4 * k + 2] * uv[0]
-      + a_full[4 * k + 3] * uv[1] + b_full[2 * k + 1];
+                           + a_full[4 * k + 3] * uv[1]
+                           + b_full[2 * k + 1];
   }
 
-  dt_free_align(a);
-  dt_free_align(b);
-  if(resized)
-  {
-    dt_free_align(a_full);
-    dt_free_align(b_full);
-  }
+  dt_free_align(a_full);
+  dt_free_align(b_full);
 }
 
 void process(struct dt_iop_module_t *self,
@@ -750,7 +757,7 @@ void process(struct dt_iop_module_t *self,
     dot_product(pix_in, input_matrix, XYZ_D65);
     // Convert to dt UCS 22 UV and store UV
     dt_aligned_pixel_t xyY = { 0.f };
-    dt_XYZ_to_xyY(XYZ_D65, xyY);
+    dt_D65_XYZ_to_xyY(XYZ_D65, xyY);
 
     xyY_to_dt_UCS_UV(xyY, uv);
     L[k] = Y_to_dt_UCS_L_star(xyY[2]);
@@ -781,15 +788,21 @@ void process(struct dt_iop_module_t *self,
     dt_UCS_JCH_to_HSB(JCH, pix_out);
 
     // Get the boosts - if chroma = 0, we have a neutral grey so set everything to 0
-    corrections_out[0] = (JCH[1] > 0.f)
-      ? lookup_gamut(d->LUT_hue, pix_out[0])
-      : 0.f;
-    corrections_out[1] = (JCH[1] > 0.f)
-      ? lookup_gamut(d->LUT_saturation, pix_out[0])
-      : 0.f;
-    corrections_out[2] = (JCH[1] > 0.f)
-      ? 16.f * pix_out[1] * (lookup_gamut(d->LUT_brightness, pix_out[0]) - 1.f) + 1.f
-      : 0.f;
+
+    if(JCH[1] > 0.f)
+    {
+      const float hue = pix_out[0];
+      const float sat = pix_out[1];
+      corrections_out[0] = lookup_gamut(d->LUT_hue, hue);
+      corrections_out[1] = lookup_gamut(d->LUT_saturation, hue);
+      corrections_out[2] = 16.f * sat * (lookup_gamut(d->LUT_brightness, hue) - 1.f);
+    }
+    else
+    {
+      corrections_out[0] = 0.0f;
+      corrections_out[1] = 1.0f;
+      corrections_out[2] = 1.0f;
+    }
 
     // Copy alpha
     pix_out[3] = pix_in[3];
@@ -817,8 +830,13 @@ void process(struct dt_iop_module_t *self,
 
     // Apply the corrections
     pix_out[0] += corrections_out[0]; // WARNING: hue is an offset
+
+    /* Define a weighing function for brightness correction based on saturation
+       with an inflection point at 0.15 reaching ~80% of correction at 0.2
+    */
+    const float weight = 1.0f / (1.0f + expf(-(30.0f*(pix_out[1] - 0.15f))));
     pix_out[1] *= corrections_out[1]; // the brightness and saturation are gains
-    pix_out[2] *= corrections_out[2];
+    pix_out[2] *= 1.0f + (weight * corrections_out[2]);
 
     // Sanitize gamut
     gamut_map_HSB(pix_out, d->gamut_LUT, white);
@@ -988,9 +1006,9 @@ void commit_params(struct dt_iop_module_t *self,
 
   d->white_level = exp2f(p->white_level);
   d->chroma_size = p->chroma_size;
-  d->chroma_feathering = powf(10.f, -p->chroma_feathering);
+  d->chroma_feathering = powf(10.f, -5.0f);
   d->param_size = p->param_size;
-  d->param_feathering = powf(10.f, -p->param_feathering);
+  d->param_feathering = powf(10.f, -6.0f);
   d->use_filter = p->use_filter;
 
   float DT_ALIGNED_ARRAY sat_values[NODES];
@@ -1539,7 +1557,7 @@ void color_picker_apply(dt_iop_module_t *self,
     dt_bauhaus_slider_set(g->white_level, p->white_level);
   }
   else
-    fprintf(stderr, "[colorequal] unknown color picker\n");
+    dt_print(DT_DEBUG_PIPE, "[colorequal] unknown color picker\n");
   --darktable.gui->reset;
 
   gui_changed(self, picker, NULL);
@@ -1696,47 +1714,50 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget,
   const uint8_t dy = (uint8_t)fabs(g->mouse_y - event->y);
   const uint8_t dx = (uint8_t)fabs(g->mouse_x - event->x);
 
-  if(g->scrolling)
+  if(gtk_notebook_get_current_page (g->notebook) <= BRIGHTNESS)
   {
-    g->scrolling = FALSE;
-  }
-  else if(g->dragging)
-  {
-    if(dy > DT_PIXEL_APPLY_DPI(1))
+    if(g->scrolling)
     {
-      _area_set_pos(g, event->y);
-
-      g->mouse_y = event->y;
-
-      redraw = TRUE;
+      g->scrolling = FALSE;
     }
-  }
-  else if(dy > DT_PIXEL_APPLY_DPI(2)     // protect against small motion while scrolling
-          || dx > DT_PIXEL_APPLY_DPI(2))
-  {
-    // look if close to a node
-    const float epsilon = DT_PIXEL_APPLY_DPI(10.0);
-
-    const int oldsel = g->selected;
-    g->selected = -1;
-    g->mouse_y = event->y;
-
-    for(int k=0; k<NODES+1; k++)
+    else if(g->dragging)
     {
-      if(fabsf(g->points[k][0] - (float)event->x) < epsilon
-         && fabsf(g->points[k][1] - (float)event->y) < epsilon)
+      if(dy > DT_PIXEL_APPLY_DPI(1))
       {
-        // if last node, select node 0 (same node actually)
-        g->selected = k == NODES ? 0 : k;
-        break;
+        _area_set_pos(g, event->y);
+
+        g->mouse_y = event->y;
+
+        redraw = TRUE;
       }
     }
+    else if(dy > DT_PIXEL_APPLY_DPI(2)     // protect against small motion while scrolling
+            || dx > DT_PIXEL_APPLY_DPI(2))
+    {
+      // look if close to a node
+      const float epsilon = DT_PIXEL_APPLY_DPI(10.0);
 
-    redraw = oldsel != g->selected;
+      const int oldsel = g->selected;
+      g->selected = -1;
+      g->mouse_y = event->y;
+
+      for(int k=0; k<NODES+1; k++)
+      {
+        if(fabsf(g->points[k][0] - (float)event->x) < epsilon
+           && fabsf(g->points[k][1] - (float)event->y) < epsilon)
+        {
+          // if last node, select node 0 (same node actually)
+          g->selected = k == NODES ? 0 : k;
+          break;
+        }
+      }
+
+      redraw = oldsel != g->selected;
+    }
+
+    if(redraw)
+      gtk_widget_queue_draw(GTK_WIDGET(g->area));
   }
-
-  if(redraw)
-    gtk_widget_queue_draw(GTK_WIDGET(g->area));
 
   return TRUE;
 }
@@ -1748,18 +1769,21 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
 
-  if(event->button == 1)
+  if(gtk_notebook_get_current_page (g->notebook) <= BRIGHTNESS)
   {
-    g->mouse_x = event->x;
-    g->mouse_y = event->y;
+    if(event->button == 1)
+    {
+      g->mouse_x = event->x;
+      g->mouse_y = event->y;
 
-    if(event->type == GDK_2BUTTON_PRESS)
-    {
-      _area_reset_nodes(g);
-    }
-    else
-    {
-      g->dragging = TRUE;
+      if(event->type == GDK_2BUTTON_PRESS)
+      {
+        _area_reset_nodes(g);
+      }
+      else
+      {
+        g->dragging = TRUE;
+      }
     }
   }
 
@@ -1795,7 +1819,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     // Re-init the profiles
     if(g->white_adapted_profile)
-      free(g->white_adapted_profile);
+      dt_free_align(g->white_adapted_profile);
     g->white_adapted_profile = D65_adapt_iccprofile(work_profile);
     g->work_profile = work_profile;
     g->gradients_cached = FALSE;
@@ -1808,7 +1832,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     if(g->white_adapted_profile != NULL)
       memcpy(input_matrix, g->white_adapted_profile->matrix_in, sizeof(dt_colormatrix_t));
     else
-      fprintf(stderr, "[colorequal] display color space falls back to sRGB\n");
+      dt_print(DT_DEBUG_PIPE, "[colorequal] display color space falls back to sRGB\n");
 
     dt_UCS_22_build_gamut_LUT(input_matrix, g->gamut_LUT);
     g->max_saturation = get_minimum_saturation(g->gamut_LUT, SLIDER_BRIGHTNESS, 1.f);
@@ -1831,7 +1855,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   if(g->white_adapted_profile)
   {
-    free(g->white_adapted_profile);
+    dt_free_align(g->white_adapted_profile);
     g->white_adapted_profile = NULL;
   }
 
@@ -1865,7 +1889,7 @@ void gui_init(struct dt_iop_module_t *self)
   if(self->dev)
     work_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->full.pipe);
   if(g->white_adapted_profile)
-    free(g->white_adapted_profile);
+    dt_free_align(g->white_adapted_profile);
   g->white_adapted_profile = D65_adapt_iccprofile(work_profile);
   g->work_profile = work_profile;
   g->gradients_cached = FALSE;
@@ -2015,16 +2039,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->chroma_size,
                               _("blurring radius of chroma prefilter analysis"));
 
-  g->chroma_feathering = dt_bauhaus_slider_from_params(self, "chroma_feathering");
-  dt_bauhaus_slider_set_digits(g->chroma_feathering, 1);
-
   g->param_size = dt_bauhaus_slider_from_params(self, "param_size");
   dt_bauhaus_slider_set_digits(g->param_size, 1);
   dt_bauhaus_slider_set_format(g->param_size, _(" px"));
   gtk_widget_set_tooltip_text(g->param_size, _("blurring radius of applied parameters"));
-
-  g->param_feathering = dt_bauhaus_slider_from_params(self, "param_feathering");
-  dt_bauhaus_slider_set_digits(g->param_feathering, 1);
 
   _init_sliders(self);
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->notebook), TRUE, TRUE, 0);
