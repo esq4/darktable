@@ -44,7 +44,7 @@ typedef enum dt_iop_blur_type_t
 typedef struct dt_iop_blurs_params_t
 {
   dt_iop_blur_type_t type; // $DEFAULT: DT_BLUR_LENS $DESCRIPTION: "blur type"
-  int radius;              // $MIN: 4 $MAX: 128 $DEFAULT: 8 $DESCRIPTION: "blur radius"
+  int radius;              // $MIN: 3 $MAX: 128 $DEFAULT: 8 $DESCRIPTION: "blur radius" //ab min 4->3
 
   // lens blur params
   int blades;              // $MIN: 3 $MAX: 11 $DEFAULT: 5 $DESCRIPTION: "diaphragm blades"
