@@ -1240,7 +1240,6 @@ static void _pop_menu_attached_detach(GtkWidget *menuitem, dt_lib_module_t *self
   _detach_selected_tag(d->attached_view, self);
 }
 
-//ab
 static void _pop_menu_attached_find(GtkWidget *menuitem, dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
@@ -1255,7 +1254,6 @@ static void _pop_menu_attached_find(GtkWidget *menuitem, dt_lib_module_t *self)
 
   gtk_entry_set_text(d->entry, name);
 }
-//ba
 
 static void _pop_menu_attached(GtkWidget *treeview, GdkEventButton *event, dt_lib_module_t *self)
 {
@@ -1284,11 +1282,9 @@ static void _pop_menu_attached(GtkWidget *treeview, GdkEventButton *event, dt_li
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
   g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_attached_detach, self);
 
-  //ab
   menuitem = gtk_menu_item_new_with_label(_("find tag"));
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
   g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_attached_find, self);
-  //ba
 
   gtk_widget_show_all(GTK_WIDGET(menu));
 
