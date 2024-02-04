@@ -40,6 +40,7 @@ FILE(GLOB SOURCE_FILES
   "common/file_location.c"
   "common/film.c"
   "common/gaussian.c"
+  "common/gimp.c"
   "common/gpx.c"
   "common/grouping.c"
   "common/guided_filter.c"
@@ -859,13 +860,6 @@ if(BUILD_PRINT)
 else(BUILD_PRINT)
   message(STATUS "Print mode: disabled")
 endif(BUILD_PRINT)
-
-if(USE_GAME)
-  add_definitions("-DHAVE_GAME")
-  message(STATUS "Game: the good knight")
-else(USE_GAME)
-  message(STATUS "Game: no")
-endif(USE_GAME)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   if(HAVE_EXECINFO_H)

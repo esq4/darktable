@@ -872,7 +872,7 @@ static gboolean _osx_openfile_callback(GtkOSXApplication *OSXapp, gchar *path, g
 static gboolean _osx_openfile_callback(GtkosxApplication *OSXapp, gchar *path, gpointer user_data)
 #endif
 {
-  return dt_load_from_string(path, TRUE, NULL) > 0;
+  return dt_is_valid_imgid(dt_load_from_string(path, TRUE, NULL));
 }
 #endif
 
@@ -1369,7 +1369,6 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
     cairo_surface_destroy(darktable.gui->surface);
     darktable.gui->surface = NULL;
   }
-  dt_cleanup();
 }
 
 // refactored function to read current ppd, because gtk for osx has been unreliable
@@ -1406,7 +1405,7 @@ double dt_get_screen_resolution(GtkWidget *widget)
   else
   {
     screen_dpi = gdk_screen_get_resolution(gtk_widget_get_screen(widget));
-    if(screen_dpi < 0.0) 
+    if(screen_dpi < 0.0)
     {
       screen_dpi = 96.0;
       gdk_screen_set_resolution(gtk_widget_get_screen(widget), 96.0);
@@ -2731,7 +2730,7 @@ void dt_gui_show_help(GtkWidget *widget)
       // array of languages the usermanual supports.
       // NULL MUST remain the last element of the array
       const char *supported_languages[] =
-        { "en", "fr", "de", "eo", "es", "gl", "it", "pl", "pt-br", "uk", NULL };
+        { "en", "fr", "de", "eo", "es", "gl", "it", "nl", "pl", "pt-br", "uk", NULL };
       int lang_index = 0;
       gboolean is_language_supported = FALSE;
 
@@ -2829,8 +2828,9 @@ void dt_gui_load_theme(const char *theme)
     {
       // fallback to default theme
       g_free(path);
-      path = g_build_filename(datadir, "themes", "darktable.css", NULL);
-      dt_conf_set_string("ui_last/theme", "darktable");
+      // NOTE: When changing the default theme, don't forget to change it here!
+      path = g_build_filename(datadir, "themes", "darktable-elegant-grey.css", NULL);
+      dt_conf_set_string("ui_last/theme", "darktable-elegant-grey");
     }
     else
       dt_conf_set_string("ui_last/theme", theme);
@@ -3359,6 +3359,23 @@ static gboolean _scroll_wrap_aspect(GtkWidget *w, GdkEventScroll *event, const c
 }
 
 static gboolean _resize_wrap_dragging = FALSE;
+static GtkWidget *_resize_wrap_hovered = NULL;
+
+static gboolean _resize_wrap_draw_handle(GtkWidget *w, void *cr, gpointer user_data)
+{
+  if(w != _resize_wrap_hovered) return FALSE;
+
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(w, &allocation);
+
+  set_color(cr, darktable.bauhaus->color_fg_insensitive);
+  cairo_move_to(cr, allocation.width / 8 * 3, allocation.height - DT_RESIZE_HANDLE_SIZE / 4 * 3);
+  cairo_line_to(cr, allocation.width / 8 * 5, allocation.height - DT_RESIZE_HANDLE_SIZE / 4 * 3);
+  cairo_set_line_width(cr, DT_RESIZE_HANDLE_SIZE / 2);
+  cairo_stroke(cr);
+
+  return FALSE;
+}
 
 static gboolean _resize_wrap_motion(GtkWidget *widget, GdkEventMotion *event, const char *config_str)
 {
@@ -3409,8 +3426,11 @@ static gboolean _resize_wrap_button(GtkWidget *widget, GdkEventButton *event, co
   return FALSE;
 }
 
-static gboolean _resize_wrap_leave(GtkWidget *widget, GdkEventCrossing *event, const char *config_str)
+static gboolean _resize_wrap_enter_leave(GtkWidget *widget, GdkEventCrossing *event, const char *config_str)
 {
+  _resize_wrap_hovered = event->type == GDK_ENTER_NOTIFY || event->detail == GDK_NOTIFY_INFERIOR || _resize_wrap_dragging ? widget : NULL;
+  gtk_widget_queue_draw(widget);
+
   if(event->mode == GDK_CROSSING_GTK_UNGRAB)
     _resize_wrap_dragging = FALSE;
   if(!_resize_wrap_dragging)
@@ -3449,7 +3469,9 @@ GtkWidget *dt_ui_resize_wrap(GtkWidget *w, gint min_size, char *config_str)
   g_signal_connect(G_OBJECT(w), "motion-notify-event", G_CALLBACK(_resize_wrap_motion), config_str);
   g_signal_connect(G_OBJECT(w), "button-press-event", G_CALLBACK(_resize_wrap_button), config_str);
   g_signal_connect(G_OBJECT(w), "button-release-event", G_CALLBACK(_resize_wrap_button), config_str);
-  g_signal_connect(G_OBJECT(w), "leave-notify-event", G_CALLBACK(_resize_wrap_leave), config_str);
+  g_signal_connect(G_OBJECT(w), "enter-notify-event", G_CALLBACK(_resize_wrap_enter_leave), config_str);
+  g_signal_connect(G_OBJECT(w), "leave-notify-event", G_CALLBACK(_resize_wrap_enter_leave), config_str);
+  g_signal_connect_after(G_OBJECT(w), "draw", G_CALLBACK(_resize_wrap_draw_handle), NULL);
 
   return w;
 }
