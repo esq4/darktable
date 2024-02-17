@@ -596,40 +596,33 @@ void init_presets(dt_iop_module_so_t *self)
 
 
 static gboolean _get_white_balance_coeff(struct dt_iop_module_t *self,
-                                    dt_aligned_pixel_t custom_wb)
+                                         dt_aligned_pixel_t custom_wb)
 {
-  // Init output with a no-op
-  for_four_channels(k) custom_wb[k] = 1.f;
-
-  if(!dt_image_is_matrix_correction_supported(&self->dev->image_storage)) return 1;
-
-  // First, get the D65-ish coeffs from the input matrix
-  // keep this in synch with calculate_bogus_daylight_wb from temperature.c !
-  // predicts the bogus D65 that temperature.c will compute for the camera input matrix
-  double bwb[4];
-
-  if(dt_colorspaces_conversion_matrices_rgb
-     (self->dev->image_storage.adobe_XYZ_to_CAM,
-      NULL, NULL,
-      self->dev->image_storage.d65_color_matrix, bwb))
-  {
-    // normalize green:
-    bwb[0] /= bwb[1];
-    bwb[2] /= bwb[1];
-    bwb[3] /= bwb[1];
-    bwb[1] = 1.0;
-  }
-  else
-     return TRUE;
-
-  // Second, if the temperature module is not using these, for example
-  // because they are wrong and user made a correct preset, find the
-  // WB adaptation ratio
   const dt_dev_chroma_t *chr = &self->dev->chroma;
-  if(chr->wb_coeffs[0] > 1.0 || chr->wb_coeffs[1] > 1.0 || chr->wb_coeffs[2] > 1.0)
+
+  // Init output with a no-op
+  for_four_channels(k)
+    custom_wb[k] = 1.0f;
+
+  if(!dt_image_is_matrix_correction_supported(&self->dev->image_storage))
+    return TRUE;
+
+  // If we use D65 there are unchanged corrections
+  if(dt_dev_is_D65_chroma(self->dev))
+    return FALSE;
+
+  const gboolean valid_chroma =
+    chr->D65coeffs[0] > 0.0 && chr->D65coeffs[1] > 0.0 && chr->D65coeffs[2] > 0.0;
+
+  const gboolean changed_chroma =
+    chr->wb_coeffs[0] > 1.0 || chr->wb_coeffs[1] > 1.0 || chr->wb_coeffs[2] > 1.0;
+
+  // Otherwise - for example because the user made a correct preset, find the
+  // WB adaptation ratio
+  if(valid_chroma && changed_chroma)
   {
     for_four_channels(k)
-      custom_wb[k] = bwb[k] / chr->wb_coeffs[k];
+      custom_wb[k] = chr->D65coeffs[k] / chr->wb_coeffs[k];
   }
   return FALSE;
 }
@@ -811,11 +804,8 @@ static inline void _loop_switch(const float *const restrict in,
       dt_colormatrix_mul(MIX_to_XYZ, RGB_to_XYZ, MIX);
       break;
   }
-
-  dt_aligned_pixel_t min_value = { 0.0f, 0.0f, 0.0f, 0.0f };
-  if(!clip)
-    for_each_channel(c)
-      min_value[c] = -FLT_MAX;
+  const float minval = clip ? 0.0f : -FLT_MAX;
+  const dt_aligned_pixel_t min_value = { minval, minval, minval, minval };
 
   dt_colormatrix_t RGB_to_XYZ_trans;
   dt_colormatrix_transpose(RGB_to_XYZ_trans, RGB_to_XYZ);
@@ -840,8 +830,7 @@ static inline void _loop_switch(const float *const restrict in,
     dt_aligned_pixel_t temp_one;
     dt_aligned_pixel_t temp_two;
 
-    for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-      temp_two[c] = fmaxf(in[k + c], min_value[c]);
+    dt_vector_max_nan(temp_two, &in[k], min_value);
 
     /* WE START IN PIPELINE RGB */
 
@@ -934,25 +923,21 @@ static inline void _loop_switch(const float *const restrict in,
 
     // Clip in LMS
     if(clip)
-      for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-        temp_one[c] = fmaxf(temp_one[c], 0.0f);
+      dt_vector_clipneg_nan(temp_one);
 
     // Apply lightness / saturation adjustment
     _luma_chroma(temp_one, saturation, lightness, temp_two, version);
 
     // Clip in LMS
     if(clip)
-      for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-        temp_two[c] = fmaxf(temp_two[c], 0.0f);
+      dt_vector_clipneg_nan(temp_two);
 
     // Save
     if(apply_grey)
     {
       // Turn LMS, XYZ or pipeline RGB into monochrome
       const float grey_mix = fmaxf(scalar_product(temp_two, grey), 0.0f);
-
-      out[k] = out[k + 1] = out[k + 2] = grey_mix;
-      out[k + 3] = in[k + 3]; // alpha mask
+      temp_two[0] = temp_two[1] = temp_two[2] = grey_mix;
     }
     else
     {
@@ -981,21 +966,17 @@ static inline void _loop_switch(const float *const restrict in,
 
       // Clip in XYZ
       if(clip)
-        for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-          temp_one[c] = fmaxf(temp_one[c], 0.0f);
+        dt_vector_clipneg_nan(temp_one);
 
       // Convert back to RGB
       dt_apply_transposed_color_matrix(temp_one, XYZ_to_RGB_trans, temp_two);
 
       if(clip)
-        for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-          out[k + c] = fmaxf(temp_two[c], 0.0f);
-      else
-        for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-          out[k + c] = temp_two[c];
-
-//      out[k + 3] = in[k + 3]; // alpha mask
+        dt_vector_clipneg_nan(temp_two);
     }
+
+    temp_two[3] = in[k + 3]; // alpha mask
+    copy_pixel_nontemporal(&out[k], temp_two);
   }
 }
 
@@ -2023,8 +2004,10 @@ void validate_color_checker(const float *const restrict in,
 
 static void _set_trouble_messages(struct dt_iop_module_t *self)
 {
-  const dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  const dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  const dt_iop_channelmixer_rgb_params_t *p =
+    (dt_iop_channelmixer_rgb_params_t *)self->params;
+  const dt_iop_channelmixer_rgb_gui_data_t *g =
+    (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   const dt_develop_t *dev = self->dev;
   const dt_dev_chroma_t *chr = &dev->chroma;
 
@@ -3566,7 +3549,9 @@ static void _update_illuminant_color(dt_iop_module_t *self)
   _update_xy_color(self);
 }
 
-static gboolean _illuminant_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+static gboolean _illuminant_color_draw(GtkWidget *widget,
+                                       cairo_t *crf,
+                                       gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_params_t *p =
@@ -3609,7 +3594,9 @@ static gboolean _illuminant_color_draw(GtkWidget *widget, cairo_t *crf, gpointer
   return TRUE;
 }
 
-static gboolean target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+static gboolean target_color_draw(GtkWidget *widget,
+                                  cairo_t *crf,
+                                  gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g =
@@ -3654,7 +3641,9 @@ static gboolean target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user
   return TRUE;
 }
 
-static gboolean origin_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+static gboolean origin_color_draw(GtkWidget *widget,
+                                  cairo_t *crf,
+                                  gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g =
@@ -3751,7 +3740,8 @@ static void _update_approx_cct(dt_iop_module_t *self)
 }
 
 
-static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
+static void illum_xy_callback(GtkWidget *slider,
+                              gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(darktable.gui->reset) return;
@@ -3922,30 +3912,29 @@ void reload_defaults(dt_iop_module_t *module)
 
   // check if we could register
   const gboolean CAT_already_applied =
-    (module->dev->chroma.adaptation != NULL)      // CAT exists
-    && (module->dev->chroma.adaptation != module) // and it is not us
-    && (!dt_image_is_monochrome(img));
+    (module->dev->chroma.adaptation != NULL)       // CAT exists
+    && (module->dev->chroma.adaptation != module); // and it is not us
 
   module->default_enabled = FALSE;
 
-  dt_aligned_pixel_t custom_wb;
-  if(!CAT_already_applied
-     && is_modern
-     && !_get_white_balance_coeff(module, custom_wb)
-     && !dt_image_is_monochrome(img))
+  if(CAT_already_applied || dt_image_is_monochrome(img))
   {
-    // if workflow = modern and we find WB coeffs, take care of white balance here
-    if(find_temperature_from_raw_coeffs(img, custom_wb, &(d->x), &(d->y)))
-      d->illuminant = DT_ILLUMINANT_CAMERA;
-
-    _check_if_close_to_daylight(d->x, d->y,
-                                &(d->temperature), &(d->illuminant), &(d->adaptation));
+    // simple channel mixer
+    d->illuminant = DT_ILLUMINANT_PIPE;
+    d->adaptation = DT_ADAPTATION_RGB;
   }
   else
   {
-    // otherwise, simple channel mixer
-    d->illuminant = DT_ILLUMINANT_PIPE;
-    d->adaptation = DT_ADAPTATION_RGB;
+    d->adaptation = DT_ADAPTATION_CAT16;
+
+    dt_aligned_pixel_t custom_wb;
+    if(!_get_white_balance_coeff(module, custom_wb))
+    {
+      if(find_temperature_from_raw_coeffs(img, custom_wb, &(d->x), &(d->y)))
+        d->illuminant = DT_ILLUMINANT_CAMERA;
+      _check_if_close_to_daylight(d->x, d->y,
+                                  &(d->temperature), &(d->illuminant), &(d->adaptation));
+    }
   }
 
   dt_iop_channelmixer_rgb_gui_data_t *g =
@@ -3983,7 +3972,8 @@ void reload_defaults(dt_iop_module_t *module)
 }
 
 
-static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *self)
+static void _spot_settings_changed_callback(GtkWidget *slider,
+                                            dt_iop_module_t *self)
 {
   if(darktable.gui->reset) return;
 
@@ -4018,7 +4008,9 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
 }
 
 
-void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
+void gui_changed(dt_iop_module_t *self,
+                 GtkWidget *w,
+                 void *previous)
 {
   dt_iop_channelmixer_rgb_params_t *p =
     (dt_iop_channelmixer_rgb_params_t *)self->params;
@@ -4051,7 +4043,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       // Get camera WB and update illuminant
       dt_aligned_pixel_t custom_wb;
       _get_white_balance_coeff(self, custom_wb);
-      const int found = find_temperature_from_raw_coeffs(&(self->dev->image_storage),
+      const gboolean found = find_temperature_from_raw_coeffs(&(self->dev->image_storage),
                                                          custom_wb, &(p->x), &(p->y));
       _check_if_close_to_daylight(p->x, p->y, &(p->temperature), NULL, &(p->adaptation));
 
@@ -4186,7 +4178,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   gui_changed(self, NULL, NULL);
 }
 
-void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
+void _auto_set_illuminant(dt_iop_module_t *self,
+                          dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g =
     (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
