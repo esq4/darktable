@@ -144,14 +144,14 @@ typedef struct dt_iop_overlay_gui_data_t
 
 const char *name()
 {
-  return _("overlay");
+  return _("composite");
 }
 
 const char **description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description
     (self,
-     _("image overlay"),
+     _("combine with elements from a processed image"),
      _("corrective and creative"),
      _("linear, RGB, scene-referred"),
      _("linear, RGB"),
@@ -160,7 +160,7 @@ const char **description(struct dt_iop_module_t *self)
 
 const char *aliases()
 {
-  return _("composition|layering|stacked");
+  return _("layer|stack|overlay");
 }
 
 int flags()
@@ -203,12 +203,14 @@ static GList *_get_disabled_modules(const dt_iop_module_t *self,
     dt_iop_module_t *mod = (dt_iop_module_t *)(l->data);
 
     // if disable is actif
-    // - disable module except if gamma
-    // - disable overlay & enlargecanvas if overlay is working on
+    // - disable module except if gamma / finalscale
+    // - disable overlay, enlargecanvas if overlay is working on
     //   the current image. This is needed to avoid recursive
-    //   image references.
+    //   image references. Also disable crop, ashift which are not
+    //   wanted here (double crop / shift).
     if((disable
-        && !dt_iop_module_is(mod->so, "gamma"))
+        && !dt_iop_module_is(mod->so, "gamma")
+        && !dt_iop_module_is(mod->so, "finalscale"))
        || (is_current
            && (dt_iop_module_is(mod->so, "enlargecanvas")
                || dt_iop_module_is(mod->so, "overlay")
@@ -262,6 +264,8 @@ static void _setup_overlay(dt_iop_module_t *self,
     return;
   }
 
+  dt_develop_t *dev = self->dev;
+
   gboolean image_exists = dt_image_exists(imgid);
 
   // The overlay image could have been removed from collection and
@@ -273,7 +277,7 @@ static void _setup_overlay(dt_iop_module_t *self,
     {
       image_exists = TRUE;
       p->imgid = new_imgid;
-      dt_dev_add_history_item(darktable.develop, self, TRUE);
+      dt_dev_add_history_item(dev, self, TRUE);
       if(g)
         gtk_widget_queue_draw(GTK_WIDGET(g->area));
     }
@@ -288,8 +292,6 @@ static void _setup_overlay(dt_iop_module_t *self,
 
   if(image_exists)
   {
-    dt_develop_t *dev = self->dev;
-
     const size_t width  = dev->image_storage.width;
     const size_t height = dev->image_storage.width;
 
@@ -306,7 +308,7 @@ static void _setup_overlay(dt_iop_module_t *self,
                  -1,
                  &buf, NULL, &bw, &bh,
                  NULL, NULL,
-                 -1, disabled_modules);
+                 -1, disabled_modules, piece->pipe->devid, TRUE);
 
     uint8_t *old_buf = *pbuf;
 
@@ -315,6 +317,8 @@ static void _setup_overlay(dt_iop_module_t *self,
     p->buf_height    = bh;
     data->buf_width  = bw;
     data->buf_height = bh;
+
+    dt_dev_add_history_item(dev, self, TRUE);
 
     *pbuf = buf;
     dt_free_align(old_buf);
@@ -749,7 +753,7 @@ static void _draw_thumb(GtkWidget *area,
     PangoLayout *layout = pango_cairo_create_layout(crf);
     pango_layout_set_font_description(layout, desc);
     // TRANSLATORS: This text must be very narrow, check in the GUI that it is not truncated
-    pango_layout_set_text(layout, _("drop\nimage\nhere"), -1);
+    pango_layout_set_text(layout, _("drop\nimage\nfrom filmstrip\nhere"), -1);
 
     PangoRectangle ink;
     pango_layout_get_pixel_extents(layout, &ink, NULL);
@@ -968,8 +972,10 @@ static void _drag_and_drop_received(GtkWidget *widget,
           dt_overlay_remove(self->dev->image_storage.id, p->imgid);
 
         // and record the new one
-        p->imgid = imgid;
-        p->hash = 0;
+        p->imgid         = imgid;
+        p->hash          = 0;
+        p->buf_width     = 0;
+        p->buf_height    = 0;
         _clear_cache_entry(self, index);
 
         dt_overlay_record(self->dev->image_storage.id, p->imgid);

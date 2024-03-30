@@ -39,7 +39,7 @@ The algorithm follows these basic ideas:
 4. In all 3 color planes we look for isolated areas being clipped (segments).
    These segments also include the unclipped photosites at the borders, we also use these locations for estimating the global chrominance.
    Inside these segments we look for a candidate to represent the value we take for restoration.
-   Choosing the candidate is done at all non-clipped locations of a segment, the best candidate is selected via a weighing
+   Choosing the candidate is done at all non-clipped locations of a segment, the best candidate is selected via a weighting
    function - the weight is derived from
    - the local standard deviation in a 5x5 area and
    - the median value of unclipped positions also in a 5x5 area.
@@ -55,7 +55,7 @@ The chosen segmentation algorithm works like this:
 3. The segmentation algorithm uses a modified floodfill, it also takes care of the surrounding rectangle of every segment
    and marks the segment borders.
 4. After segmentation we check every segment for
-   - the segment's best candidate via the weighing function
+   - the segment's best candidate via the weighting function
    - the candidates location
 */
 
@@ -245,16 +245,7 @@ static void _initial_gradients(const size_t w,
       const size_t v = (size_t)row * w + col;
       float g = 0.0f;
       if((distance[v] > 0.0f) && (distance[v] < 2.0f))
-      {
-        // scharr operator
-        const float gx = 47.0f * (luminance[v-w-1] - luminance[v-w+1])
-                      + 162.0f * (luminance[v-1]   - luminance[v+1])
-                       + 47.0f * (luminance[v+w-1] - luminance[v+w+1]);
-        const float gy = 47.0f * (luminance[v-w-1] - luminance[v+w-1])
-                      + 162.0f * (luminance[v-w]   - luminance[v+w])
-                       + 47.0f * (luminance[v-w+1] - luminance[v+w+1]);
-        g = 4.0f * sqrtf(sqrf(gx / 256.0f) + sqrf(gy / 256.0f));
-      }
+        g = 4.0f * scharr_gradient(&luminance[v], w);
       gradient[v] = g;
     }
   }

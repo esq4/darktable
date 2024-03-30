@@ -83,7 +83,9 @@ changes (where available).
   cases. It can still be enabled via the resource file if needed.
 
 - Add buttons next to the snapshots to allow restoring it as the new
-  history.
+  history. Also the snapshots are now supporting drawn masks. It is
+  possible to visualize the difference between the main darkroom view
+  and a snapshot with different masking for example.
 
 - Using <kbd>Right-Click</kbd> on color label icons (bottom toolbar of
   lighttable) it is possible to add a description to color
@@ -93,7 +95,31 @@ changes (where available).
 - Removed the AI options in color calibration module because of
   mediocre quality.
 
+- It is now possible to import in-place pictures in a gvfs mount on
+  GNU/Linux.
+
+- Add a dashed outline of the current selected area in the print view.
+
+- Added a few more EXIF fields to the image information module: White
+  balance, exposure program, flash and metering mode.  These get
+  filled automatically for new imports. For existing photos please
+  perform a "refresh EXIF" on the selected images.
+
 ## Bug Fixes
+
+- Fix copy of multiple instances to ensure the proper order is applied
+  when pasting to a new image.
+
+- Fixing raw chromatic aberration on clang based systems.
+
+- Fixes backthumb crawler for deleted history. We make sure that the
+  crawler is aware of a deleted history and so will regenerate the
+  thumbs as expected.
+
+- Fix drawn masks visualizing in darkroom after pixelpipe module have
+  changed. The drawn masks will now be properly adjusted if there is
+  new distortion on the pipe for example. This was not the case until
+  one was editing the mask.
 
 ## Lua
 
@@ -144,74 +170,27 @@ changes (where available).
 
 ### Optional
 
-- Bump libavif to 0.9.3
+- n/a
 
 ## RawSpeed changes
 
 
-## Camera support, compared to 4.4
+## Camera support, compared to 4.6
 
 ### Base Support
 
-- Canon EOS Kiss F
-- Canon EOS Kiss X50
-- Canon EOS Kiss X90
-- Canon IXY 220F (dng, chdk)
-- Canon PowerShot SX220 HS (chdk)
-- Fujifilm FinePix SL1000
-- Fujifilm X-S20 (compressed)
-- ImBack ImB35mm (chdk)
-- Leica M10-D (dng)
-- Leica M10-P (dng)
-- Leica M10-R (dng)
-- Leica M11-P (dng)
-- Leica Q2 Monochrom (dng)
-- Leica SL2 (dng)
-- Leica SL2-S (dng)
-- Nikon Coolpix A1000 (12bit-uncompressed)
-- Nikon Z f (14bit-compressed)
-- OM System TG-7
-- Panasonic DC-TZ200D (3:2)
-- Panasonic DC-TZ202D (3:2)
-- Panasonic DC-TZ220 (3:2)
-- Panasonic DC-TZ220D (3:2)
-- Panasonic DC-ZS200D (3:2)
-- Panasonic DC-ZS220 (3:2)
-- Panasonic DC-ZS220D (3:2)
-- Panasonic DMC-G10 (3:2, 16:9, 1:1)
-- Panasonic DMC-GM1S (4:3, 3:2, 16:9, 1:1)
-- Pentax K-3 Mark III Monochrome
-- Pentax KF
-- Samsung EK-GN120
-- Samsung G920F (dng)
-- Samsung G935F (dng)
-- Samsung GX10 (dng)
-- Samsung GX20 (dng)
-- Sigma fp (dng)
-- Sigma fp L (dng)
-- Sigma sd Quattro (dng)
-- Sigma sd Quattro H (dng)
-- Sinar eVolution 75
-- Sony ILCE-6700
-- Sony ILCE-7CM2
-- Sony ILCE-7CR
-- Sony ILME-FX3
-- Sony ZV-E1
+- Canon EOS R6 Mark II (requires LibRaw 202403 and later)
+- Canon EOS R8 (requires LibRaw 202403 and later)
+- Canon EOS R50 (requires LibRaw 202403 and later)
+- Canon EOS R100 (requires LibRaw 202403 and later)
 
 ### White Balance Presets
 
-- Leica M (Typ 240)
-- Olympus E-P7
-- Olympus TG-6
-- Sony ILCE-7CM2
+- ???
 
 ### Noise Profiles
 
-- Canon IXY 220F
-- Nikon Z f
-- Olympus E-P7
-- Pentax *ist DS
-- Sony ILCE-6700
+- ???
 
 ### Missing Compression Mode Support
 

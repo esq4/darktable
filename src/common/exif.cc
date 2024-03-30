@@ -171,7 +171,8 @@ static const char *_get_exiv2_type(const int type)
   }
 }
 
-static void _get_xmp_tags(const char *prefix, GList **taglist)
+static void _get_xmp_tags(const char *prefix,
+                          GList **taglist)
 {
   const Exiv2::XmpPropertyInfo *pl = Exiv2::XmpProperties::propertyList(prefix);
   if(pl)
@@ -185,7 +186,7 @@ static void _get_xmp_tags(const char *prefix, GList **taglist)
   }
 }
 
-static int _illu_to_temp(dt_dng_illuminant_t illu)
+static int _illu_to_temp(const dt_dng_illuminant_t illu)
 {
   switch(illu)
   {
@@ -230,7 +231,8 @@ static int _illu_to_temp(dt_dng_illuminant_t illu)
 
 void dt_exif_set_exiv2_taglist()
 {
-  if(exiv2_taglist) return;
+  if(exiv2_taglist)
+    return;
 
   try
   {
@@ -409,7 +411,8 @@ static const guint dt_xmp_keys_n = G_N_ELEMENTS(dt_xmp_keys);
 
 // inspired by ufraw_exiv2.cc:
 
-static void _strlcpy_to_utf8(char *dest, size_t dest_max,
+static void _strlcpy_to_utf8(char *dest,
+                             const size_t dest_max,
                              Exiv2::ExifData::const_iterator &pos,
                              Exiv2::ExifData &exifData)
 {
@@ -425,7 +428,26 @@ static void _strlcpy_to_utf8(char *dest, size_t dest_max,
   {
     g_strlcpy(dest, str.c_str(), dest_max);
   }
+  g_strstrip(dest);
 }
+
+// if a numerical exif value n has no string repsentation in exiv2
+// the returned string is a useless "(n)" which can be descarded
+static void _exif_value_str(const int value,
+                            char *dest,
+                            const size_t dest_max,
+                            Exiv2::ExifData::const_iterator &pos,
+                            Exiv2::ExifData &exifData)
+{
+  _strlcpy_to_utf8(dest, dest_max, pos, exifData);
+  gchar *str_value = g_strdup_printf("(%d)", value);
+  if(g_strcmp0(dest, str_value) == 0)
+  {
+    dest[0] = '\0';
+  }
+  g_free(str_value);
+}
+
 
 // function to remove known dt keys and subtrees from xmpdata, so not
 // to append them twice this should work because dt first reads all
@@ -698,7 +720,7 @@ static bool _exif_read_iptc_tag(Exiv2::IptcData &iptcData,
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass iptcData
 static bool _exif_decode_iptc_data(dt_image_t *img,
-                                  Exiv2::IptcData &iptcData)
+                                   Exiv2::IptcData &iptcData)
 {
   try
   {
@@ -799,7 +821,8 @@ static bool _exif_read_exif_tag(Exiv2::ExifData &exifData,
 // DefaultUserCrop is known by name only from 0.27.4
 // Magic-nr taken from dng specs, the specs also say it has 4 floats (top,left,bottom,right
 // We only take them if a) we find a value != the default *and* b) data are plausible
-static bool _check_usercrop(Exiv2::ExifData &exifData, dt_image_t *img)
+static bool _check_usercrop(Exiv2::ExifData &exifData,
+                            dt_image_t *img)
 {
   Exiv2::ExifData::const_iterator pos =
     exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.0xc7b5"));
@@ -825,7 +848,8 @@ static bool _check_usercrop(Exiv2::ExifData &exifData, dt_image_t *img)
   return FALSE;
 }
 
-static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
+static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData,
+                                   dt_image_t *img)
 {
   gboolean has_opcodes = FALSE;
 
@@ -861,7 +885,8 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   return has_opcodes;
 }
 
-static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
+static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData,
+                                            dt_image_t *img)
 {
   Exiv2::ExifData::const_iterator pos, posd, posc, posv;
 
@@ -909,7 +934,7 @@ static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_
         const float kc = posc->toFloat(i + 1);
         const float kv = posv->toFloat(i + 1);
         // check that the knots position is the same for distortion, ca and vignetting,
-        if (kd != kc || kd != kv)
+        if(kd != kc || kd != kv)
         {
           img->exif_correction_type = CORRECTION_TYPE_NONE;
           break;
@@ -943,7 +968,7 @@ static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_
         if(i != 0) kc = posc->toFloat(i);
         const float kv = posv->toFloat(i + 1);
         // check that the knots position is the same for distortion, ca and vignetting,
-        if (kd != kc || kd != kv)
+        if(kd != kc || kd != kv)
         {
           img->exif_correction_type = CORRECTION_TYPE_NONE;
           break;
@@ -987,7 +1012,7 @@ static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_
       {
         const float kd = pos->toFloat(i);
         img->exif_correction_data.olympus.dist[i] = kd;
-        if (kd != 0 && i < 3)
+        if(kd != 0 && i < 3)
         {
           // Assume it's valid if any of the first three elements are nonzero. Ignore the
           // fourth element since the null value for no correction is '0 0 0 1'
@@ -1010,7 +1035,7 @@ static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_
       {
         const float kc = pos->toFloat(i);
         img->exif_correction_data.olympus.ca[i] = kc;
-        if (kc != 0)
+        if(kc != 0)
         {
           img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
           img->exif_correction_data.olympus.has_ca = TRUE;
@@ -1022,7 +1047,8 @@ static gboolean _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_
   return img->exif_correction_type != CORRECTION_TYPE_NONE;
 }
 
-void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
+void dt_exif_img_check_additional_tags(dt_image_t *img,
+                                       const char *filename)
 {
   try
   {
@@ -1324,7 +1350,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       dt_tag_attach(tagid, img->id, FALSE, FALSE);
     }
 
-    if(_check_dng_opcodes(exifData, img) || _check_lens_correction_data(exifData, img))
+    if(_check_dng_opcodes(exifData, img)
+       || _check_lens_correction_data(exifData, img))
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_EXIF_TAGS;
     }
@@ -1332,7 +1359,9 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     /*
      * Get the focus distance in meters.
      */
-    if(Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() != 0)
+    if(Exiv2::testVersion(0, 27, 4)
+       && FIND_EXIF_TAG("Exif.NikonLd4.LensID")
+       && pos->toLong() != 0)
     {
       // Z lens, need to specifically look for the second instance of Exif.NikonLd4.FocusDistance
       // unless using Exiv2 0.28.x and later (also expanded to 2 bytes of precision since 0.28.1).
@@ -1354,8 +1383,10 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
         img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
       }
     }
-    else if(FIND_EXIF_TAG("Exif.NikonLd2.FocusDistance") || FIND_EXIF_TAG("Exif.NikonLd3.FocusDistance")
-            || (Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance")))
+    else if(FIND_EXIF_TAG("Exif.NikonLd2.FocusDistance")
+            || FIND_EXIF_TAG("Exif.NikonLd3.FocusDistance")
+            || (Exiv2::testVersion(0, 27, 4)
+                && FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance")))
     {
       float value = pos->toFloat();
       img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
@@ -1416,11 +1447,14 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     {
       img->exif_focus_distance = pos->toFloat();
     }
-    else if(Exiv2::testVersion(0,27,2) && FIND_EXIF_TAG("Exif.Sony2Fp.FocusPosition2"))
+    else if(Exiv2::testVersion(0,27,2)
+            && FIND_EXIF_TAG("Exif.Sony2Fp.FocusPosition2"))
     {
       const float focus_position = pos->toFloat();
 
-      if(focus_position && FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm")) {
+      if(focus_position
+         && FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm"))
+      {
         const float focal_length_35mm = pos->toFloat();
 
         /* http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3688.msg29653.html#msg29653 */
@@ -1441,7 +1475,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
     }
     /* for e.g. Sinar backs the raw orientation is in a different subdirectory */
-    if(FIND_EXIF_TAG("Exif.Thumbnail.PhotometricInterpretation") && (32803 == pos->toLong())
+    if(FIND_EXIF_TAG("Exif.Thumbnail.PhotometricInterpretation")
+       && (32803 == pos->toLong())
        && FIND_EXIF_TAG("Exif.Thumbnail.Orientation"))
     {
       img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
@@ -1556,6 +1591,31 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       _strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
     }
 
+    // Check if an "Unknown Lens (xxx)" was returned by using regex,
+    // and retry Exif.Photo.LensModel as last resort
+    GMatchInfo *match_info;
+
+    GRegex *regex = g_regex_new("\\(\\d+\\)$",
+                        (GRegexCompileFlags) 0, 
+                        (GRegexMatchFlags) 0, 
+                        NULL);
+    g_regex_match_full(regex, 
+                       img->exif_lens, 
+                       -1, 
+                       0, 
+                       (GRegexMatchFlags) 0,
+                       &match_info,
+                       NULL);
+    const int match_count = g_match_info_get_match_count(match_info);
+    if(match_count > 0
+        && FIND_EXIF_TAG("Exif.Photo.LensModel"))
+    {
+      _strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+    }
+
+    g_match_info_free(match_info);
+    g_regex_unref(regex);
+
     /* Use pretty name for Canon RF & RF-S lenses (as exiftool/exiv2/lensfun) */
     if(g_str_has_prefix(img->exif_lens, "RF"))
     {
@@ -1569,36 +1629,59 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     }
 
     /* Capitalize Nikon Z-mount lenses properly for UI presentation */
-    if(g_str_has_prefix(img->exif_lens, "NIKKOR") || g_str_has_prefix(img->exif_lens, "TAMRON"))
+    if(g_str_has_prefix(img->exif_lens, "NIKKOR")
+       || g_str_has_prefix(img->exif_lens, "TAMRON"))
     {
       for(size_t i = 1; i <= 5; ++i)
         img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
     }
 
-    // finally the lens has only numbers and parentheses, let's try to use
-    // Exif.Photo.LensModel if defined.
-
-    std::string lens(img->exif_lens);
-    if(std::string::npos == lens.find_first_not_of(" (1234567890)")
-       && FIND_EXIF_TAG("Exif.Photo.LensModel"))
+    // Handle Sigma lenses on modern bodies (e.g. Nikon Z) using already clean
+    // Exif.Photo.LensMake and Exif.Photo.LensModel
+    if(g_ascii_strcasecmp(img->exif_lens, "Sigma") && FIND_EXIF_TAG("Exif.Photo.LensMake")
+       && pos->toString() == "SIGMA")
     {
-      _strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+      char *pretty;
+      pretty = g_strconcat("Sigma ", img->exif_lens, (char *)NULL);
+      g_strlcpy(img->exif_lens, pretty, sizeof(img->exif_lens));
+      g_free(pretty);
     }
 
-#if 0
-    /* Read flash mode */
-    if( (pos=exifData.findKey(Exiv2::ExifKey("Exif.Photo.Flash")))
-         != exifData.end() && pos->size())
+    if((pos = Exiv2::whiteBalance(exifData)) != exifData.end() && pos->size())
     {
-      uf_strlcpy_to_utf8(uf->conf->flashText, max_name, pos, exifData);
+      const int value = pos->toLong();
+      _exif_value_str(value, img->exif_whitebalance,
+                      sizeof(img->exif_whitebalance), pos, exifData);
     }
-    /* Read White Balance Setting */
-    if( (pos=exifData.findKey(Exiv2::ExifKey("Exif.Photo.WhiteBalance")))
-         != exifData.end() && pos->size())
+
+    if(FIND_EXIF_TAG("Exif.Photo.Flash"))
     {
-      uf_strlcpy_to_utf8(uf->conf->whiteBalanceText, max_name, pos, exifData);
+      const int value = pos->toLong();
+      if(value != 0)
+      {
+        _strlcpy_to_utf8(img->exif_flash, sizeof(img->exif_flash), pos, exifData);
+      }
     }
-#endif
+
+    if(FIND_EXIF_TAG("Exif.Photo.ExposureProgram"))
+    {
+      const int value = pos->toLong();
+      if(value != 0)
+      {
+        _exif_value_str(value, img->exif_exposure_program,
+                        sizeof(img->exif_exposure_program), pos, exifData);
+      }
+    }
+
+    if(FIND_EXIF_TAG("Exif.Photo.MeteringMode"))
+    {
+      const int value = pos->toLong();
+      if(value != 0)
+      {
+        _exif_value_str(value, img->exif_metering_mode,
+                        sizeof(img->exif_metering_mode), pos, exifData);
+      }
+    }
 
     char datetime[DT_DATETIME_LENGTH];
     _find_datetime_taken(exifData, pos, datetime);
@@ -1660,9 +1743,10 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       dt_mark_colormatrix_invalid(&colmatrix[1][0]);
       dt_mark_colormatrix_invalid(&colmatrix[2][0]);
       dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
-      dt_mark_colormatrix_invalid(&img->d65_color_matrix[0]); // make sure for later testing
-
-      // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
+      dt_mark_colormatrix_invalid(&img->d65_color_matrix[0]);
+      // make sure for later testing fallback later via
+      // `find_temperature_from_raw_coeffs` if there is no valid
+      // illuminant
 
       // The correction matrices are taken from
       // http://www.brucelindbloom.com - chromatic Adaption.
@@ -1700,7 +1784,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
 
       Exiv2::ExifData::const_iterator cm1_pos =
         exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix1"));
-      if((cm1_pos != exifData.end()) && (cm1_pos->count() == 9))
+      if((cm1_pos != exifData.end())
+         && (cm1_pos->count() == 9))
       {
         for(int i = 0; i < 9; i++) colmatrix[0][i] = cm1_pos->toFloat(i);
 
@@ -1710,7 +1795,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
 
       Exiv2::ExifData::const_iterator cm2_pos =
         exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix2"));
-      if((cm2_pos != exifData.end()) && (cm2_pos->count() == 9))
+      if((cm2_pos != exifData.end())
+         && (cm2_pos->count() == 9))
       {
         for(int i = 0; i < 9; i++) colmatrix[1][i] = cm2_pos->toFloat(i);
 
@@ -1723,7 +1809,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
 #if EXIV2_TEST_VERSION(0,27,4)
       Exiv2::ExifData::const_iterator cm3_pos =
         exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix3"));
-      if((cm3_pos != exifData.end()) && (cm3_pos->count() == 9))
+      if((cm3_pos != exifData.end())
+         && (cm3_pos->count() == 9))
       {
         for(int i = 0; i < 9; i++) colmatrix[2][i] = cm3_pos->toFloat(i);
 
@@ -1950,7 +2037,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
 
 void dt_exif_apply_default_metadata(dt_image_t *img)
 {
-  if(dt_conf_get_bool("ui_last/import_apply_metadata") == TRUE)
+  if(dt_conf_get_bool("ui_last/import_apply_metadata")
+     && !(img->job_flags & DT_IMAGE_JOB_NO_METADATA))
   {
     char *str;
 
@@ -1994,7 +2082,9 @@ void dt_exif_apply_default_metadata(dt_image_t *img)
     }
 
     str = dt_conf_get_string("ui_last/import_last_tags");
-    if(dt_is_valid_imgid(img->id) && str != NULL && str[0] != '\0')
+    if(dt_is_valid_imgid(img->id)
+       && str != NULL
+       && str[0] != '\0')
     {
       GList *imgs = NULL;
       imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
@@ -2006,7 +2096,9 @@ void dt_exif_apply_default_metadata(dt_image_t *img)
 }
 
 // TODO: can this blob also contain xmp and iptc data?
-gboolean dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size)
+gboolean dt_exif_read_from_blob(dt_image_t *img,
+                                uint8_t *blob,
+                                const int size)
 {
   try
   {
@@ -2085,7 +2177,8 @@ gboolean dt_exif_get_thumbnail(const char *path,
 /** read the metadata of an image.
  * XMP data trumps IPTC data trumps EXIF data
  */
-gboolean dt_exif_read(dt_image_t *img, const char *path)
+gboolean dt_exif_read(dt_image_t *img,
+                      const char *path)
 {
   // at least set datetime taken to something useful in case there is
   // no exif data in this file (pfm, png, ...)
@@ -2783,7 +2876,8 @@ unsigned char *dt_exif_xmp_decode(const char *input,
   return output;
 }
 
-static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
+static void _exif_import_tags(dt_image_t *img,
+                              Exiv2::XmpData::iterator &pos)
 {
   // tags in array
   const int cnt = pos->count();
@@ -3077,7 +3171,7 @@ static GList *_read_history_v1(const std::string &xmpPacket,
 }
 
 static GList *_read_history_v2(Exiv2::XmpData &xmpData,
-                              const char *filename)
+                               const char *filename)
 {
   GList *history_entries = NULL;
   history_entry_t *current_entry = NULL;
@@ -3234,8 +3328,8 @@ static void _free_mask_entry(gpointer data)
 }
 
 static GHashTable *_read_masks(Exiv2::XmpData &xmpData,
-                              const char *filename,
-                              const int version)
+                               const char *filename,
+                               const int version)
 {
   GHashTable *mask_entries =
     g_hash_table_new_full(g_int_hash, g_int_equal, NULL, _free_mask_entry);
@@ -3314,8 +3408,8 @@ static GHashTable *_read_masks(Exiv2::XmpData &xmpData,
 }
 
 static GList *_read_masks_v3(Exiv2::XmpData &xmpData,
-                            const char *filename,
-                            const int version)
+                             const char *filename,
+                             const int version)
 {
   GList *history_entries = NULL;
   mask_entry_t *current_entry = NULL;
@@ -3425,7 +3519,8 @@ skip:
   return history_entries;
 }
 
-static void _add_mask_entry_to_db(dt_imgid_t imgid, mask_entry_t *entry)
+static void _add_mask_entry_to_db(const dt_imgid_t imgid,
+                                  mask_entry_t *entry)
 {
   // add the mask entry only once
   if(entry->already_added)
@@ -3467,8 +3562,8 @@ static void _add_mask_entry_to_db(dt_imgid_t imgid, mask_entry_t *entry)
 }
 
 static void _add_non_clone_mask_entries_to_db(gpointer key,
-                                             gpointer value,
-                                             gpointer user_data)
+                                              gpointer value,
+                                              gpointer user_data)
 {
   dt_imgid_t imgid = *(int *)user_data;
   mask_entry_t *entry = (mask_entry_t *)value;
@@ -3477,8 +3572,8 @@ static void _add_non_clone_mask_entries_to_db(gpointer key,
 }
 
 static void _add_mask_entries_to_db(const dt_imgid_t imgid,
-                                   GHashTable *mask_entries,
-                                   int mask_id)
+                                    GHashTable *mask_entries,
+                                    const int mask_id)
 {
   if(mask_id <= 0) return;
 
@@ -3505,7 +3600,8 @@ static void _add_mask_entries_to_db(const dt_imgid_t imgid,
 }
 
 // get MAX multi_priority
-int _get_max_multi_priority(GList *history, const char *operation)
+int _get_max_multi_priority(GList *history,
+                            const char *operation)
 {
   int max_prio = 0;
 
@@ -3721,8 +3817,13 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
       if(!history_entries) // didn't work? try super old version with rdf:Bag
         history_entries = _read_history_v1(xmpPacket, filename, 1);
     }
-    else if(xmp_version == 2 || xmp_version == 3 || xmp_version == 4 || xmp_version == 5 )
+    else if(xmp_version == 2
+            || xmp_version == 3
+            || xmp_version == 4
+            || xmp_version == 5)
+    {
       history_entries = _read_history_v2(xmpData, filename);
+    }
     else
     {
       std::cerr << "error: Xmp schema version "
@@ -3947,7 +4048,8 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
 
         GList *link =
           dt_ioppr_get_iop_order_link(iop_order_list, e->operation, e->instance);
-        if(link) iop_order_list = g_list_delete_link(iop_order_list, link);
+        if(link)
+          iop_order_list = g_list_delete_link(iop_order_list, link);
 
         iop_order_list = g_list_append(iop_order_list, e);
       }
@@ -3993,6 +4095,7 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
            -1, &stmt, NULL);
         // clang-format on
         DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
+
         if(sqlite3_step(stmt) != SQLITE_DONE)
         {
           dt_print(DT_DEBUG_ALWAYS,
@@ -4012,16 +4115,18 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
     if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_end")))
        != xmpData.end() && num > 0)
     {
+      stmt = NULL;
+
       int history_end = MIN(pos->toLong(), num) + add_to_history_end;
-      if(num_masks > 0) history_end++;
-      if((history_end < 1) && preset_applied) preset_applied = -1;
-      DT_DEBUG_SQLITE3_PREPARE_V2
-        (dt_database_get(darktable.db),
-         "UPDATE main.images SET history_end = ?1 WHERE id = ?2", -1,
-         &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, img->id);
-      if(sqlite3_step(stmt) != SQLITE_DONE)
+      if(num_masks > 0)
+        history_end++;
+
+      if((history_end < 1) && preset_applied)
+        preset_applied = -1;
+
+      const gboolean ok = dt_image_set_history_end(img->id, history_end);
+
+      if(!ok)
       {
         dt_print(DT_DEBUG_ALWAYS,
                  "[exif] error writing history_end for image %d\n", img->id);
@@ -4044,6 +4149,7 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
                                   &stmt, NULL);
       // clang-format on
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
+
       if(sqlite3_step(stmt) != SQLITE_DONE)
       {
         dt_print(DT_DEBUG_ALWAYS,
@@ -4070,7 +4176,8 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
 
     _read_xmp_harmony_guide(xmpData, img, xmp_version);
 
-    sqlite3_finalize(stmt);
+    if(stmt)
+      sqlite3_finalize(stmt);
 
     // set or clear bit in image struct. ONLY set if the
     // Xmp.darktable.auto_presets_applied was 1 AND there was a
@@ -4921,7 +5028,8 @@ char *dt_exif_xmp_read_string(const dt_imgid_t imgid)
   }
 }
 
-static void _remove_xmp_key(Exiv2::XmpData &xmp, const char *key)
+static void _remove_xmp_key(Exiv2::XmpData &xmp,
+                            const char *key)
 {
   try
   {
@@ -4934,7 +5042,8 @@ static void _remove_xmp_key(Exiv2::XmpData &xmp, const char *key)
   }
 }
 
-static void _remove_xmp_keys(Exiv2::XmpData &xmpData, const char *key)
+static void _remove_xmp_keys(Exiv2::XmpData &xmpData,
+                             const char *key)
 {
   try
   {
@@ -4952,7 +5061,8 @@ static void _remove_xmp_keys(Exiv2::XmpData &xmpData, const char *key)
   }
 }
 
-static void _remove_exif_key(Exiv2::ExifData &exif, const char *key)
+static void _remove_exif_key(Exiv2::ExifData &exif,
+                             const char *key)
 {
   try
   {
@@ -4965,7 +5075,8 @@ static void _remove_exif_key(Exiv2::ExifData &exif, const char *key)
   }
 }
 
-static void _remove_iptc_key(Exiv2::IptcData &iptc, const char *key)
+static void _remove_iptc_key(Exiv2::IptcData &iptc,
+                             const char *key)
 {
   try
   {
@@ -5019,7 +5130,7 @@ const std::pair<std::array<float, 4>, bool> getRegionNormalized(
   float y = yIt->toFloat() * imgHeight;
 
   /* MWG regions use (x,y) as the center of the region */
-  if (regionType == RegionType::MWG)
+  if(regionType == RegionType::MWG)
   {
     x -= w/2;
     y -= h/2;
@@ -5635,7 +5746,8 @@ void dt_exif_get_basic_data(const uint8_t *data,
   }
 }
 
-static void _exif_log_handler(const int log_level, const char *message)
+static void _exif_log_handler(const int log_level,
+                              const char *message)
 {
   if(log_level >= Exiv2::LogMsg::level())
   {
