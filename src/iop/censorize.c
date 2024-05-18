@@ -1,6 +1,6 @@
 /*
   This file is part of darktable,
-  Copyright (C) 2020-2023 darktable developers.
+  Copyright (C) 2020-2024 darktable developers.
 
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -48,7 +48,7 @@ DT_MODULE_INTROSPECTION(1, dt_iop_censorize_params_t)
 typedef struct dt_iop_censorize_params_t
 {
   float radius_1;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0  $DESCRIPTION: "input blur radius"
-  float pixelate;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0 $DESCRIPTION: "pixellation radius"
+  float pixelate;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0 $DESCRIPTION: "pixelization radius"
   float radius_2;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0  $DESCRIPTION: "output blur radius"
   float noise;                 // $MIN: 0.0 $MAX: 1.0   $DEFAULT: 0.0   $DESCRIPTION: "noise level"
 } dt_iop_censorize_params_t;
@@ -105,11 +105,7 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
 
 static inline void make_noise(float *const output, const float noise, const size_t width, const size_t height)
 {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(output, width, height, noise) \
-  schedule(static) collapse(2)
-#endif
+  DT_OMP_FOR(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
@@ -121,7 +117,7 @@ static inline void make_noise(float *const output, const float noise, const size
       xoshiro128plus(state);
 
       const size_t index = (i * width + j) * 4;
-      float *const restrict pix_out = __builtin_assume_aligned(output + index, 16);
+      float *const restrict pix_out = DT_IS_ALIGNED_PIXEL(output + index);
       const float norm = pix_out[1];
 
       // create statistical noise
@@ -193,11 +189,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const size_t pixels_x = width / (2 * pixel_radius);
     const size_t pixels_y = height / (2 * pixel_radius);
 
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, ch, input, output, pixel_radius, pixels_y, pixels_x) \
-  schedule(simd:static) collapse(2)
-#endif
+    DT_OMP_FOR(collapse(2))
     for(size_t j = 0; j < pixels_y + 1; j++)
       for(size_t i = 0; i < pixels_x + 1; i++)
       {
@@ -218,7 +210,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
         dt_aligned_pixel_t RGB = { 0.f };
         for(size_t k = 0; k < 5; k++)
         {
-          const float *const restrict pix_in = __builtin_assume_aligned(input + (width * box[k].y + box[k].x) * 4, 16);
+          const float *const restrict pix_in = DT_IS_ALIGNED_PIXEL(input + (width * box[k].y + box[k].x) * 4);
           for_four_channels(c)
             RGB[c] += pix_in[c] / 5.f;
         }
@@ -227,7 +219,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
         for(size_t jj = tl.y; jj < br.y; jj++)
           for(size_t ii = tl.x; ii < br.x; ii++)
           {
-            float *const restrict pix_out = __builtin_assume_aligned(output + (jj * width + ii) * 4, 16);
+            float *const restrict pix_out = DT_IS_ALIGNED_PIXEL(output + (jj * width + ii) * 4);
             for_four_channels(c)
               pix_out[c] = RGB[c];
           }
@@ -410,9 +402,9 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->noise = dt_bauhaus_slider_from_params(self, N_("noise"));
 
-  gtk_widget_set_tooltip_text(g->radius_1, _("radius of gaussian blur before pixellation"));
-  gtk_widget_set_tooltip_text(g->radius_2, _("radius of gaussian blur after pixellation"));
-  gtk_widget_set_tooltip_text(g->pixelate, _("radius of the intermediate pixellation"));
+  gtk_widget_set_tooltip_text(g->radius_1, _("radius of gaussian blur before pixelization"));
+  gtk_widget_set_tooltip_text(g->radius_2, _("radius of gaussian blur after pixelization"));
+  gtk_widget_set_tooltip_text(g->pixelate, _("radius of the intermediate pixelization"));
   gtk_widget_set_tooltip_text(g->noise, _("amount of noise to add at the end"));
 }
 
@@ -421,4 +413,3 @@ void gui_init(struct dt_iop_module_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

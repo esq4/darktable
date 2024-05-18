@@ -39,6 +39,7 @@
 #include "imageio/imageio_common.h"
 #include "imageio/imageio_dng.h"
 #include "imageio/imageio_module.h"
+#include "imageio/imageio_rawspeed.h"
 
 #include "gui/gtk.h"
 
@@ -369,7 +370,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai,
                                         dt_dev_pixelpipe_t *pipe,
                                         const gboolean export_masks)
 {
-  dt_control_merge_hdr_format_t *data = (dt_control_merge_hdr_format_t *)datai;
+  const dt_control_merge_hdr_format_t *data = (dt_control_merge_hdr_format_t *)datai;
   dt_control_merge_hdr_t *d = data->d;
 
   // just take a copy. also do it after blocking read, so filters will make sense.
@@ -380,7 +381,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai,
   if(!d->pixels)
   {
     d->first_imgid = imgid;
-    d->first_filter = image.buf_dsc.filters;
+    d->first_filter = dt_rawspeed_crop_dcraw_filters(image.buf_dsc.filters, image.crop_x, image.crop_y);
     // sensor layout is just passed on to be written to dng.
     // we offset it to the crop of the image here, so we don't
     // need to load in the FCxtrans dependency into the dng writer.
@@ -427,7 +428,6 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai,
   }
   else if(datai->width != d->wd
           || datai->height != d->ht
-          || d->first_filter != image.buf_dsc.filters
           || d->orientation != image.orientation)
   {
     dt_control_log(_("images have to be of same size and orientation!"));
@@ -448,12 +448,7 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai,
   const float photoncnt = 100.0f * aperture * exp / iso;
   float saturation = 1.0f;
   d->whitelevel = fmaxf(d->whitelevel, saturation * cal);
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ivoid, cal, photoncnt) \
-  shared(d, saturation) \
-  schedule(static) collapse(2)
-#endif
+  DT_OMP_FOR(collapse(2))
   for(int y = 0; y < d->ht; y++)
     for(int x = 0; x < d->wd; x++)
     {
@@ -569,9 +564,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
 // normalize by white level to make clipping at 1.0 work as expected
 
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) shared(d)
-#endif
+  DT_OMP_FOR(shared(d))
   for(size_t k = 0; k < (size_t)d.wd * d.ht; k++)
   {
     if(d.weight[k] > 0.0)
@@ -585,7 +578,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   dt_image_full_path(d.first_imgid, pathname, sizeof(pathname), &from_cache);
 
   // last param is dng mode
-  const int exif_len = dt_exif_read_blob(&exif, pathname, d.first_imgid, 0, d.wd, d.ht, 1);
+  const int exif_len = dt_exif_read_blob(&exif, pathname, d.first_imgid, FALSE, d.wd, d.ht, TRUE);
   char *c = pathname + strlen(pathname);
   while(*c != '.' && c > pathname) c--;
   g_strlcpy(c, "-hdr.dng", sizeof(pathname) - (c - pathname));
@@ -1567,6 +1560,16 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
   guint tagid = 0, etagid = 0;
   dt_tag_new("darktable|changed", &tagid);
   dt_tag_new("darktable|exported", &etagid);
+
+  const char iptc_envelope_characterset[] = "Iptc.Envelope.CharacterSet";
+  if(!g_strstr_len(settings->metadata_export, -1, iptc_envelope_characterset))
+  {
+    // IPTC character encoding not set by user, so we set the default utf8 here
+    settings->metadata_export = dt_util_dstrcat(settings->metadata_export,
+                                                "\1%s\1%s", 
+                                                iptc_envelope_characterset,
+                                                "\x1b%G");  // ESC % G
+  }
 
   dt_export_metadata_t metadata;
   metadata.flags = 0;

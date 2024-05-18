@@ -492,6 +492,9 @@ void tiling_callback(
   tiling->xalign = is_xtrans ? DT_XTRANS_SNAPPER : DT_BAYER_SNAPPER;
   tiling->yalign = is_xtrans ? DT_XTRANS_SNAPPER : DT_BAYER_SNAPPER;
 
+  tiling->maxbuf = 1.0f;
+  tiling->overhead = 0;
+
   if((demosaicing_method == DT_IOP_DEMOSAIC_PPG) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
@@ -501,13 +504,12 @@ void tiling_callback(
     tiling->factor = 1.0f + ioratio;         // in + out
 
     if(full_scale && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
+      tiling->factor += MAX(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     else if(full_scale)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
+      tiling->factor += MAX(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
     else
       tiling->factor += smooth;                        // + smooth
 
-    tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->overlap = 5; // take care of border handling
   }
@@ -526,26 +528,24 @@ void tiling_callback(
                       + 1.0f;          // aux
 
     if(full_scale && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);
+      tiling->factor += MAX(1.0f + greeneq, smooth);
     else if(full_scale)
-      tiling->factor += fmax(2.0f + greeneq, smooth);
+      tiling->factor += MAX(2.0f + greeneq, smooth);
     else
       tiling->factor += smooth;
 
-    tiling->maxbuf = 1.0f;
-    tiling->overhead = 0;
     tiling->overlap = overlap;
   }
   else if(demosaicing_method == DT_IOP_DEMOSAIC_RCD)
   {
     tiling->factor = 1.0f + ioratio;
     if(full_scale && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
+      tiling->factor += MAX(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     else if(full_scale)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
+      tiling->factor += MAX(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
     else
       tiling->factor += smooth;                        // + smooth
-    tiling->maxbuf = 1.0f;
+
     tiling->overhead = sizeof(float) * DT_RCD_TILESIZE * DT_RCD_TILESIZE * 8 * dt_get_num_threads();
     tiling->overlap = 10;
     tiling->factor_cl = tiling->factor + 3.0f;
@@ -554,12 +554,11 @@ void tiling_callback(
   {
     tiling->factor = 1.0f + ioratio;
     if(full_scale && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
+      tiling->factor += MAX(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     else if(full_scale)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
+      tiling->factor += MAX(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
     else
       tiling->factor += smooth;                        // + smooth
-    tiling->maxbuf = 1.0f;
     tiling->overhead = sizeof(float) * DT_LMMSE_TILESIZE * DT_LMMSE_TILESIZE * 6 * dt_get_num_threads();
     tiling->overlap = 10;
   }
@@ -569,14 +568,12 @@ void tiling_callback(
     tiling->factor = 1.0f + ioratio;
 
     if(full_scale && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);
+      tiling->factor += MAX(1.0f + greeneq, smooth);
     else if(full_scale)
-      tiling->factor += fmax(2.0f + greeneq, smooth);
+      tiling->factor += MAX(2.0f + greeneq, smooth);
     else
       tiling->factor += smooth;
 
-    tiling->maxbuf = 1.0f;
-    tiling->overhead = 0;
     tiling->overlap = 6;
   }
   if(data->demosaicing_method & DT_DEMOSAIC_DUAL)
@@ -1311,7 +1308,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad_toggle(g->dual_thrs, TRUE);
   dt_bauhaus_widget_set_quad_active(g->dual_thrs, FALSE);
   g_signal_connect(G_OBJECT(g->dual_thrs), "quad-pressed", G_CALLBACK(_visualize_callback), self);
-  dt_bauhaus_widget_set_quad_tooltip(g->dual_thrs, _("toggle to visualize the mask"));
+  dt_bauhaus_widget_set_quad_tooltip(g->dual_thrs, _("toggle mask visualization"));
 
   g->lmmse_refine = dt_bauhaus_combobox_from_params(self, "lmmse_refine");
   gtk_widget_set_tooltip_text(g->lmmse_refine, _("LMMSE refinement steps. the median steps average the output,\nrefine adds some recalculation of red & blue channels"));

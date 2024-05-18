@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2014-2023 darktable developers.
+    Copyright (C) 2014-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,7 +43,6 @@ typedef struct dt_iop_scalepixels_params_t
 
 typedef struct dt_iop_scalepixels_gui_data_t
 {
-  GtkWidget *pixel_aspect_ratio;
 } dt_iop_scalepixels_gui_data_t;
 
 typedef struct dt_iop_scalepixels_data_t {
@@ -212,12 +211,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
   const dt_iop_scalepixels_data_t * const d = piece->data;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch_width, d, ivoid, ovoid, roi_in, roi_out) \
-  shared(interpolation) \
-  schedule(static)
-#endif
+  DT_OMP_FOR()
   // (slow) point-by-point transformation.
   // TODO: optimize with scanlines and linear steps between?
   for(int j = 0; j < roi_out->height; j++)
@@ -259,24 +253,12 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   piece->data = NULL;
 }
 
-void gui_update(dt_iop_module_t *self)
-{
-  dt_iop_scalepixels_gui_data_t *g = (dt_iop_scalepixels_gui_data_t *)self->gui_data;
-  dt_iop_scalepixels_params_t *p = (dt_iop_scalepixels_params_t *)self->params;
-
-  dt_bauhaus_slider_set(g->pixel_aspect_ratio, p->pixel_aspect_ratio);
-}
-
 void gui_init(dt_iop_module_t *self)
 {
-  dt_iop_scalepixels_gui_data_t *g = IOP_GUI_ALLOC(scalepixels);
-
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  IOP_GUI_ALLOC(scalepixels);
   
-  g->pixel_aspect_ratio = dt_bauhaus_slider_from_params(self, "pixel_aspect_ratio");
-  dt_bauhaus_slider_set_step(g->pixel_aspect_ratio, .01);
-  dt_bauhaus_slider_set_digits(g->pixel_aspect_ratio, 2);
-  gtk_widget_set_tooltip_text(g->pixel_aspect_ratio, _("adjust pixel aspect ratio"));
+  GtkWidget *w = dt_bauhaus_slider_from_params(self, "pixel_aspect_ratio");
+  gtk_widget_set_tooltip_text(w, _("adjust pixel aspect ratio"));
 }
 
 // clang-format off

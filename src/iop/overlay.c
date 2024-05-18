@@ -325,7 +325,7 @@ static void _setup_overlay(dt_iop_module_t *self,
   }
   else
   {
-    dt_control_log(_("image %d does not exists"), imgid);
+    dt_control_log(_("image %d does not exist"), imgid);
   }
 }
 
@@ -666,11 +666,7 @@ void process(struct dt_iop_module_t *self,
   /* render surface on output */
   const float opacity = data->opacity / 100.0f;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(roi_out, in, out, image, opacity, ch)   \
-  schedule(static)
-#endif
+  DT_OMP_FOR()
   for(int j = 0; j < roi_out->height * roi_out->width; j++)
   {
     float *const i = in + ch*j;
@@ -961,8 +957,8 @@ static void _drag_and_drop_received(GtkWidget *widget,
       if(dt_overlay_used_by(imgid, self->dev->image_storage.id))
       {
         dt_control_log
-          (_("cannot use image %d as overlay"
-             " as it is using itself the current image as overlay"),
+          (_("cannot use image %d as an overlay"
+             " as it is using the current image as an overlay itself"),
            imgid);
       }
       else
@@ -1035,7 +1031,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(10));
   int line = 0;
 
-  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
+  g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_height(0));
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(_draw_thumb), self);
   gtk_widget_set_size_request(GTK_WIDGET(g->area), 150, 150);
   gtk_grid_attach(grid, GTK_WIDGET(g->area), 0, line++, 1, 2);

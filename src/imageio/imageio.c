@@ -346,10 +346,9 @@ gboolean dt_imageio_has_mono_preview(const char *filename)
   cleanup:
 
   dt_print(DT_DEBUG_IMAGEIO,
-           "[dt_imageio_has_mono_preview] testing `%s', yes/no %i, %ix%i\n",
-           filename, mono, thumb_width, thumb_height);
-  if(tmp)
-    dt_free_align(tmp);
+           "[dt_imageio_has_mono_preview] testing `%s', monochrome=%s, %ix%i\n",
+           filename, mono ? "YES" : "FALSE", thumb_width, thumb_height);
+  dt_free_align(tmp);
   return mono;
 }
 
@@ -365,12 +364,7 @@ void dt_imageio_flip_buffers(char *out,
 {
   if(!orientation)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ht, wd, bpp, stride) \
-    shared(in, out) \
-    schedule(static)
-#endif
+    DT_OMP_FOR()
     for(int j = 0; j < ht; j++)
       memcpy(out + (size_t)j * bpp * wd, in + (size_t)j * stride, bpp * wd);
     return;
@@ -394,12 +388,7 @@ void dt_imageio_flip_buffers(char *out,
     ii = (int)fwd - ii - 1;
     si = -si;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(wd, bpp, ht, stride) \
-  shared(in, out, jj, ii, sj, si) \
-  schedule(static)
-#endif
+  DT_OMP_FOR()
   for(int j = 0; j < ht; j++)
   {
     char *out2 = out + (size_t)labs(sj) * jj + (size_t)labs(si) * ii + (size_t)sj * j;
@@ -428,12 +417,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out,
   const float scale = 1.0f / (white - black);
   if(!orientation)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(wd, scale, black, ht, ch, stride) \
-    shared(in, out) \
-    schedule(static)
-#endif
+    DT_OMP_FOR()
     for(int j = 0; j < ht; j++)
       for(int i = 0; i < wd; i++)
         for(int k = 0; k < ch; k++)
@@ -460,12 +444,7 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out,
     ii = (int)fwd - ii - 1;
     si = -si;
   }
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(wd, ch, scale, black, stride, ht) \
-  shared(in, out, jj, ii, sj, si) \
-  schedule(static)
-#endif
+  DT_OMP_FOR()
   for(int j = 0; j < ht; j++)
   {
     float *out2 = out + (size_t)labs(sj) * jj + (size_t)labs(si) * ii + sj * j;
@@ -744,6 +723,23 @@ gboolean dt_imageio_export(const dt_imgid_t imgid,
   }
 }
 
+
+static double _get_pipescale(dt_dev_pixelpipe_t *pipe,
+                             const int width,
+                             const int height,
+                             const double max_scale)
+{
+  const double scalex = width > 0
+    ? fmin((double)width / (double)pipe->processed_width, max_scale)
+    : max_scale;
+
+  const double scaley = height > 0
+    ? fmin((double)height / (double)pipe->processed_height, max_scale)
+    : max_scale;
+
+  return fmin(scalex, scaley);
+}
+
 // internal function: to avoid exif blob reading + 8-bit byteorder
 // flag + high-quality override
 gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
@@ -828,8 +824,16 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
     GList *style_items = dt_styles_get_item_list(format_params->style, FALSE, -1, TRUE);
     if(!style_items)
     {
-      dt_control_log(_("cannot find the style '%s' to apply during export."),
-                     format_params->style);
+      dt_print(DT_DEBUG_ALWAYS,
+               "[imageio] cannot find the style '%s' to apply during export\n",
+               format_params->style);
+      if(darktable.gui)
+        dt_control_log(_("cannot find the style '%s' to apply during export"),
+                       format_params->style);
+      else
+        dt_print(DT_DEBUG_ALWAYS,
+                 "[imageio] please check that you have imported this style into darktable"
+                 " and specified it in the command line without the .dtstyle extension\n");
       goto error;
     }
 
@@ -890,30 +894,24 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
 
   if(darktable.unmuted & DT_DEBUG_IMAGEIO)
   {
-    dt_print(DT_DEBUG_ALWAYS,"[dt_imageio_export_with_flags] ");
-    if(use_style)
-    {
-      if(appending)
-        dt_print(DT_DEBUG_ALWAYS,
-                 "appending style `%s'\n", format_params->style);
-      else
-        dt_print(DT_DEBUG_ALWAYS,
-                 "overwrite style `%s'\n", format_params->style);
-    }
-    else
-      dt_print(DT_DEBUG_ALWAYS,"\n");
-
-    int cnt = 0;
+    char mbuf[1024] = { 0 };
     for(GList *nodes = pipe.nodes; nodes; nodes = g_list_next(nodes))
     {
       dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
       if(piece->enabled)
       {
-        cnt++;
-        dt_print(DT_DEBUG_ALWAYS," %s", piece->module->op);
+        const size_t used = strlen(mbuf);
+        snprintf(mbuf + used, sizeof(dev) - used, " %s", piece->module->op);
       }
     }
-    dt_print(DT_DEBUG_ALWAYS," (%i)\n", cnt);
+    dt_print(DT_DEBUG_ALWAYS,"[dt_imageio_export_with_flags] %s%s%s%s%s modules:%s%s\n",
+      use_style && appending  ? "appending style " : "",
+      use_style && !appending ? "appending style " : "",
+      use_style               ? "`" : "",
+      use_style               ? format_params->style : "",
+      use_style               ? "'." : "",
+      mbuf,
+      strlen(mbuf) > 1022 ? " ..." : "");
   }
 
   if(filter)
@@ -931,11 +929,8 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
   dt_show_times(&start, "[export] creating pixelpipe");
 
   // find output color profile for this image:
-  int sRGB = 1;
-  if(icc_type == DT_COLORSPACE_SRGB)
-  {
-    sRGB = 1;
-  }
+  gboolean sRGB = TRUE;
+  if(icc_type == DT_COLORSPACE_SRGB) { }
   else if(icc_type == DT_COLORSPACE_NONE)
   {
     dt_iop_module_t *colorout = NULL;
@@ -952,9 +947,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
     }
   }
   else
-  {
-    sRGB = 0;
-  }
+    sRGB = FALSE;
 
   // get only once at the beginning, in case the user changes it on the way:
   const gboolean high_quality_processing = high_quality;
@@ -968,34 +961,23 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
     height = pipe.processed_height;
   }
 
-  const double max_possible_scale = 100.0; // FIXME can we calculate a
-                                           // reasonable maximum scale
-                                           // for available memory?
-  const double max_scale = (upscale
-                            && ((width > 0 || height > 0) || is_scaling))
-                                 ? max_possible_scale : 1.00;
+  // note: not perfect but a reasonable good guess looking at overall pixelpipe requirements
+  // and specific stuff in finalscale.
+  const double max_possible_scale =
+      dt_get_available_mem() / (64 * sizeof(float) * pipe.processed_width * pipe.processed_height);
 
-  const double scalex = width > 0
-    ? fmin((double)width / (double)pipe.processed_width, max_scale)
-    : max_scale;
-  const double scaley = height > 0
-    ? fmin((double)height / (double)pipe.processed_height, max_scale)
-    : max_scale;
-  double scale = fmin(scalex, scaley);
+  const gboolean doscale = upscale && ((width > 0 || height > 0) || is_scaling);
+  double max_scale = doscale ? max_possible_scale : 1.00;
 
-  float origin[] = { 0.0f, 0.0f };
+  double scale = _get_pipescale(&pipe, width, height, max_scale);
+  float origin[2] = { 0.0f, 0.0f };
 
-  if(dt_dev_distort_backtransform_plus(&dev, &pipe, 0.f,
+  if(dt_dev_distort_backtransform_plus(&dev, &pipe, 0.0,
                                        DT_DEV_TRANSFORM_DIR_ALL, origin, 1))
   {
     if(width == 0) width = pipe.processed_width;
     if(height == 0) height = pipe.processed_height;
-    scale = fmin(width >  0
-                   ? fmin((double)width / (double)pipe.processed_width, max_scale)
-                   : max_scale,
-                 height > 0
-                   ? fmin((double)height / (double)pipe.processed_height, max_scale)
-                   : max_scale);
+    scale = _get_pipescale(&pipe, width, height, max_scale);
 
     if(is_scaling)
     {
@@ -1014,11 +996,11 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
   const int processed_height = floor(scale * pipe.processed_height);
 
   dt_print(DT_DEBUG_IMAGEIO,
-           "[dt_imageio_export] [%s] imgid %d, %ix%i --> %ix%i (scale %7f)."
+           "[dt_imageio_export] [%s] imgid %d, %ix%i --> %ix%i (scale=%.4f, maxscale=%.4f)."
            " upscale=%s, hq=%s\n",
            thumbnail_export ? "thumbnail" : "export", imgid,
            pipe.processed_width, pipe.processed_height,
-           processed_width, processed_height, scale,
+           processed_width, processed_height, scale, max_scale,
            upscale ? "yes" : "no",
            high_quality_processing ? "yes" : "no");
 
@@ -1123,11 +1105,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
       else
       { // !display_byteorder, need to swap:
         uint8_t *const buf8 = pipe.backbuf;
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(processed_width, processed_height, buf8) \
-  schedule(static)
-#endif
+        DT_OMP_FOR()
         // just flip byte order
         for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)
         {
@@ -1193,7 +1171,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
 
     // last param is dng mode, it's false here
     const int length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB,
-                                         processed_width, processed_height, 0);
+                                         processed_width, processed_height, FALSE);
 
     res = (format->write_image(format_params, filename, outbuf, icc_type,
                               icc_filename, exif_profile, length, imgid,

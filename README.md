@@ -64,8 +64,10 @@ Requirements
 
 *32-bit platforms are not officially supported - they might or might not work.*
 
-*Windows support is still young and suffers from bugs that do not affect Linux. If possible,
-prefer using darktable on Linux.*
+*Both darktable and the libraries it uses are developed on the Linux platform.
+Therefore, other platforms MAY have additional bugs that are not present in the Linux version.
+In addition, for example, on the Windows platform, printing support is not currently implemented.
+So we recommend, if you have a choice of platform, to use darktable on Linux.*
 
 ### Hardware
 
@@ -108,8 +110,8 @@ You can check for them by running darktable with the `--version` command line op
 
 The development snapshot reflects the current state of the master branch. It is intended for testing and is generally not safe. See the notes [below](#get-the-source) for warnings and precautions about using the master branch.
 
-* [Install native packages and repositories for Linux](https://software.opensuse.org/download.html?project=graphics:darktable:master&package=darktable) (one snapshot per day).
-* [Binary packages are provided for Linux (AppImage), macOS and Windows on a nightly basis](https://github.com/darktable-org/darktable/releases/tag/nightly) (x86_64 only).
+* [Install native packages directly or add third party repository for some Linux distros](https://software.opensuse.org/download.html?project=graphics:darktable:master&package=darktable) (one snapshot per day)
+* [Binary packages are provided for Linux (AppImage), macOS and Windows on a nightly basis](https://github.com/darktable-org/darktable/releases/tag/nightly)
 
 Updating from older versions
 ----------------------------
@@ -163,7 +165,8 @@ Required dependencies (minimum version):
 * GTK 3.24.15
 * GLib 2.56
 * SQLite 3.15 *(but 3.24 or newer strongly recommended)*
-* Exiv2 0.25 *(but at least 0.27.4 built with ISO BMFF support needed for Canon CR3 raw import)*
+* Exiv2 0.27.2 *(but at least 0.27.4 built with ISO BMFF support needed for Canon CR3 raw import)*
+* pugixml 1.5
 
 Required dependencies (no version requirement):
 * Lensfun *(for automatic lens correction)* (Note: alpha 0.3.95 and git master branch are not supported)
@@ -355,7 +358,7 @@ To use a test version of darktable without damaging your regular/stable version'
 /opt/darktable-test/bin/darktable --configdir "~/.config/darktable-test"
 ```
 
-and ensure that you set the option "create sidecar file for each image" to "never" in preferences -> storage -> XMP. This way,
+and ensure that you set the option "create XMP files" to "never" in preferences -> storage -> XMP sidecar files. This way,
 your regular/stable version will save its configuration files in `~/.config/darktable`, as usual,
 the test/unstable one will save in `~/.config/darktable-test`, and the two versions will not produce database conflicts.
 

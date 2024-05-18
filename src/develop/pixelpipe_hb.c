@@ -301,16 +301,11 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe,
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
   dt_pthread_mutex_lock(&pipe->backbuf_mutex);
-  pipe->backbuf = NULL;
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
   dt_dev_pixelpipe_cache_cleanup(pipe);
-  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
 
-  dt_pthread_mutex_destroy(&(pipe->backbuf_mutex));
-  dt_pthread_mutex_destroy(&(pipe->busy_mutex));
-  dt_pthread_mutex_destroy(&(pipe->mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
   pipe->icc_filename = NULL;
@@ -319,6 +314,10 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->backbuf = NULL;
   pipe->backbuf_width = 0;
   pipe->backbuf_height = 0;
+
+  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+  dt_pthread_mutex_destroy(&(pipe->backbuf_mutex));
+
   pipe->output_imgid = NO_IMGID;
 
   if(pipe->forms)
@@ -326,6 +325,8 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
     g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
     pipe->forms = NULL;
   }
+  dt_pthread_mutex_destroy(&(pipe->busy_mutex));
+  dt_pthread_mutex_destroy(&(pipe->mutex));
 }
 
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
@@ -646,11 +647,7 @@ static void _dump_pipe_pfm_diff(
   const float *in = indata;
   const float *out = outdata;
 
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(roi_in, roi_out, mixed, in, out, fchannels) \
-  schedule(static) collapse(2)
-#endif
+  DT_OMP_FOR(collapse(2))
   for(int row = 0; row < roi_out->height; row++)
   {
     for(int col = 0; col < roi_out->width; col++)
@@ -800,6 +797,14 @@ static void _pixelpipe_picker(dt_iop_module_t *module,
   {
     const dt_iop_order_iccprofile_info_t *const profile =
       dt_ioppr_get_pipe_current_profile_info(module, piece->pipe);
+
+    dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_PICKER, "pixelpipe picker",
+      piece->pipe, module, DT_DEVICE_CPU, roi, NULL, " %s -> %s, %sbox %i/%i -- %i/%i\n",
+      dt_iop_colorspace_to_name(image_cst),
+      dt_iop_colorspace_to_name(dt_iop_color_picker_get_active_cst(module)),
+      darktable.lib->proxy.colorpicker.primary_sample->denoise ? "denoised " : "",
+      box[0], box[1], box[2], box[3]);
+
     dt_color_picker_helper(dsc, pixel, roi, box,
                            darktable.lib->proxy.colorpicker.primary_sample->denoise,
                            pick, image_cst,
@@ -879,6 +884,13 @@ static void _pixelpipe_picker_cl(const int devid,
 
   if(err != CL_SUCCESS) goto error;
 
+  dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_PICKER, "pixelpipe picker CL",
+    piece->pipe, module, devid, roi, NULL, " %s -> %s, %sbox %i/%i -- %i/%i\n",
+    dt_iop_colorspace_to_name(image_cst),
+    dt_iop_colorspace_to_name(dt_iop_color_picker_get_active_cst(module)),
+    darktable.lib->proxy.colorpicker.primary_sample->denoise ? "denoised " : "",
+    box[0], box[1], box[2], box[3]);
+
   dt_iop_roi_t roi_copy = (dt_iop_roi_t)
     {.x      = roi->x + box[0],
      .y      = roi->y + box[1],
@@ -945,6 +957,11 @@ static void _pixelpipe_pick_samples(dt_develop_t *dev,
        !dt_color_picker_box(module, roi_in, sample, PIXELPIPE_PICKER_INPUT, box))
     {
       // pixel input is in display profile, hence the sample output will be as well
+      dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_PICKER, "pixelpipe pick samples",
+        NULL, module, DT_DEVICE_NONE, roi_in, NULL, " %sbox %i/%i -- %i/%i\n",
+        darktable.lib->proxy.colorpicker.primary_sample->denoise ? "denoised " : "",
+        box[0], box[1], box[2], box[3]);
+
       dt_color_picker_helper(dsc, input, roi_in, box, sample->denoise,
                              sample->display,
                              IOP_CS_RGB, IOP_CS_RGB, display_profile);
@@ -1379,12 +1396,7 @@ static gboolean _dev_pixelpipe_process_rec(
           pipe, module, DT_DEVICE_NONE, &roi_in, roi_out, "bpp=%lu\n", bpp);
         if(cp_width > 0)
         {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-          dt_omp_firstprivate(bpp, cp_height, cp_width, in_x, in_y) \
-          shared(pipe, roi_out, roi_in, output) \
-          schedule(static)
-#endif
+          DT_OMP_FOR()
           for(int j = 0; j < cp_height; j++)
             memcpy(((char *)*output) + (size_t)bpp * j * roi_out->width,
                    ((char *)pipe->input) + (size_t)bpp * (in_x + (in_y + j) * pipe->iwidth),
@@ -2774,18 +2786,24 @@ void dt_dev_pixelpipe_get_dimensions(dt_dev_pixelpipe_t *pipe,
    all callers must check this flag and de-allocate after usage (dt_free_align).
 */
 
-float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
+float *dt_dev_get_raster_mask(struct dt_dev_pixelpipe_iop_t *piece,
                               const dt_iop_module_t *raster_mask_source,
                               const dt_mask_id_t raster_mask_id,
                               const dt_iop_module_t *target_module,
                               gboolean *free_mask)
 {
-  if(!raster_mask_source)
-    return NULL;
-
   *free_mask = FALSE;
-  float *raster_mask = NULL;
 
+  if(!raster_mask_source)
+  {
+    dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_MASKS,
+      "get raster mask", piece->pipe, target_module, DT_DEVICE_NONE, NULL, NULL,
+      "no raster mask source provided\n");
+    return NULL;
+  }
+
+  float *raster_mask = NULL;
+  float *provided_raster_mask = NULL;
   GList *source_iter;
   for(source_iter = piece->pipe->nodes;
       source_iter;
@@ -2816,6 +2834,7 @@ float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
       break;
   }
 
+  dt_iop_roi_t *final_roi = &piece->processed_roi_in;
   // we found the raster_mask source module
   if(source_iter)
   {
@@ -2823,20 +2842,31 @@ float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
       (dt_dev_pixelpipe_iop_t *)source_iter->data;
 
     const gboolean source_enabled = source_piece && source_piece->enabled;
-    /* there might be stale masks from disabled modules left over.
+    const int maskmode = source_enabled ? source_piece->module->blend_params->mask_mode : 0;
+    const gboolean source_writing = maskmode != 0 && (maskmode & DEVELOP_MASK_RASTER) == 0;
+    /* there might be stale masks from disabled modules or modules that don't write masks.
        don't use those!
+       FIXME: we should try to fix this elsewhere. Or can we safely remove these masks here?
     */
     if(!source_enabled)
     {
       dt_print_pipe(DT_DEBUG_PIPE,
-         "no raster found", piece->pipe, piece->module, DT_DEVICE_NONE, NULL, NULL,
-         "source module `%s%s' is disabled\n",
+         "no raster mask", piece->pipe, piece->module, DT_DEVICE_NONE, NULL, NULL,
+         "as source module `%s%s' is disabled\n",
+         raster_mask_source->op, dt_iop_get_instance_id(raster_mask_source));
+      return NULL;
+    }
+    else if(!source_writing)
+    {
+      dt_print_pipe(DT_DEBUG_PIPE,
+         "no raster mask", piece->pipe, piece->module, DT_DEVICE_NONE, NULL, NULL,
+         "as source module `%s%s' does not write raster masks\n",
          raster_mask_source->op, dt_iop_get_instance_id(raster_mask_source));
       return NULL;
     }
     else
     {
-      raster_mask = g_hash_table_lookup(source_piece->raster_masks,
+      provided_raster_mask = raster_mask = g_hash_table_lookup(source_piece->raster_masks,
                                         GINT_TO_POINTER(raster_mask_id));
       if(!raster_mask)
       {
@@ -2865,6 +2895,10 @@ float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
                                      * it_piece->processed_roi_out.height);
               if(transformed_mask)
               {
+                dt_print_pipe(DT_DEBUG_MASKS | DT_DEBUG_PIPE | DT_DEBUG_VERBOSE,
+                  "distort raster mask",
+                  piece->pipe, it_piece->module, DT_DEVICE_NONE,
+                  &it_piece->processed_roi_in, &it_piece->processed_roi_out, "\n");
                 it_piece->module->distort_mask(it_piece->module,
                                              it_piece,
                                              raster_mask,
@@ -2875,10 +2909,13 @@ float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
                 // As we might have multiple modules doing a transformation we want to
                 // de-allocate all intermediate buffers and only leave the last one
                 // to be used and deallocated by the caller.
-                if(*free_mask) dt_free_align(raster_mask);
-
-                *free_mask = TRUE;
+                if(provided_raster_mask != raster_mask)
+                {
+                  dt_free_align(raster_mask);
+                  *free_mask = TRUE;
+                }
                 raster_mask = transformed_mask;
+                final_roi = &it_piece->processed_roi_out;
               }
               else
               {
@@ -2913,12 +2950,29 @@ float *dt_dev_get_raster_mask(const struct dt_dev_pixelpipe_iop_t *piece,
     }
   }
 
-  dt_print_pipe(DT_DEBUG_PIPE,
-                "got raster mask", piece->pipe, target_module, DT_DEVICE_NONE, NULL, NULL,
-                "from module `%s%s' %s\n",
-                raster_mask_source->op, dt_iop_get_instance_id(raster_mask_source),
-                *free_mask ? "distorted" : "");
+  const gboolean correct =  piece->processed_roi_out.width == final_roi->width
+                        &&  piece->processed_roi_out.height == final_roi->height;
 
+  dt_print_pipe(DT_DEBUG_PIPE | DT_DEBUG_MASKS,
+                correct ? "got raster mask" : "RASTER SIZE MISMATCH",
+                 piece->pipe, target_module, DT_DEVICE_NONE, NULL, NULL,
+                "from module `%s%s'%s at %p (%ix%i) %sdistorted to %p (%ix%i)\n",
+                raster_mask_source->op, dt_iop_get_instance_id(raster_mask_source),
+                *free_mask ? ", free mask" : "",
+                provided_raster_mask,
+                piece->processed_roi_out.width, piece->processed_roi_out.height,
+                provided_raster_mask != raster_mask ? "" : "NOT ",
+                raster_mask,
+                final_roi->width, final_roi->height);
+  if(!correct)
+  {
+    if(*free_mask)
+    {
+      dt_free_align(raster_mask);
+      raster_mask = NULL;
+      free_mask = FALSE;
+    }
+  }
   return raster_mask;
 }
 
@@ -2955,7 +3009,9 @@ gboolean dt_dev_write_scharr_mask(dt_dev_pixelpipe_iop_t *piece,
 
   p->scharr.hash = dt_hash(DT_INITHASH, &p->scharr.roi, sizeof(dt_iop_roi_t));
 
-  dt_print_pipe(DT_DEBUG_PIPE, "write scharr mask", p, NULL, DT_DEVICE_CPU, roi_in, NULL, "\n");
+  dt_print_pipe(DT_DEBUG_PIPE, "write scharr mask", p, NULL, DT_DEVICE_CPU, NULL, NULL, "%p (%ix%i)\n",
+    mask, width, height);
+
   if(darktable.dump_pfm_module && (piece->pipe->type & DT_DEV_PIXELPIPE_EXPORT))
     dt_dump_pfm("scharr_cpu", mask, width, height, sizeof(float), "detail");
 
@@ -2963,7 +3019,7 @@ gboolean dt_dev_write_scharr_mask(dt_dev_pixelpipe_iop_t *piece,
 
   error:
   dt_print_pipe(DT_DEBUG_ALWAYS,
-           "write scharr mask", p, NULL, DT_DEVICE_CPU, roi_in, NULL,
+           "write scharr mask", p, NULL, DT_DEVICE_CPU, NULL, NULL,
            "couldn't write detail mask\n");
   dt_dev_clear_scharr_mask(p);
   return TRUE;
@@ -2984,8 +3040,6 @@ int dt_dev_write_scharr_mask_cl(dt_dev_pixelpipe_iop_t *piece,
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int devid = p->devid;
-  const int clwidth = ROUNDUPDWD(width, devid);
-  const int clheight = ROUNDUPDHT(height, devid);
 
   cl_mem out = NULL;
   cl_mem tmp = NULL;
@@ -3005,13 +3059,13 @@ int dt_dev_write_scharr_mask_cl(dt_dev_pixelpipe_iop_t *piece,
         wboff ? 1.0f : p->dsc.temperature.coeffs[2]};
 
   err = dt_opencl_enqueue_kernel_2d_args
-      (devid, darktable.opencl->blendop->kernel_calc_Y0_mask, clwidth, clheight,
+      (devid, darktable.opencl->blendop->kernel_calc_Y0_mask, width, height,
        CLARG(tmp), CLARG(in), CLARG(width), CLARG(height),
        CLARG(wb[0]), CLARG(wb[1]), CLARG(wb[2]));
   if(err != CL_SUCCESS) goto error;
 
   err = dt_opencl_enqueue_kernel_2d_args
-      (devid, darktable.opencl->blendop->kernel_write_scharr_mask, clwidth, clheight,
+      (devid, darktable.opencl->blendop->kernel_calc_scharr_mask, width, height,
        CLARG(tmp), CLARG(out), CLARG(width), CLARG(height));
   if(err != CL_SUCCESS) goto error;
 
@@ -3023,7 +3077,9 @@ int dt_dev_write_scharr_mask_cl(dt_dev_pixelpipe_iop_t *piece,
 
   p->scharr.hash = dt_hash(DT_INITHASH, &p->scharr.roi, sizeof(dt_iop_roi_t));
 
-  dt_print_pipe(DT_DEBUG_PIPE, "write scharr mask", p, NULL, piece->pipe->devid, roi_in, NULL, "\n");
+  dt_print_pipe(DT_DEBUG_PIPE, "write scharr mask", p, NULL, piece->pipe->devid, NULL, NULL, "%p (%ix%i)\n",
+    mask, width, height);
+
   if(darktable.dump_pfm_module && (piece->pipe->type & DT_DEV_PIXELPIPE_EXPORT))
     dt_dump_pfm("scharr_cl", mask, width, height, sizeof(float), "detail");
 
@@ -3031,7 +3087,7 @@ int dt_dev_write_scharr_mask_cl(dt_dev_pixelpipe_iop_t *piece,
   if(err != CL_SUCCESS)
   {
     dt_print_pipe(DT_DEBUG_ALWAYS,
-           "write scharr mask", p, NULL, piece->pipe->devid, roi_in, NULL,
+           "write scharr mask", p, NULL, piece->pipe->devid, NULL, NULL,
            "couldn't write scharr mask: %s\n", cl_errstr(err));
     dt_dev_clear_scharr_mask(p);
   }
@@ -3043,10 +3099,11 @@ int dt_dev_write_scharr_mask_cl(dt_dev_pixelpipe_iop_t *piece,
 
 // this expects a mask prepared by rawprepare or demosaic and distorts it
 // through all pipeline modules until target
-float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
+float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_iop_t *piece,
                                   float *src,
                                   const dt_iop_module_t *target_module)
 {
+  dt_dev_pixelpipe_t *pipe = piece->pipe;
   gboolean valid = FALSE;
   const gboolean raw_img = dt_image_is_raw(&pipe->image);
 
@@ -3071,8 +3128,7 @@ float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
   }
   if(!valid) return NULL;
 
-  dt_print_pipe(DT_DEBUG_MASKS,
-           "distort detail mask", pipe, target_module, pipe->devid, &pipe->scharr.roi, NULL, "\n");
+  dt_iop_roi_t *final_roi = &pipe->scharr.roi;
 
   float *resmask = src;
   float *inmask  = src;
@@ -3091,8 +3147,8 @@ float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
         {
           float *tmp = dt_alloc_align_float((size_t)it_piece->processed_roi_out.width
                                             * it_piece->processed_roi_out.height);
-          dt_print_pipe(DT_DEBUG_MASKS | DT_DEBUG_VERBOSE,
-             "distort detail mask", pipe, it_piece->module, pipe->devid, &it_piece->processed_roi_in, &it_piece->processed_roi_out, "\n");
+          dt_print_pipe(DT_DEBUG_MASKS | DT_DEBUG_PIPE | DT_DEBUG_VERBOSE,
+             "distort detail mask", pipe, it_piece->module, DT_DEVICE_NONE, &it_piece->processed_roi_in, &it_piece->processed_roi_out, "\n");
 
           it_piece->module->distort_mask(it_piece->module, it_piece, inmask, tmp,
                                        &it_piece->processed_roi_in,
@@ -3100,6 +3156,7 @@ float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
           resmask = tmp;
           if(inmask != src) dt_free_align(inmask);
           inmask = tmp;
+          final_roi = &it_piece->processed_roi_out;
         }
         else if(!it_piece->module->distort_mask
                 && (it_piece->processed_roi_in.width != it_piece->processed_roi_out.width
@@ -3108,7 +3165,7 @@ float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
                     || it_piece->processed_roi_in.y != it_piece->processed_roi_out.y))
               dt_print_pipe(DT_DEBUG_ALWAYS,
                       "distort details mask",
-                      pipe, it_piece->module, pipe->devid,
+                      pipe, it_piece->module, DT_DEVICE_NONE,
                       &it_piece->processed_roi_in, &it_piece->processed_roi_out,
                       "misses distort_mask()\n");
 
@@ -3116,6 +3173,22 @@ float *dt_dev_distort_detail_mask(dt_dev_pixelpipe_t *pipe,
       }
     }
   }
+  const gboolean correct =  piece->processed_roi_out.width == final_roi->width
+                        &&  piece->processed_roi_out.height == final_roi->height;
+
+  dt_print_pipe(DT_DEBUG_MASKS | DT_DEBUG_PIPE,
+    correct ? "got detail mask" : "DETAIL SIZE MISMATCH",
+    pipe, target_module, DT_DEVICE_NONE, NULL, NULL,
+    "from %p (%ix%i) distorted to %p (%ix%i)\n",
+    pipe->scharr.data, pipe->scharr.roi.width, pipe->scharr.roi.height,
+    resmask, final_roi->width, final_roi->height);
+
+  if(!correct)
+  {
+    dt_free_align(resmask);
+    resmask = NULL;
+  }
+
   return resmask;
 }
 
