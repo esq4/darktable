@@ -1741,24 +1741,24 @@ static void _thumbs_ask_for_discard(dt_thumbtable_t *table)
       g_strdup(_("you have changed the settings related to"
                  " how thumbnails are generated.\n"));
     if(max_level >= DT_MIPMAP_8 && min_level == DT_MIPMAP_0)
-      dt_util_str_cat(&txt, _("all cached thumbnails need to be invalidated.\n\n"));
+      txt = dt_util_dstrcat(txt, _("all cached thumbnails need to be invalidated.\n\n"));
     else if(max_level >= DT_MIPMAP_8)
-      dt_util_str_cat
-        (&txt,
+      txt = dt_util_dstrcat
+        (txt,
          _("cached thumbnails starting from level %d need to be invalidated.\n\n"),
          min_level);
     else if(min_level == DT_MIPMAP_0)
-      dt_util_str_cat
-        (&txt,
+      txt = dt_util_dstrcat
+        (txt,
          _("cached thumbnails below level %d need to be invalidated.\n\n"),
          max_level);
     else
-      dt_util_str_cat
-        (&txt,
+      txt = dt_util_dstrcat
+        (txt,
          _("cached thumbnails between level %d and %d need to be invalidated.\n\n"),
          min_level, max_level);
 
-    dt_util_str_cat(&txt, _("do you want to do that now?"));
+    txt = dt_util_dstrcat(txt, _("do you want to do that now?"));
 
     if(dt_gui_show_yes_no_dialog(_("cached thumbnails invalidation"),
                                  "%s", txt))

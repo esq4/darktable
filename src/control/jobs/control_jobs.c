@@ -958,7 +958,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
     }
     else
     {
-      dt_util_str_cat(&really_removed, really_removed?",%d":"%d", imgid);
+      really_removed = dt_util_dstrcat(really_removed, really_removed?",%d":"%d", imgid);
       dt_image_remove(imgid);
     }
     fraction += 1.0 / total;
@@ -1854,10 +1854,10 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
   if(!g_strstr_len(settings->metadata_export, -1, iptc_envelope_characterset))
   {
     // IPTC character encoding not set by user, so we set the default utf8 here
-    dt_util_str_cat(&settings->metadata_export,
-                    "\1%s\1%s",
-                    iptc_envelope_characterset,
-                    "\x1b%G");  // ESC % G
+    settings->metadata_export = dt_util_dstrcat(settings->metadata_export,
+                                                "\1%s\1%s",
+                                                iptc_envelope_characterset,
+                                                "\x1b%G");  // ESC % G
   }
 
   dt_export_metadata_t metadata;

@@ -197,37 +197,37 @@ static void _dt_collection_set_selq_pre_sort(const dt_collection_t *collection,
   if(collection->params.query_flags & COLLECTION_QUERY_USE_SORT)
   {
     // we always need filename and version : they are fallback orders in any cases
-    dt_util_str_cat(&fields, ", filename, version");
+    fields = dt_util_dstrcat(fields, ", filename, version");
     if(collection->params.sorts[DT_COLLECTION_SORT_GROUP])
-      dt_util_str_cat(&fields, ", group_id");
+      fields = dt_util_dstrcat(fields, ", group_id");
     if(collection->params.sorts[DT_COLLECTION_SORT_PATH])
-      dt_util_str_cat(&fields, ", film_id");
+      fields = dt_util_dstrcat(fields, ", film_id");
     if(collection->params.sorts[DT_COLLECTION_SORT_DATETIME])
-      dt_util_str_cat(&fields, ", datetime_taken");
+      fields = dt_util_dstrcat(fields, ", datetime_taken");
     if(collection->params.sorts[DT_COLLECTION_SORT_IMPORT_TIMESTAMP])
-      dt_util_str_cat(&fields, ", import_timestamp");
+      fields = dt_util_dstrcat(fields, ", import_timestamp");
     if(collection->params.sorts[DT_COLLECTION_SORT_CHANGE_TIMESTAMP])
-      dt_util_str_cat(&fields, ", change_timestamp");
+      fields = dt_util_dstrcat(fields, ", change_timestamp");
     if(collection->params.sorts[DT_COLLECTION_SORT_EXPORT_TIMESTAMP])
-      dt_util_str_cat(&fields, ", export_timestamp");
+      fields = dt_util_dstrcat(fields, ", export_timestamp");
     if(collection->params.sorts[DT_COLLECTION_SORT_PRINT_TIMESTAMP])
-      dt_util_str_cat(&fields, ", print_timestamp");
+      fields = dt_util_dstrcat(fields, ", print_timestamp");
     if(collection->params.sorts[DT_COLLECTION_SORT_ASPECT_RATIO])
-      dt_util_str_cat(&fields, ", aspect_ratio");
+      fields = dt_util_dstrcat(fields, ", aspect_ratio");
     if(collection->params.sorts[DT_COLLECTION_SORT_RATING])
-      dt_util_str_cat(&fields, ", flags");
+      fields = dt_util_dstrcat(fields, ", flags");
     if(collection->params.sorts[DT_COLLECTION_SORT_CUSTOM_ORDER])
     {
       tag_join = (tagid);
-      dt_util_str_cat(&fields,
-                      ", %s position",
-                      tagid ? "CASE WHEN ti.position IS NULL THEN 0 ELSE ti.position END AS" : "");
+      fields = dt_util_dstrcat(fields,
+                               ", %s position",
+                               tagid ? "CASE WHEN ti.position IS NULL THEN 0 ELSE ti.position END AS" : "");
     }
   }
 
   // clang-format off
-  dt_util_str_cat
-    (selq_pre,
+  *selq_pre = dt_util_dstrcat
+    (*selq_pre,
      "SELECT DISTINCT sel.id"
      "  FROM (SELECT %s"
      "        FROM main.images AS mi"
@@ -258,15 +258,15 @@ int dt_collection_update(const dt_collection_t *collection)
                           and_operator(&and_term), collection->params.film_id);
   }
   // DON'T SELECT IMAGES MARKED TO BE DELETED.
-  dt_util_str_cat(&wq, " %s (flags & %d) != %d",
-                  and_operator(&and_term), DT_IMAGE_REMOVE,
-                  DT_IMAGE_REMOVE);
+  wq = dt_util_dstrcat(wq, " %s (flags & %d) != %d",
+                        and_operator(&and_term), DT_IMAGE_REMOVE,
+                        DT_IMAGE_REMOVE);
 
   /* add where ext if wanted */
   if((collection->params.query_flags & COLLECTION_QUERY_USE_WHERE_EXT))
   {
     gchar *where_ext = dt_collection_get_extended_where(collection, -1);
-    dt_util_str_cat(&wq, " %s %s", and_operator(&and_term), where_ext);
+    wq = dt_util_dstrcat(wq, " %s %s", and_operator(&and_term), where_ext);
     g_free(where_ext);
   }
 
@@ -277,8 +277,8 @@ int dt_collection_update(const dt_collection_t *collection)
   {
     // clang-format off
     /* Show the expanded group... */
-    dt_util_str_cat
-      (&wq,
+    wq = dt_util_dstrcat
+      (wq,
        " AND (group_id = %d OR "
        /* ...and, in unexpanded groups, show the representative image.
         * It's possible that the above WHERE clauses will filter out the representative
@@ -297,7 +297,7 @@ int dt_collection_update(const dt_collection_t *collection)
      * representative image wasn't filtered out.  This is important,
      * because otherwise it may be impossible to collapse the group
      * again. */
-    dt_util_str_cat(&wq, " OR (mi.id = %d)", darktable.gui->expanded_group_id);
+    wq = dt_util_dstrcat(wq, " OR (mi.id = %d)", darktable.gui->expanded_group_id);
   }
 
   // get all the sort items
@@ -325,28 +325,28 @@ int dt_collection_update(const dt_collection_t *collection)
     // some sort orders require to join tables to the query
     if(collection->params.sorts[DT_COLLECTION_SORT_COLOR])
     {
-      dt_util_str_cat
-        (&selq_post, " LEFT OUTER JOIN main.color_labels AS b ON sel.id = b.imgid");
+      selq_post = dt_util_dstrcat
+        (selq_post, " LEFT OUTER JOIN main.color_labels AS b ON sel.id = b.imgid");
     }
     if(collection->params.sorts[DT_COLLECTION_SORT_PATH])
     {
       // clang-format off
-      dt_util_str_cat
-        (&selq_post, " JOIN (SELECT id AS film_rolls_id, folder"
+      selq_post = dt_util_dstrcat
+        (selq_post, " JOIN (SELECT id AS film_rolls_id, folder"
                "       FROM main.film_rolls) ON film_id = film_rolls_id");
       // clang-format on
     }
     if(collection->params.sorts[DT_COLLECTION_SORT_TITLE])
     {
-      dt_util_str_cat
-        (&selq_post,
+      selq_post = dt_util_dstrcat
+        (selq_post,
         " LEFT OUTER JOIN main.meta_data AS mt ON sel.id = mt.id AND mt.key = %d",
         DT_METADATA_XMP_DC_TITLE);
     }
     if(collection->params.sorts[DT_COLLECTION_SORT_DESCRIPTION])
     {
-      dt_util_str_cat
-        (&selq_post,
+      selq_post = dt_util_dstrcat
+        (selq_post,
         " LEFT OUTER JOIN main.meta_data AS md ON sel.id = md.id AND md.key = %d",
         DT_METADATA_XMP_DC_DESCRIPTION);
     }
@@ -359,14 +359,16 @@ int dt_collection_update(const dt_collection_t *collection)
   }
 
   /* store the new query */
-  dt_util_str_cat(&query, "%s%s%s %s%s",
-                  selq_pre, wq, selq_post, sq ? sq : "",
-                  (collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
-                  ? " " LIMIT_QUERY : "");
-  dt_util_str_cat(&query_no_group, "%s%s%s %s%s",
-                  selq_pre, wq_no_group, selq_post, sq ? sq : "",
-                  (collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
-                  ? " " LIMIT_QUERY : "");
+  query
+      = dt_util_dstrcat(query, "%s%s%s %s%s",
+                        selq_pre, wq, selq_post, sq ? sq : "",
+                        (collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
+                        ? " " LIMIT_QUERY : "");
+  query_no_group
+      = dt_util_dstrcat(query_no_group, "%s%s%s %s%s",
+                        selq_pre, wq_no_group, selq_post, sq ? sq : "",
+                        (collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
+                        ? " " LIMIT_QUERY : "");
   result = _dt_collection_store(collection, query, query_no_group);
 
   /* free memory used */
@@ -468,9 +470,9 @@ gchar *dt_collection_get_extended_where(const dt_collection_t *collection,
     {
       // exclude the one rule from extended where
       if(i != exclude || mode == 1)
-        dt_util_str_cat(&complete_string, "%s", collection->where_ext[i]);
+        complete_string = dt_util_dstrcat(complete_string, "%s", collection->where_ext[i]);
       else if(i == 0 && g_strcmp0(collection->where_ext[i], ""))
-        dt_util_str_cat(&complete_string, "1=1");
+        complete_string = dt_util_dstrcat(complete_string, "1=1");
     }
   }
   else
@@ -486,10 +488,10 @@ gchar *dt_collection_get_extended_where(const dt_collection_t *collection,
         i < nb_rules && collection->where_ext[i] != NULL;
         i++)
     {
-      dt_util_str_cat(&rules_txt, "%s", collection->where_ext[i]);
+      rules_txt = dt_util_dstrcat(rules_txt, "%s", collection->where_ext[i]);
     }
     if(g_strcmp0(rules_txt, ""))
-      dt_util_str_cat(&complete_string, "(%s)", rules_txt);
+      complete_string = dt_util_dstrcat(complete_string, "(%s)", rules_txt);
 
     g_free(rules_txt);
 
@@ -502,20 +504,20 @@ gchar *dt_collection_get_extended_where(const dt_collection_t *collection,
         i < nb_filters && collection->where_ext[i + nb_rules] != NULL;
         i++)
     {
-      dt_util_str_cat(&rules_txt, "%s", collection->where_ext[i + nb_rules]);
+      rules_txt = dt_util_dstrcat(rules_txt, "%s", collection->where_ext[i + nb_rules]);
     }
 
     if(g_strcmp0(rules_txt, ""))
     {
       if(g_strcmp0(complete_string, ""))
-        dt_util_str_cat(&complete_string, " AND ");
-      dt_util_str_cat(&complete_string, "(%s)", rules_txt);
+        complete_string = dt_util_dstrcat(complete_string, " AND ");
+      complete_string = dt_util_dstrcat(complete_string, "(%s)", rules_txt);
     }
     g_free(rules_txt);
   }
 
   if(!g_strcmp0(complete_string, ""))
-    dt_util_str_cat(&complete_string, "1=1");
+    complete_string = dt_util_dstrcat(complete_string, "1=1");
 
   gchar *where_ext = g_strdup_printf("(%s)", complete_string);
   g_free(complete_string);
@@ -805,7 +807,7 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
 
     // get the sort query
     gchar *sq = _dt_collection_get_sort_text(sort, sortorder);
-    dt_util_str_cat(&query, "%s %s", (i == 0) ? "" : ",", sq);
+    query = dt_util_dstrcat(query, "%s %s", (i == 0) ? "" : ",", sq);
     g_free(sq);
 
     // set the "already done" values
@@ -821,7 +823,7 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
   if(!already_last_sort)
   {
     gchar *lsq = _dt_collection_get_sort_text(lastsort, lastsortorder);
-    dt_util_str_cat(&query, ", %s", lsq);
+    query = dt_util_dstrcat(query, ", %s", lsq);
     g_free(lsq);
     if(lastsort == DT_COLLECTION_SORT_FILENAME)
       filename = TRUE;
@@ -829,10 +831,10 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
 
   // complete the query with fallback if needed
   if(!filename)
-    dt_util_str_cat(&query, ", filename%s",
+    query = dt_util_dstrcat(query, ", filename%s",
                             (first_order) ? " DESC" : "");
 
-  dt_util_str_cat(&query, ", version ASC");
+  query = dt_util_dstrcat(query, ", version ASC");
 
   return query;
 }
@@ -1158,7 +1160,7 @@ void dt_collection_split_operator_datetime(const gchar *input,
 
     if(strcmp(*operator, "") == 0 || strcmp(*operator, "=") == 0 || strcmp(*operator, "<>") == 0)
     {
-      dt_util_str_cat(&*number1, "%s%%", txt);
+      *number1 = dt_util_dstrcat(*number1, "%s%%", txt);
       *number2 = _dt_collection_compute_datetime(">", txt);
     }
     else
@@ -1606,24 +1608,24 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
           // clang-format off
-          dt_util_str_cat(&query, "%scamera_id IN (SELECT id"
-                                  "                FROM main.cameras"
-                                  "                WHERE (maker IS NULL AND model IS NULL)"
-                                  "                   OR (TRIM(maker)='' AND TRIM(model)=''))",
-                                  i>0?" OR ":"");
+          query = dt_util_dstrcat(query, "%scamera_id IN (SELECT id"
+                                         "                FROM main.cameras"
+                                         "                WHERE (maker IS NULL AND model IS NULL)"
+                                         "                   OR (TRIM(maker)='' AND TRIM(model)=''))",
+                                         i>0?" OR ":"");
           // clang-format on
         }
         else
         {
           gchar *cam = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%scamera_id IN (SELECT id FROM main.cameras WHERE maker || ' ' || model LIKE '%s')",
-                          i>0?" OR ":"", cam);
+          query = dt_util_dstrcat(query,
+                                  "%scamera_id IN (SELECT id FROM main.cameras WHERE maker || ' ' || model LIKE '%s')",
+                                  i>0?" OR ":"", cam);
           g_free(cam);
         }
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_TAG: // tag
@@ -1717,23 +1719,23 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
-          dt_util_str_cat
-            (&query,
+          query = dt_util_dstrcat
+            (query,
              "%slens_id IN (SELECT id FROM main.lens WHERE name IS NULL OR TRIM(name)='' OR UPPER(TRIM(name))='N/A')",
              i>0?" OR ":"");
         }
         else
         {
           gchar *lens = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%slens_id IN (SELECT id FROM main.lens WHERE name LIKE '%s')",
-                          i>0?" OR ":"", lens);
+          query = dt_util_dstrcat(query,
+                                  "%slens_id IN (SELECT id FROM main.lens WHERE name LIKE '%s')",
+                                  i>0?" OR ":"", lens);
           g_free(lens);
         }
 
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_WHITEBALANCE: // white balance
@@ -1744,23 +1746,23 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
-          dt_util_str_cat
-            (&query,
+          query = dt_util_dstrcat
+            (query,
              "%swhitebalance_id IN (SELECT id FROM main.whitebalance WHERE name IS NULL OR TRIM(name)='')",
              i>0?" OR ":"");
         }
         else
         {
           gchar *whitebalance = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%swhitebalance_id IN (SELECT id FROM main.whitebalance WHERE name LIKE '%s')",
-                          i>0?" OR ":"", whitebalance);
+          query = dt_util_dstrcat(query,
+                                  "%swhitebalance_id IN (SELECT id FROM main.whitebalance WHERE name LIKE '%s')",
+                                  i>0?" OR ":"", whitebalance);
           g_free(whitebalance);
         }
 
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_FLASH: // flash
@@ -1771,22 +1773,22 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
-          dt_util_str_cat
-            (&query,
+          query = dt_util_dstrcat
+            (query,
              "%sflash_id IN (SELECT id FROM main.flash WHERE name IS NULL OR TRIM(name)='')",
              i>0?" OR ":"");
         }
         else
         {
           gchar *flash = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%sflash_id IN (SELECT id FROM main.flash WHERE name LIKE '%s')",
-                          i>0?" OR ":"", flash);
+          query = dt_util_dstrcat(query,
+                                  "%sflash_id IN (SELECT id FROM main.flash WHERE name LIKE '%s')",
+                                  i>0?" OR ":"", flash);
           g_free(flash);
         }
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_EXPOSURE_PROGRAM: // exposure program
@@ -1797,22 +1799,22 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
-          dt_util_str_cat
-            (&query,
+          query = dt_util_dstrcat
+            (query,
              "%sexposure_program_id IN (SELECT id FROM main.exposure_program WHERE name IS NULL OR TRIM(name)='')",
              i>0?" OR ":"");
         }
         else
         {
           gchar *exposure_program = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%sexposure_program_id IN (SELECT id FROM main.exposure_program WHERE name LIKE '%s')",
-                          i>0?" OR ":"", exposure_program);
+          query = dt_util_dstrcat(query,
+                                  "%sexposure_program_id IN (SELECT id FROM main.exposure_program WHERE name LIKE '%s')",
+                                  i>0?" OR ":"", exposure_program);
           g_free(exposure_program);
         }
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_METERING_MODE: // metering mode
@@ -1823,22 +1825,22 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         if(!g_strcmp0(elems[i], _("unnamed")))
         {
-          dt_util_str_cat
-            (&query,
+          query = dt_util_dstrcat
+            (query,
              "%smetering_mode_id IN (SELECT id FROM main.metering_mode WHERE name IS NULL OR TRIM(name)='')",
              i>0?" OR ":"");
         }
         else
         {
           gchar *metering_mode = _add_wildcards(elems[i]);
-          dt_util_str_cat(&query,
-                          "%smetering_mode_id IN (SELECT id FROM main.metering_mode WHERE name LIKE '%s')",
-                          i>0?" OR ":"", metering_mode);
+          query = dt_util_dstrcat(query,
+                                  "%smetering_mode_id IN (SELECT id FROM main.metering_mode WHERE name LIKE '%s')",
+                                  i>0?" OR ":"", metering_mode);
           g_free(metering_mode);
         }
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_GROUP_ID: // group id
@@ -1848,13 +1850,13 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       for(int i = 0; i < g_strv_length(elems); i++)
       {
         gchar *group_ids = _add_wildcards(elems[i]);
-        dt_util_str_cat(&query,
-                        "%sgroup_id LIKE '%s'",
-                        i>0?" OR ":"", group_ids);
+        query = dt_util_dstrcat(query,
+                                "%sgroup_id LIKE '%s'",
+                                i>0?" OR ":"", group_ids);
         g_free(group_ids);
       }
       g_strfreev(elems);
-      dt_util_str_cat(&query, ")");
+      query = dt_util_dstrcat(query, ")");
       break;
 
     case DT_COLLECTION_PROP_FOCAL_LENGTH: // focal length
@@ -2544,9 +2546,9 @@ void dt_collection_update_query(const dt_collection_t *collection,
       {
         const int id = GPOINTER_TO_INT(l->data);
         if(i == 0)
-          dt_util_str_cat(&txt, "%d", id);
+          txt = dt_util_dstrcat(txt, "%d", id);
         else
-          dt_util_str_cat(&txt, ",%d", id);
+          txt = dt_util_dstrcat(txt, ",%d", id);
         i++;
       }
       // 2. search the first imgid not in the list but AFTER the list
