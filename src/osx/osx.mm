@@ -115,15 +115,9 @@ char* dt_osx_get_bundle_res_path()
 #ifdef MAC_INTEGRATION
   gchar *bundle_id;
 
-#ifdef GTK_TYPE_OSX_APPLICATION
-  bundle_id = quartz_application_get_bundle_id();
-  if(bundle_id)
-    result = quartz_application_get_resource_path();
-#else
   bundle_id = gtkosx_application_get_bundle_id();
   if(bundle_id)
     result = gtkosx_application_get_resource_path();
-#endif
   g_free(bundle_id);
 
 #endif
@@ -288,6 +282,11 @@ void dt_osx_prepare_environment()
 void dt_osx_focus_window()
 {
   [NSApp activateIgnoringOtherApps:YES];
+}
+
+gboolean dt_osx_open_url(const char *url)
+{
+  return [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@(url)]];
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

@@ -535,7 +535,7 @@ static inline gint wavelets_process(const float *const restrict in,
   float *const tempbuf = dt_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
   for(int s = 0; s < scales; ++s)
   {
-    //dt_print(DT_DEBUG_ALWAYS, "CPU Wavelet decompose : scale %i\n", s);
+    //dt_print(DT_DEBUG_ALWAYS, "CPU Wavelet decompose : scale %i", s);
     const int mult = 1 << s;
 
     const float *restrict buffer_in;
@@ -591,7 +591,7 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self,
                                     const dt_iop_roi_t *const roi_out,
                                     const dt_aligned_pixel_t clips)
 {
-  dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
+  dt_iop_highlights_data_t *data = piece->data;
 
   const uint32_t filters = piece->pipe->dsc.filters;
   dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
@@ -709,7 +709,7 @@ static inline cl_int wavelets_process_cl(const int devid,
   // the wavelets decomposition here is the same as the equalizer/atrous module,
   for(int s = 0; s < scales; ++s)
   {
-    //dt_print(DT_DEBUG_ALWAYS, "GPU Wavelet decompose : scale %i\n", s);
+    //dt_print(DT_DEBUG_ALWAYS, "GPU Wavelet decompose : scale %i", s);
     const int mult = 1 << s;
 
     cl_mem buffer_in;
@@ -786,8 +786,8 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self,
                                          const dt_iop_roi_t *const roi_out,
                                          const dt_aligned_pixel_t clips)
 {
-  dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
-  dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
+  dt_iop_highlights_data_t *data = piece->data;
+  dt_iop_highlights_global_data_t *gd = self->global_data;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
 
@@ -833,28 +833,27 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self,
   cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)clips);
   cl_mem wb_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float*)wb);
 
-  dt_opencl_set_kernel_args(devid, gd->kernel_highlights_bilinear_and_mask, 0,
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_highlights_bilinear_and_mask, width, height,
     CLARG(dev_in), CLARG(interpolated), CLARG(temp),
     CLARG(clips_cl), CLARG(wb_cl), CLARG(filters), CLARG(roi_out->width), CLARG(roi_out->height));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_bilinear_and_mask, sizes);
   dt_opencl_release_mem_object(clips_cl);
   if(err != CL_SUCCESS) goto error;
 
-  dt_opencl_set_kernel_args(devid, gd->kernel_highlights_box_blur, 0, CLARG(temp), CLARG(clipping_mask),
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_highlights_box_blur, width, height,
+    CLARG(temp), CLARG(clipping_mask),
     CLARG(roi_out->width), CLARG(roi_out->height));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_box_blur, sizes);
   if(err != CL_SUCCESS) goto error;
 
   // Downsample
-  const int RGBa = TRUE;
-  dt_opencl_set_kernel_args(devid, gd->kernel_interpolate_bilinear, 0,
-    CLARG(clipping_mask), CLARG(width), CLARG(height), CLARG(ds_clipping_mask), CLARG(ds_width), CLARG(ds_height), CLARG(RGBa));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, ds_sizes);
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_interpolate_bilinear, ds_width, ds_height,
+    CLARG(clipping_mask), CLARG(width), CLARG(height),
+    CLARG(ds_clipping_mask), CLARG(ds_width), CLARG(ds_height));
   if(err != CL_SUCCESS) goto error;
 
-  dt_opencl_set_kernel_args(devid, gd->kernel_interpolate_bilinear, 0,
-    CLARG(interpolated), CLARG(width), CLARG(height), CLARG(ds_interpolated), CLARG(ds_width), CLARG(ds_height), CLARG(RGBa));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, ds_sizes);
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_interpolate_bilinear, ds_width, ds_height,
+    CLARG(interpolated), CLARG(width), CLARG(height),
+    CLARG(ds_interpolated), CLARG(ds_width), CLARG(ds_height));
+
   if(err != CL_SUCCESS) goto error;
 
   for(int i = 0; i < data->iterations; i++)
@@ -870,16 +869,15 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self,
   }
 
   // Upsample
-  dt_opencl_set_kernel_args(devid, gd->kernel_interpolate_bilinear, 0,
-    CLARG(ds_interpolated), CLARG(ds_width), CLARG(ds_height), CLARG(interpolated), CLARG(width), CLARG(height));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, sizes);
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_interpolate_bilinear, width, height,
+    CLARG(ds_interpolated), CLARG(ds_width), CLARG(ds_height),
+    CLARG(interpolated), CLARG(width), CLARG(height));
   if(err != CL_SUCCESS) goto error;
 
   // Remosaic
-  dt_opencl_set_kernel_args(devid, gd->kernel_highlights_remosaic_and_replace, 0,
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_highlights_remosaic_and_replace, width, height,
     CLARG(dev_in), CLARG(interpolated), CLARG(clipping_mask), CLARG(dev_out),
     CLARG(wb_cl), CLARG(filters), CLARG(width), CLARG(height));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace, sizes);
 
 error:
   dt_opencl_release_mem_object(wb_cl);

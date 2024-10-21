@@ -86,7 +86,7 @@ const char *aliases()
   return _("blur|lens|motion");
 }
 
-const char **description(struct dt_iop_module_t *self)
+const char **description(dt_iop_module_t *self)
 {
   return dt_iop_set_description(self,
                                 _("simulate physically-accurate lens and motion blurs"),
@@ -284,7 +284,7 @@ static inline void build_gui_kernel(unsigned char *const buffer, const size_t wi
   float *const restrict kernel_2 = dt_alloc_align_float(width * height);
   if(!kernel_1 || !kernel_2)
   {
-    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skipping build_gui_kernel\n");
+    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skipping build_gui_kernel");
     goto cleanup;
   }
 
@@ -350,7 +350,7 @@ static inline void build_pixel_kernel(float *const buffer, const size_t width, c
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
   if(!kernel_1)
   {
-    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skippping build_pixel_kernel\n");
+    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skippping build_pixel_kernel");
     return;
   }
 
@@ -392,7 +392,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
                         const void *const restrict ivoid, void *const restrict ovoid,
                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
+  dt_iop_blurs_params_t *p = piece->data;
   const float scale = piece->iscale / roi_in->scale;
 
   if(!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out))
@@ -411,7 +411,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   float *const restrict padded_out = dt_alloc_align_float(padded_width * padded_height * 4);
   if(!padded_in || !padded_out)
   {
-    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skipping process_fft\n");
+    dt_print(DT_DEBUG_ALWAYS,"[blurs] out of memory, skipping process_fft");
     goto cleanup;
   }
 
@@ -526,11 +526,11 @@ cleanup:
 // Spatial convolution should be slower for large blurs because it is o(N²) where N is the width of the kernel
 // but code is much simpler and easier to debug
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                     const void *const restrict ivoid, void *const restrict ovoid,
                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
+  dt_iop_blurs_params_t *p = piece->data;
   const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
 
   if(!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out))
@@ -601,11 +601,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
 
 #if HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)piece->data;
-  dt_iop_blurs_global_data_t *const gd = (dt_iop_blurs_global_data_t *)self->global_data;
+  dt_iop_blurs_params_t *p = piece->data;
+  dt_iop_blurs_global_data_t *const gd = self->global_data;
 
   cl_int err = DT_OPENCL_SYSMEM_ALLOCATION;
   cl_mem kernel_cl = NULL;
@@ -645,7 +645,7 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  dt_iop_blurs_global_data_t *gd = (dt_iop_blurs_global_data_t *)module->data;
+  dt_iop_blurs_global_data_t *gd = module->data;
   dt_opencl_free_kernel(gd->kernel_blurs_convolve);
   free(module->data);
   module->data = NULL;
@@ -655,8 +655,8 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)self->params;
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
+  dt_iop_blurs_params_t *p = self->params;
+  dt_iop_blurs_gui_data_t *g = self->gui_data;
 
   if(!w || w == g->type)
   {
@@ -703,11 +703,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   }
 }
 
-static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
+static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_module_t *self)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
-  dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)self->params;
+  dt_iop_blurs_gui_data_t *g = self->gui_data;
+  dt_iop_blurs_params_t *p = self->params;
 
   GtkAllocation allocation;
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
@@ -789,11 +788,23 @@ void gui_init(dt_iop_module_t *self)
   g->curvature = dt_bauhaus_slider_from_params(self, "curvature");
   g->offset = dt_bauhaus_slider_from_params(self, "offset");
 
+  // add the tooltips
+  gtk_widget_set_tooltip_markup(g->radius, _("size of the blur in pixels\n"
+                                             "<b>caution</b>: doubling the radius quadruples the run-time!"));
+  gtk_widget_set_tooltip_text(g->concavity, _("shifts towards a star shape as value approaches blades-1"));
+  gtk_widget_set_tooltip_text(g->linearity,
+                              _("adjust straightness of edges from 0=perfect circle\nto 1=completely straight"));
+  gtk_widget_set_tooltip_text(g->rotation, _("set amount by which to rotate shape around its center"));
+
+  gtk_widget_set_tooltip_text(g->angle, _("orientation of the motion's path"));
+  gtk_widget_set_tooltip_text(g->curvature, _("amount to curve the motion relative\nto its overall orientation"));
+  gtk_widget_set_tooltip_text(g->offset, _("select which portion of the path to use,\n"
+                                           "allowing the path to become asymmetric"));
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
+  dt_iop_blurs_gui_data_t *g = self->gui_data;
   if(g->img) dt_free_align(g->img);
   IOP_GUI_FREE;
 }

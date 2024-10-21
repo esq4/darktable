@@ -101,6 +101,13 @@
     <longdescription>enables default meanings for additional buttons, modifiers or moves when used in combination with a base shortcut</longdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
+    <name>show_splash_screen</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>show splash screen at startup</shortdescription>
+    <longdescription>display a small message dialog showing the progress of darktable's startup before the main window appears</longdescription>
+  </dtconfig>
+  <dtconfig prefs="misc" section="interface">
     <name>accel/load_defaults</name>
     <type>bool</type>
     <default>true</default>
@@ -138,7 +145,7 @@
     <type>string</type>
     <default>library.db</default>
     <shortdescription>database location</shortdescription>
-    <longdescription>filename relative to ~/.config/darktable or starting with a slash (needs a restart).</longdescription>
+    <longdescription>filename relative to ~/.config/darktable or starting with a slash (restart required)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>storage/piwigo/last_album</name>
@@ -187,21 +194,35 @@
     <name>min_panel_height</name>
     <type>int</type>
     <default>64</default>
-    <shortdescription>minimum width of the side panels in pixels</shortdescription>
-    <longdescription>(needs a restart)</longdescription>
+    <shortdescription>minimum height of the bottom panel in pixels</shortdescription>
+    <longdescription>(restart required)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>max_panel_height</name>
     <type>int</type>
     <default>400</default>
+    <shortdescription>maximum height of the bottom panel in pixels</shortdescription>
+    <longdescription>(restart required)</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>min_panel_width</name>
+    <type>int</type>
+    <default>150</default>
+    <shortdescription>minimum width of the side panels in pixels</shortdescription>
+    <longdescription>(restart required)</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>max_panel_width</name>
+    <type>int</type>
+    <default>1500</default>
     <shortdescription>maximum width of the side panels in pixels</shortdescription>
-    <longdescription>(needs a restart)</longdescription>
+    <longdescription>(restart required)</longdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="slideshow">
     <name>slideshow_delay</name>
     <type>int</type>
     <default>5</default>
-    <shortdescription>waiting time between each picture in slideshow</shortdescription>
+    <shortdescription>waiting time between each image in slideshow</shortdescription>
   </dtconfig>
 <!-- be sure to keep the code in sync when changing this enum, see common/darktable.c void dt_get_sysresource_level() -->
   <dtconfig prefs="processing" section="cpugpu">
@@ -243,12 +264,12 @@
     <type>string</type>
     <default>*/!0,*/*/*/!0,*</default>
     <shortdescription>priority of OpenCL devices for each pixelpipe type</shortdescription>
-    <longdescription>defines priorities on how (multiple) OpenCL devices are allocated to the different types of pixelpipe (full, preview, export, thumbnail, preview2). for more details visit our usermanual (needs a restart).</longdescription>
+    <longdescription>defines priorities on how (multiple) OpenCL devices are allocated to the different types of pixelpipe (full, preview, export, thumbnail, preview2). for more details visit our user manual. (restart required)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_mandatory_timeout</name>
     <type min="100">int</type>
-    <default>400</default>
+    <default>1000</default>
     <shortdescription>timeout period for locking mandatory opencl device</shortdescription>
     <longdescription>time period (in units of 5ms) after which we give up try-locking an opencl device for mandatory use. defaults to 400 (2 seconds).</longdescription>
   </dtconfig>
@@ -471,26 +492,12 @@
     <shortdescription>number of collections to be stored</shortdescription>
     <longdescription>the number of recent collections to store and show in this list</longdescription>
   </dtconfig>
-  <dtconfig dialog="recentcollect">
-    <name>plugins/lighttable/recentcollect/hide</name>
-    <type>bool</type>
-    <default>true</default>
-    <shortdescription>prefer a history button in the collections module</shortdescription>
-    <longdescription>hide this module and instead access collections history with a button in the collections module</longdescription>
-  </dtconfig>
   <dtconfig dialog="collect">
     <name>plugins/lighttable/collect/history_max</name>
     <type min="1" max="50">int</type>
     <default>10</default>
     <shortdescription>number of collections to be stored</shortdescription>
     <longdescription>the number of recent collections to store and show in this list</longdescription>
-  </dtconfig>
-  <dtconfig dialog="collect">
-    <name>plugins/lighttable/collect/history_hide</name>
-    <type>bool</type>
-    <default>false</default>
-    <shortdescription>hide the history button and show a specific module instead</shortdescription>
-    <longdescription>hide the history button and show the recent collections module instead</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/filtering/history_max</name>
@@ -942,7 +949,7 @@
   <dtconfig>
     <name>ui_last/preferences_dialog_height</name>
     <type>int</type>
-    <default>700</default>
+    <default>720</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
@@ -971,7 +978,7 @@
     <name>ui_last/import_select_new</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>select only new pictures</shortdescription>
+    <shortdescription>select only new images</shortdescription>
     <longdescription>only select images that have not already been imported</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
@@ -1314,6 +1321,13 @@
     <longdescription>if enabled, write full preview to disk (.cache/darktable/) when evicted from the memory cache.\nnote that this can take a lot of memory (several gigabytes for 20k images) and will never delete cached full previews again.\nit's safe though to delete these manually, if you want.\nlight table performance will be increased greatly when zooming image in full preview mode.</longdescription>
   </dtconfig>
   <dtconfig prefs="lighttable" section="thumbs">
+    <name>thumbtable_fractional_scrolling</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>enable smooth scrolling for lighttable thumbnails</shortdescription>
+    <longdescription>if enabled, scrolling the lighttable scrolls by some number of pixels, as expected with a touch pad.\ndisabled, the lighttable scrolls full rows of thumbnails, as befits a scroll wheel.</longdescription>
+  </dtconfig>
+  <dtconfig prefs="lighttable" section="thumbs">
     <name>backthumbs_mipsize</name>
     <type>
       <enum>
@@ -1348,14 +1362,14 @@
   <dtconfig prefs="lighttable" section="thumbs">
     <name>plugins/lighttable/extended_pattern</name>
     <type>longstring</type>
-    <default>$(FILE_NAME).$(FILE_EXTENSION)$(NL)$(EXIF_EXPOSURE) • f/$(EXIF_APERTURE) • $(EXIF_FOCAL_LENGTH)mm • $(EXIF_ISO) ISO $(SIDECAR_TXT)</default>
+    <default>$(FILE_NAME).$(FILE_EXTENSION)$(NL)&lt;b&gt;$(EXIF.EXPOSURE)&lt;/b&gt; • &lt;b&gt;f/$(EXIF.APERTURE)&lt;/b&gt; • &lt;b&gt;$(EXIF.FOCAL.LENGTH)&lt;/b&gt;mm • &lt;b&gt;$(EXIF.ISO)&lt;/b&gt; ISO $(GPS.LOCATION.ICON) $(EXIF.FLASH.ICON) $(SIDECAR_TXT)</default>
     <shortdescription>pattern for the thumbnail extended overlay text</shortdescription>
     <longdescription>see manual to know all the tags you can use.</longdescription>
   </dtconfig>
   <dtconfig prefs="lighttable" section="thumbs">
     <name>plugins/lighttable/thumbnail_tooltip_pattern</name>
     <type>longstring</type>
-    <default>&lt;b&gt;$(FILE_NAME).$(FILE_EXTENSION)&lt;/b&gt;$(NL)$(EXIF.DATE.REGIONAL) $(EXIF.TIME.REGIONAL)$(NL)$(EXIF_EXPOSURE) • f/$(EXIF_APERTURE) • $(EXIF_FOCAL_LENGTH) mm • $(EXIF_ISO) ISO</default>
+    <default>&lt;b&gt;$(FILE_NAME).$(FILE_EXTENSION)&lt;/b&gt;$(NL)$(EXIF.DATE.REGIONAL) $(EXIF.TIME.REGIONAL) $(GPS.LOCATION.ICON) $(EXIF.FLASH.ICON)$(NL)&lt;b&gt;$(EXIF.EXPOSURE)&lt;/b&gt; • &lt;b&gt;f/$(EXIF.APERTURE)&lt;/b&gt; • &lt;b&gt;$(EXIF.FOCAL.LENGTH)&lt;/b&gt;mm • &lt;b&gt;$(EXIF.ISO)&lt;/b&gt; ISO</default>
     <shortdescription>pattern for the thumbnail tooltip (empty to disable)</shortdescription>
     <longdescription>see manual to know all the tags you can use.</longdescription>
   </dtconfig>
@@ -1417,7 +1431,7 @@
   <dtconfig prefs="darkroom" section="general">
     <name>plugins/darkroom/image_infos_pattern</name>
     <type>longstring</type>
-    <default>$(EXIF_EXPOSURE) • f/$(EXIF_APERTURE) • $(EXIF_FOCAL_LENGTH) mm • $(EXIF_ISO) ISO</default>
+    <default>$(EXIF.EXPOSURE) • f/$(EXIF.APERTURE) • $(EXIF.FOCAL.LENGTH) mm • $(EXIF.ISO) ISO $(GPS.LOCATION.ICON) $(EXIF.FLASH.ICON)</default>
     <shortdescription>pattern for the image information line</shortdescription>
     <longdescription>see manual for a list of the tags you can use.</longdescription>
   </dtconfig>
@@ -1462,14 +1476,7 @@
     <type>bool</type>
     <default>false</default>
     <shortdescription>hide built-in presets for processing modules</shortdescription>
-    <longdescription>hides built-in presets of processing modules in both presets and favourites menu.</longdescription>
-    </dtconfig>
-      <dtconfig prefs="darkroom" section="modules">
-      <name>plugins/darkroom/show_guides_in_ui</name>
-      <type>bool</type>
-      <default>true</default>
-      <shortdescription>show the auto_apply guides widget in modules UI</shortdescription>
-      <longdescription>show the auto_apply guides widget in modules UI</longdescription>
+    <longdescription>hide built-in presets of processing modules in presets menu.</longdescription>
   </dtconfig>
     <dtconfig prefs="darkroom" section="modules">
     <name>plugins/darkroom/show_guides_in_ui</name>
@@ -1483,22 +1490,22 @@
     <type>bool</type>
     <default>false</default>
     <shortdescription>hide built-in presets for utility modules</shortdescription>
-    <longdescription>hides built-in presets of utility modules in presets menu.</longdescription>
+    <longdescription>hide built-in presets of utility modules in presets menu.</longdescription>
   </dtconfig>
   <dtconfig prefs="import" section="session">
     <name>session/base_directory_pattern</name>
     <type>string</type>
     <default>$(PICTURES_FOLDER)/Darktable</default>
-    <shortdescription>base directory naming pattern</shortdescription>
-    <longdescription>part of full import path for an import session</longdescription>
+    <shortdescription>base filmroll's directory</shortdescription>
+    <longdescription>directory where new imported filmrolls are created</longdescription>
   </dtconfig>
 
   <dtconfig prefs="import" section="session">
     <name>session/sub_directory_pattern</name>
     <type>string</type>
     <default>$(YEAR)$(MONTH)$(DAY)_$(JOBCODE)</default>
-    <shortdescription>sub directory naming pattern</shortdescription>
-    <longdescription>part of full import path for an import session</longdescription>
+    <shortdescription>filmroll name</shortdescription>
+    <longdescription>name of the imported filmroll</longdescription>
   </dtconfig>
 
   <dtconfig prefs="import" section="session">
@@ -2261,7 +2268,7 @@
     <type>bool</type>
     <default>true</default>
     <shortdescription>always show panels' scrollbars</shortdescription>
-    <longdescription>defines whether the panel scrollbars should be always visible or activated only depending on the content.  (need a restart)</longdescription>
+    <longdescription>defines whether the panel scrollbars should be always visible or activated only depending on the content. (restart required)</longdescription>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
     <name>darkroom/ui/transition_duration</name>
@@ -2820,6 +2827,13 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/imageio/format/avif/speed</name>
+    <type min="0" max="10">int</type>
+    <default>6</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/imageio/format/xcf/bpp</name>
     <type>
       <enum>
@@ -3075,7 +3089,7 @@
         <option>histogram</option>
       </enum>
     </type>
-    <default>histogram</default>
+    <default>waveform</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
@@ -3090,6 +3104,13 @@
     <default>right</default>
     <shortdescription>position of the scopes module</shortdescription>
     <longdescription>position the scopes at the top-left or top-right of the screen</longdescription>
+  </dtconfig>
+  <dtconfig prefs="darkroom" section="modules">
+    <name>plugins/darkroom/panel_swap</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>swap the utility and processing modules panels</shortdescription>
+    <longdescription>move the list of processing modules to the left of the screen</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/histogram/histogram</name>
@@ -3484,7 +3505,7 @@
     <type>dir</type>
     <default>$(home)</default>
     <shortdescription>LUT 3D root folder</shortdescription>
-    <longdescription>this folder (and sub-folders) contains LUT files used by LUT 3D module. (need a restart).</longdescription>
+    <longdescription>this folder (and sub-folders) contains LUT files used by LUT 3D module. (restart required)</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>plugins/darkroom/workflow</name>
@@ -3505,7 +3526,7 @@
     <type>bool</type>
     <default>false</default>
     <shortdescription>auto-apply per camera basecurve presets</shortdescription>
-    <longdescription>use the per-camera basecurve by default instead of the generic manufacturer one if there is one available (needs a restart).\nthis option is taken into account when the \"auto-apply pixel workflow defaults\" is set to \"display-referred\".\nto prevent auto-apply basecurve presets \"auto-apply pixel workflow defaults\" should be set to \"none\"</longdescription>
+    <longdescription>use the per-camera basecurve by default instead of the generic manufacturer one if there is one available. (restart required)\nthis option is taken into account when the \"auto-apply pixel workflow defaults\" is set to \"display-referred\".\nto prevent auto-apply basecurve presets \"auto-apply pixel workflow defaults\" should be set to \"none\"</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>ui/detect_mono_exif</name>

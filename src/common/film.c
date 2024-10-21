@@ -1,6 +1,6 @@
 /*
    This file is part of darktable,
-   Copyright (C) 2009-2023 darktable developers.
+   Copyright (C) 2009-2024 darktable developers.
 
    darktable is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -90,20 +90,49 @@ void dt_film_set_query(const dt_filmid_t id)
                              DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
+//TODO: move somewhere more appropriate
+char *dt_sqlite3_escape_wildcards(const char *s)
+{
+  if(!s)
+    return NULL;
+  size_t count = 0;
+  for(const char *t = s; *t; t++)
+  {
+    count++;
+    if (*t == '%' || *t == '_' || *t == '~')
+      count++;
+  }
+  char *result = (char*)malloc(count+1);
+  if(!result)
+    return result;
+  char *dest = result;
+  for(; *s ; s++)
+  {
+    if(*s == '%' || *s == '_' || *s == '~')
+      *dest++ = '~';
+    *dest++ = *s;
+  }
+  *dest = '\0';
+  return result;
+}
+
 dt_filmid_t dt_film_get_id(const char *folder)
 {
   dt_filmid_t filmroll_id = NO_FILMID;
   sqlite3_stmt *stmt;
 #ifdef _WIN32
+  char *quoted = dt_sqlite3_escape_wildcards(folder);
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT id FROM main.film_rolls WHERE folder LIKE ?1",
+                              "SELECT id FROM main.film_rolls WHERE folder LIKE ?1 ESCAPE '~'",
                               -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, quoted, -1, SQLITE_TRANSIENT);
+  free(quoted);
 #else
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT id FROM main.film_rolls WHERE folder = ?1",
                               -1, &stmt, NULL);
-#endif
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, folder, -1, SQLITE_STATIC);
+#endif
   if(sqlite3_step(stmt) == SQLITE_ROW) filmroll_id = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
   return filmroll_id;
@@ -205,7 +234,7 @@ dt_filmid_t dt_film_new(dt_film_t *film, const char *directory)
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, film->dirname, -1, SQLITE_STATIC);
     const int rc = sqlite3_step(stmt);
     if(rc != SQLITE_DONE)
-      dt_print(DT_DEBUG_ALWAYS, "[film_new] failed to insert film roll! %s\n",
+      dt_print(DT_DEBUG_ALWAYS, "[film_new] failed to insert film roll! %s",
               sqlite3_errmsg(dt_database_get(darktable.db)));
     sqlite3_finalize(stmt);
     /* requery for filmroll and fetch new id */
@@ -280,7 +309,7 @@ dt_filmid_t dt_film_import(const char *dirname)
   film->dir = g_dir_open(film->dirname, 0, &error);
   if(error)
   {
-    dt_print(DT_DEBUG_ALWAYS, "[film_import] failed to open directory %s: %s\n",
+    dt_print(DT_DEBUG_ALWAYS, "[film_import] failed to open directory %s: %s",
              film->dirname, error->message);
     g_error_free(error);
     dt_film_cleanup(film);
@@ -396,8 +425,7 @@ void dt_film_remove_empty()
     }
   }
   sqlite3_finalize(stmt);
-  if(raise_signal) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals,
-                                                 DT_SIGNAL_FILMROLLS_REMOVED);
+  if(raise_signal) DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_REMOVED);
 
   // dispatch asking for deletion (and subsequent deletion) to the gui thread
   if(empty_dirs)
@@ -474,7 +502,7 @@ void dt_film_remove(const dt_filmid_t id)
   sqlite3_finalize(stmt);
   // dt_control_update_recent_films();
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_CHANGED);
 }
 
 GList *dt_film_get_image_ids(const dt_filmid_t filmid)

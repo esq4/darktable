@@ -28,6 +28,7 @@
 #include "common/imagebuf.h"
 #include "common/image_cache.h"
 #include "common/math.h"
+#include "common/color_picker.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -930,7 +931,7 @@ static void dt_lib_histogram_process
   dt_times_t start;
   dt_get_perf_times(&start);
 
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
 
   // special case, clear the scopes
   if(!input)
@@ -982,19 +983,19 @@ static void dt_lib_histogram_process
       // primary_picker->scope_mean as red/green/blue dots (or short
       // lines) at appropriate position at the horizontal/vertical
       // position of sample
-      if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+      dt_boundingbox_t pos;
+      const gboolean isbox = sample->size == DT_LIB_COLORPICKER_SIZE_BOX;
+      const gboolean ispoint = sample->size == DT_LIB_COLORPICKER_SIZE_POINT;
+      if(ispoint || isbox)
       {
-        roi.crop_x = MIN(width, MAX(0, sample->box[0] * width));
-        roi.crop_y = MIN(height, MAX(0, sample->box[1] * height));
-        roi.crop_right = width - MIN(width, MAX(0, sample->box[2] * width));
-        roi.crop_bottom = height - MIN(height, MAX(0, sample->box[3] * height));
-      }
-      else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
-      {
-        roi.crop_x = MIN(width, MAX(0, sample->point[0] * width));
-        roi.crop_y = MIN(height, MAX(0, sample->point[1] * height));
-        roi.crop_right = width - MIN(width, MAX(0, sample->point[0] * width));
-        roi.crop_bottom = height - MIN(height, MAX(0, sample->point[1] * height));
+        dt_color_picker_transform_box(darktable.develop,
+                                     isbox ? 2 : 1,
+                                     isbox ? sample->box : sample->point,
+                                     pos, TRUE);
+        roi.crop_x = MIN(width, MAX(0, pos[0] * width));
+        roi.crop_y = MIN(height, MAX(0, pos[1] * height));
+        roi.crop_right = width -    MIN(width,  MAX(0, (isbox ? pos[2] : pos[0]) * width));
+        roi.crop_bottom = height -  MIN(height, MAX(0, (isbox ? pos[3] : pos[1]) * height));
       }
     }
   }
@@ -1010,15 +1011,16 @@ static void dt_lib_histogram_process
   if(!profile_info_to)
   {
     dt_print(DT_DEBUG_ALWAYS,
-       "[histogram] no histogram profile, replaced with linear Rec2020\n");
+       "[histogram] no histogram profile, replaced with linear Rec2020");
     dt_control_log(_("unsupported profile selected for histogram,"
                      " it will be replaced with linear Rec2020"));
   }
 
-  const dt_iop_order_iccprofile_info_t *profile_info_out = !profile_info_to
-            ? dt_ioppr_add_profile_info_to_list(darktable.develop,
-                                                DT_COLORSPACE_LIN_REC2020, "", DT_INTENT_RELATIVE_COLORIMETRIC)
-            : profile_info_to;
+  const dt_iop_order_iccprofile_info_t *fallback =
+    dt_ioppr_add_profile_info_to_list(darktable.develop,
+      DT_COLORSPACE_LIN_REC2020, "", DT_INTENT_RELATIVE_COLORIMETRIC);
+
+  const dt_iop_order_iccprofile_info_t *profile_info_out = !profile_info_to ? fallback : profile_info_to;
 
   dt_ioppr_transform_image_colorspace_rgb(input, img_display, width, height,
                                             profile_info_from, profile_info_out, "final histogram");
@@ -1033,7 +1035,9 @@ static void dt_lib_histogram_process
       _lib_histogram_process_waveform(d, img_display, &roi);
       break;
     case DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE:
-      _lib_histogram_process_vectorscope(d, img_display, &roi, profile_info_out);
+      // if using a non-rgb profile_info_out as in cmyk softproofing we pass DT_COLORSPACE_LIN_REC2020
+      //   for calculating the vertex_rgb data.
+      _lib_histogram_process_vectorscope(d, img_display, &roi, profile_info_out->type ? profile_info_out : fallback);
       break;
     case DT_LIB_HISTOGRAM_SCOPE_N:
       dt_unreachable_codepath();
@@ -1681,15 +1685,18 @@ static gboolean _drawable_motion_notify_callback(GtkWidget *widget,
 
     // FIXME: make just one tooltip for the widget depending on
     // whether it is draggable or not, and set it when enter the view
-    gchar *tip = g_strdup_printf("%s\n",
-                                 _(dt_lib_histogram_scope_type_names[d->scope_type]));
+    gchar *tip = g_strdup_printf("%s\n(%s)\n%s\n%s",
+                                 _(dt_lib_histogram_scope_type_names[d->scope_type]),
+                                 _("use buttons at top of graph to change type"),
+                                 _("click on ❓ and then graph for documentation"),
+                                 _("use color picker module to restrict area"));
     if(d->scope_type == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
     {
       d->highlight = DT_LIB_HISTOGRAM_HIGHLIGHT_NONE;
       if(d->scope_type == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE &&
               d->vectorscope_type == DT_LIB_HISTOGRAM_VECTORSCOPE_RYB &&
               d->harmony_guide.type != DT_COLOR_HARMONY_NONE)
-        tip = dt_util_dstrcat(tip, "\n%s\n%s\n%s\n%s",
+        dt_util_str_cat(&tip, "\n%s\n%s\n%s\n%s",
                               _("scroll to coarse-rotate"),
                               _("ctrl+scroll to fine rotate"),
                               _("shift+scroll to change width"),
@@ -1706,14 +1713,14 @@ static gboolean _drawable_motion_notify_callback(GtkWidget *widget,
                      && d->scope_orient == DT_LIB_HISTOGRAM_ORIENT_VERT))))
       {
         d->highlight = DT_LIB_HISTOGRAM_HIGHLIGHT_BLACK_POINT;
-        tip = dt_util_dstrcat(tip, "\n%s\n%s",
+        dt_util_str_cat(&tip, "\n%s\n%s",
                               _("drag to change black point"),
                               _("double-click resets"));
       }
       else
       {
         d->highlight = DT_LIB_HISTOGRAM_HIGHLIGHT_EXPOSURE;
-        tip = dt_util_dstrcat(tip, "\n%s\n%s",
+        dt_util_str_cat(&tip, "\n%s\n%s",
                               _("drag to change exposure"),
                               _("double-click resets"));
       }
@@ -2106,7 +2113,7 @@ static void _colorspace_clicked(GtkWidget *button, dt_lib_histogram_t *d)
 
 static void _update_color_harmony_gui(dt_lib_module_t *self)
 {
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
 
   const dt_imgid_t imgid = darktable.develop->image_storage.id;
 
@@ -2133,9 +2140,8 @@ static void _update_color_harmony_gui(dt_lib_module_t *self)
   _color_harmony_changed(d);
 }
 
-void _signal_image_changed(gpointer instance, gpointer user_data)
+void _signal_image_changed(gpointer instance, dt_lib_module_t *self)
 {
-  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
 
   _update_color_harmony_gui(self);
 }
@@ -2308,7 +2314,7 @@ static void _lib_histogram_collapse_callback(dt_action_t *action)
 static void _lib_histogram_cycle_mode_callback(dt_action_t *action)
 {
   dt_lib_module_t *self = darktable.lib->proxy.histogram.module;
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
 
   // FIXME: When switch modes, this hack turns off the highlight and
   // turn the cursor back to pointer, as we don't know what/if the new
@@ -2403,14 +2409,14 @@ static void _lib_histogram_cycle_mode_callback(dt_action_t *action)
 static void _lib_histogram_change_type_callback(dt_action_t *action)
 {
   dt_lib_module_t *self = darktable.lib->proxy.histogram.module;
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
   _scope_view_clicked(d->scope_view_button, d);
 }
 
 static void _lib_histogram_cycle_harmony_callback(dt_action_t *action)
 {
   dt_lib_module_t *self = darktable.lib->proxy.histogram.module;
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
   d->harmony_guide.type = (d->color_harmony_old + 1) % DT_COLOR_HARMONY_N;
   _color_harmony_button_on(d);
   d->color_harmony_old = d->harmony_guide.type;
@@ -2429,7 +2435,7 @@ static void _lib_histogram_preview_updated_callback(gpointer instance,
   // other way to assure that the histogram image is current besides
   // checking the pixelpipe to see if it has processed the current
   // image
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
   gtk_widget_queue_draw(d->scope_draw);
 }
 
@@ -2437,12 +2443,11 @@ void view_enter(struct dt_lib_module_t *self,
                 struct dt_view_t *old_view,
                 struct dt_view_t *new_view)
 {
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
   if(new_view->view(new_view) == DT_VIEW_DARKROOM)
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT
-      (darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-       G_CALLBACK(_lib_histogram_preview_updated_callback), self);
+    DT_CONTROL_SIGNAL_CONNECT(DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+                              _lib_histogram_preview_updated_callback, self);
   }
   // button box should be hidden when enter view, unless mouse is over
   // histogram, in which case gtk kindly generates enter events
@@ -2457,9 +2462,7 @@ void view_leave(struct dt_lib_module_t *self,
                 struct dt_view_t *old_view,
                 struct dt_view_t *new_view)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                               G_CALLBACK(_lib_histogram_preview_updated_callback),
-                               self);
+  DT_CONTROL_SIGNAL_DISCONNECT(_lib_histogram_preview_updated_callback, self);
 }
 
 void gui_init(dt_lib_module_t *self)
@@ -2815,13 +2818,12 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_widget_show_all(self->widget);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
-                                  G_CALLBACK(_signal_image_changed), self);
+  DT_CONTROL_SIGNAL_CONNECT(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _signal_image_changed, self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
+  dt_lib_histogram_t *d = self->data;
 
   dt_free_align(d->histogram);
   for(int ch=0; ch<3; ch++)
@@ -2838,8 +2840,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_free_align(self->data);
   self->data = NULL;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_signal_image_changed), self);
+  DT_CONTROL_SIGNAL_DISCONNECT(_signal_image_changed, self);
 }
 
 // clang-format off

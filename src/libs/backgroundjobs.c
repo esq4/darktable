@@ -92,7 +92,7 @@ void gui_init(dt_lib_module_t *self)
   // its gui_data!
   for(const GList *iter = darktable.control->progress_system.list; iter; iter = g_list_next(iter))
   {
-    dt_progress_t *progress = (dt_progress_t *)iter->data;
+    dt_progress_t *progress = iter->data;
     void *gui_data = dt_control_progress_get_gui_data(progress);
     free(gui_data);
     gui_data = _lib_backgroundjobs_added(self, dt_control_progress_has_progress_bar(progress),
@@ -133,6 +133,10 @@ static gboolean _added_gui_thread(gpointer user_data)
   gtk_box_reorder_child(GTK_BOX(params->self_widget), params->instance_widget, 1);
   gtk_widget_show_all(params->instance_widget);
   gtk_widget_show(params->self_widget);
+
+  GdkCursor *cursor = gdk_cursor_new_for_display(gdk_display_get_default(), GDK_LEFT_PTR);
+  gdk_window_set_cursor(gtk_widget_get_window(params->instance_widget), cursor);
+  g_object_unref(cursor);
 
   free(params);
   return FALSE;

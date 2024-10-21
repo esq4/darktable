@@ -23,6 +23,8 @@
 #include <stdint.h>
 #include "common/sse.h"		// also includes darktable.h
 
+#define LUT_ELEM 512 // gamut LUT number of elements:
+
 #define NORM_MIN 1.52587890625e-05f // norm can't be < to 2^(-16)
 
 // select speed vs accuracy tradeoff
@@ -42,12 +44,8 @@
 #define M_PI   3.14159265358979323846
 #endif /* !M_PI */
 #ifndef M_PI_F
-#define M_PI_F  3.14159265358979324f
+#define M_PI_F 3.14159265358979323846f
 #endif /* !M_PI_F */
-
-
-#define DT_M_PI_F (3.14159265358979324f)
-#define DT_M_PI (3.14159265358979324)
 
 #define DT_M_LN2f (0.6931471805599453f)
 

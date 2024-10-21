@@ -81,17 +81,17 @@ static int rgbe_error(int rgbe_error_code, char *msg)
   switch(rgbe_error_code)
   {
     case rgbe_read_error:
-      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE read error: %s\n", strerror(errno));
+      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE read error: %s", strerror(errno));
       break;
     case rgbe_write_error:
-      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE write error: %s\n", strerror(errno));
+      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE write error: %s", strerror(errno));
       break;
     case rgbe_format_error:
-      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE bad file format: %s\n", msg);
+      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE bad file format: %s", msg);
       break;
     default:
     case rgbe_memory_error:
-      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE error: %s\n", msg);
+      dt_print(DT_DEBUG_ALWAYS, "[rgbe_open] RGBE error: %s", msg);
   }
   return RGBE_RETURN_FAILURE;
 }
@@ -444,11 +444,11 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img,
   if(!ext)
     return DT_IMAGEIO_LOAD_FAILED;
   if(g_ascii_strcasecmp(ext, ".hdr") != 0)
-    return DT_IMAGEIO_LOAD_FAILED;
+    return DT_IMAGEIO_UNSUPPORTED_FORMAT;
 
   FILE *f = g_fopen(filename, "rb");
   if(!f)
-    return DT_IMAGEIO_LOAD_FAILED;
+    return DT_IMAGEIO_FILE_NOT_FOUND;
 
   rgbe_header_info info;
   if(RGBE_ReadHeader(f, &img->width, &img->height, &info) != RGBE_RETURN_SUCCESS)
@@ -471,7 +471,7 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img,
   if(RGBE_ReadPixels_RLE(f, rgbe_buf, img->width, img->height) != RGBE_RETURN_SUCCESS)
   {
     dt_free_align(rgbe_buf);
-    goto rgbe_failed;
+    goto rgbe_corrupt;
   }
 
   fclose(f);
@@ -519,6 +519,10 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img,
 rgbe_failed:
   fclose(f);
   return DT_IMAGEIO_LOAD_FAILED;
+
+rgbe_corrupt:
+  fclose(f);
+  return DT_IMAGEIO_FILE_CORRUPTED;
 
 error_cache_full:
   fclose(f);

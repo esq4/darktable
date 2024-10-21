@@ -149,7 +149,7 @@ static void _range_select_destroy(GtkWidget *widget)
 
   GtkDarktableRangeSelect *range = DTGTK_RANGE_SELECT(widget);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_pref_changed), range);
+  DT_CONTROL_SIGNAL_DISCONNECT(_dt_pref_changed, range);
 
   if(!g_list_is_empty(range->markers))
     g_list_free_full(range->markers, g_free);
@@ -589,6 +589,7 @@ static void _current_set_text(GtkDarktableRangeSelect *range, const double curre
 static void _current_hide_popup(GtkDarktableRangeSelect *range)
 {
   if(!range->cur_window) return;
+  darktable.gui->hide_tooltips--;
   gtk_widget_destroy(range->cur_window);
   range->cur_window = NULL;
 }
@@ -596,6 +597,7 @@ static void _current_hide_popup(GtkDarktableRangeSelect *range)
 static void _current_show_popup(GtkDarktableRangeSelect *range)
 {
   if(range->cur_window) return;
+  darktable.gui->hide_tooltips++;
   range->cur_window = gtk_popover_new(range->band);
   gtk_widget_set_name(range->cur_window, "range-current");
   gtk_popover_set_modal(GTK_POPOVER(range->cur_window), FALSE);
@@ -1110,7 +1112,7 @@ static GtkWidget *_popup_get_numeric_menu(GtkDarktableRangeSelect *range, GtkWid
       continue;
 
     gchar *txt = (blo->txt) ? g_strdup(blo->txt) : range->print(blo->value_r, TRUE);
-    if(blo->nb > 0) txt = dt_util_dstrcat(txt, " (%d)", blo->nb);
+    if(blo->nb > 0) dt_util_str_cat(&txt, " (%d)", blo->nb);
     GtkWidget *smt = gtk_menu_item_new_with_label(txt);
     g_free(txt);
     g_object_set_data(G_OBJECT(smt), "range_block", blo);
@@ -1137,7 +1139,7 @@ static GtkWidget *_popup_get_numeric_menu(GtkDarktableRangeSelect *range, GtkWid
       continue;
 
     gchar *txt = (blo->txt) ? g_strdup(blo->txt) : range->print(blo->value_r, TRUE);
-    if(blo->nb > 0) txt = dt_util_dstrcat(txt, " (%d)", blo->nb);
+    if(blo->nb > 0) dt_util_str_cat(&txt, " (%d)", blo->nb);
     GtkWidget *smt = gtk_menu_item_new_with_label(txt);
     g_free(txt);
     g_object_set_data(G_OBJECT(smt), "range_block", blo);
@@ -1724,20 +1726,18 @@ GtkWidget *dtgtk_range_select_new(const gchar *property, const gboolean show_ent
     gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
     // the entries
-    range->entry_min = gtk_entry_new();
+    range->entry_min = dt_ui_entry_new(0);
     gtk_widget_set_can_default(range->entry_min, TRUE);
-    gtk_entry_set_width_chars(GTK_ENTRY(range->entry_min), 0);
     _entry_set_tooltip(range->entry_min, BOUND_MIN, range->type);
     g_signal_connect(G_OBJECT(range->entry_min), "activate", G_CALLBACK(_event_entry_activated), range);
     g_signal_connect(G_OBJECT(range->entry_min), "focus-out-event", G_CALLBACK(_event_entry_focus_out), range);
     g_signal_connect(G_OBJECT(range->entry_min), "button-press-event", G_CALLBACK(_event_entry_press), range);
     gtk_box_pack_start(GTK_BOX(hbox), range->entry_min, TRUE, TRUE, 0);
 
-    range->entry_max = gtk_entry_new();
+    range->entry_max = dt_ui_entry_new(0);
     gtk_widget_set_can_default(range->entry_max, TRUE);
-    gtk_entry_set_width_chars(GTK_ENTRY(range->entry_max), 0);
     gtk_entry_set_alignment(GTK_ENTRY(range->entry_max), 1.0);
-    _entry_set_tooltip(range->entry_min, BOUND_MAX, range->type);
+    _entry_set_tooltip(range->entry_max, BOUND_MAX, range->type);
     g_signal_connect(G_OBJECT(range->entry_max), "activate", G_CALLBACK(_event_entry_activated), range);
     g_signal_connect(G_OBJECT(range->entry_max), "focus-out-event", G_CALLBACK(_event_entry_focus_out), range);
     g_signal_connect(G_OBJECT(range->entry_max), "button-press-event", G_CALLBACK(_event_entry_press), range);
@@ -1749,8 +1749,7 @@ GtkWidget *dtgtk_range_select_new(const gchar *property, const gboolean show_ent
 
   if(type == DT_RANGE_TYPE_DATETIME) _popup_date_init(range);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(_dt_pref_changed),
-                                  range);
+  DT_CONTROL_SIGNAL_CONNECT(DT_SIGNAL_PREFERENCES_CHANGE, _dt_pref_changed, range);
   gtk_widget_set_name((GtkWidget *)range, "dt-range");
 
   return (GtkWidget *)range;
@@ -1773,19 +1772,19 @@ gchar *dtgtk_range_select_get_bounds_pretty(GtkDarktableRangeSelect *range)
   else
     txt = range->print(range->select_min_r, TRUE);
 
-  txt = dt_util_dstrcat(txt, " → ");
+  dt_util_str_cat(&txt, " → ");
 
   if(range->bounds & DT_RANGE_BOUND_MAX)
-    txt = dt_util_dstrcat(txt, _("max"));
+    dt_util_str_cat(&txt, _("max"));
   else if(range->bounds & DT_RANGE_BOUND_MAX_RELATIVE)
-    txt = dt_util_dstrcat(txt, "+%04d:%02d:%02d %02d:%02d:%02d", range->select_relative_date_r.year,
+    dt_util_str_cat(&txt, "+%04d:%02d:%02d %02d:%02d:%02d", range->select_relative_date_r.year,
                           range->select_relative_date_r.month, range->select_relative_date_r.day,
                           range->select_relative_date_r.hour, range->select_relative_date_r.minute,
                           range->select_relative_date_r.second);
   else if(range->bounds & DT_RANGE_BOUND_MAX_NOW)
-    txt = dt_util_dstrcat(txt, _("now"));
+    dt_util_str_cat(&txt, _("now"));
   else
-    txt = dt_util_dstrcat(txt, "%s", range->print(range->select_max_r, TRUE));
+    dt_util_str_cat(&txt, "%s", range->print(range->select_max_r, TRUE));
 
   return txt;
 }

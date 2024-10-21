@@ -72,14 +72,14 @@ typedef struct dt_iop_enlargecanvas_gui_data_t
 
 const char *name()
 {
-  return _("canvas enlargement");
+  return _("enlarge canvas");
 }
 
 const char** description(struct dt_iop_module_t *self)
 {
   return dt_iop_set_description
     (self,
-     _("enlarge canvas"),
+     _("add empty space to the left, top, right or bottom"),
      _("corrective and creative"),
      _("linear, RGB, scene-referred"),
      _("linear, RGB"),
@@ -88,7 +88,7 @@ const char** description(struct dt_iop_module_t *self)
 
 const char *aliases()
 {
-  return _("composition");
+  return _("composition|expand|extend");
 }
 
 int flags()
@@ -122,7 +122,7 @@ void modify_roi_out(struct dt_iop_module_t *self,
                     dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
 {
-  dt_iop_enlargecanvas_data_t *d = (dt_iop_enlargecanvas_data_t *)piece->data;
+  dt_iop_enlargecanvas_data_t *d = piece->data;
   *roi_out = *roi_in;
 
   const int border_size_l = roi_in->width * d->percent_left / 100.f;
@@ -156,7 +156,7 @@ void modify_roi_in(struct dt_iop_module_t *self,
                    const dt_iop_roi_t *roi_out,
                    dt_iop_roi_t *roi_in)
 {
-  dt_iop_enlargecanvas_data_t *d = (dt_iop_enlargecanvas_data_t *)piece->data;
+  dt_iop_enlargecanvas_data_t *d = piece->data;
   *roi_in = *roi_out;
 
   const float bw = (piece->buf_out.width - piece->buf_in.width) * roi_out->scale;
@@ -200,7 +200,7 @@ int distort_transform(dt_iop_module_t *self,
                       float *points,
                       const size_t points_count)
 {
-  const dt_iop_enlargecanvas_params_t *d = (dt_iop_enlargecanvas_params_t *)piece->data;
+  const dt_iop_enlargecanvas_params_t *d = piece->data;
 
   const int bw = (piece->buf_out.width - piece->buf_in.width);
   const int bh = (piece->buf_out.height - piece->buf_in.height);
@@ -237,7 +237,7 @@ int distort_backtransform(dt_iop_module_t *self,
                           float *points,
                           size_t points_count)
 {
-  const dt_iop_enlargecanvas_params_t *d = (dt_iop_enlargecanvas_params_t *)piece->data;
+  const dt_iop_enlargecanvas_params_t *d = piece->data;
 
   const int bw = (piece->buf_out.width - piece->buf_in.width);
   const int bh = (piece->buf_out.height - piece->buf_in.height);
@@ -297,7 +297,7 @@ void distort_mask(struct dt_iop_module_t *self,
                   const dt_iop_roi_t *const roi_in,
                   const dt_iop_roi_t *const roi_out)
 {
-  const dt_iop_enlargecanvas_data_t *const d = (dt_iop_enlargecanvas_data_t *)piece->data;
+  const dt_iop_enlargecanvas_data_t *const d = piece->data;
 
   float pos_v = .5f;
   float pos_h = .5f;
@@ -335,7 +335,7 @@ void process(struct dt_iop_module_t *self,
              const dt_iop_roi_t *const roi_in,
              const dt_iop_roi_t *const roi_out)
 {
-  const dt_iop_enlargecanvas_data_t *const d = (dt_iop_enlargecanvas_data_t *)piece->data;
+  const dt_iop_enlargecanvas_data_t *const d = piece->data;
 
   float pos_v = .5f;
   float pos_h = .5f;
@@ -405,8 +405,8 @@ void cleanup_global(dt_iop_module_so_t *module)
 /** gui setup and update, these are needed. */
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_enlargecanvas_gui_data_t *g = (dt_iop_enlargecanvas_gui_data_t *)self->gui_data;
-  dt_iop_enlargecanvas_params_t *p = (dt_iop_enlargecanvas_params_t *)self->params;
+  dt_iop_enlargecanvas_gui_data_t *g = self->gui_data;
+  dt_iop_enlargecanvas_params_t *p = self->params;
 
   dt_bauhaus_slider_set(g->percent_left, p->percent_left);
   dt_bauhaus_slider_set(g->percent_right, p->percent_right);
@@ -423,15 +423,27 @@ void gui_init(dt_iop_module_t *self)
 
   g->percent_left = dt_bauhaus_slider_from_params(self, "percent_left");
   dt_bauhaus_slider_set_format(g->percent_left, "%");
+  gtk_widget_set_tooltip_text(g->percent_left,
+                              _("how much to enlarge the canvas to the left "
+                              "as a percentage of the original image width"));
 
   g->percent_right = dt_bauhaus_slider_from_params(self, "percent_right");
   dt_bauhaus_slider_set_format(g->percent_right, "%");
+  gtk_widget_set_tooltip_text(g->percent_right,
+                              _("how much to enlarge the canvas to the right "
+                              "as a percentage of the original image width"));
 
   g->percent_top = dt_bauhaus_slider_from_params(self, "percent_top");
   dt_bauhaus_slider_set_format(g->percent_top, "%");
+  gtk_widget_set_tooltip_text(g->percent_top,
+                              _("how much to enlarge the canvas to the top "
+                              "as a percentage of the original image height"));
 
   g->percent_bottom = dt_bauhaus_slider_from_params(self, "percent_bottom");
   dt_bauhaus_slider_set_format(g->percent_bottom, "%");
+  gtk_widget_set_tooltip_text(g->percent_bottom,
+                              _("how much to enlarge the canvas to the bottom "
+                              "as a percentage of the original image height"));
 
   g->color = dt_bauhaus_combobox_from_params(self, "color");
   gtk_widget_set_tooltip_text(g->color, _("select the color of the enlarged canvas"));

@@ -70,7 +70,7 @@ G_BEGIN_DECLS
 // version for current darktable cl kernels
 // this is reflected in the kernel directory and allows to
 // enforce a new kernel compilation cycle
-#define DT_OPENCL_KERNELS 3
+#define DT_OPENCL_KERNELS 5
 
 typedef enum dt_opencl_memory_t
 {
@@ -314,10 +314,6 @@ int dt_opencl_lock_device(const int pipetype);
 /** done with your command queue. */
 void dt_opencl_unlock_device(const int dev);
 
-/** calculates md5sums for a list of CL include files. */
-void dt_opencl_md5sum(const char **files,
-                      char **md5sums);
-
 /** inits a kernel. returns the index or -1 if fail. */
 int dt_opencl_create_kernel(const int program,
                             const char *name);
@@ -384,10 +380,17 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev,
 /** call kernel with arguments! */
 #define dt_opencl_enqueue_kernel_2d_args(dev, kernel, w, h, ...) \
     dt_opencl_enqueue_kernel_2d_args_internal(dev, kernel, w, h, __VA_ARGS__, CLWRAP(SIZE_MAX, NULL))
+
+#define dt_opencl_enqueue_kernel_1d_args(dev, kernel, x, ...) \
+    dt_opencl_enqueue_kernel_1d_args_internal(dev, kernel, x, __VA_ARGS__, CLWRAP(SIZE_MAX, NULL))
+
 int dt_opencl_enqueue_kernel_2d_args_internal(const int dev,
                                               const int kernel,
                                               const size_t w,
                                               const size_t h, ...);
+int dt_opencl_enqueue_kernel_1d_args_internal(const int dev,
+                                              const int kernel,
+                                              const size_t x, ...);
 
 /** launch kernel with specified dimension and defined local size! */
 int dt_opencl_enqueue_kernel_ndim_with_local(const int dev,
@@ -584,6 +587,8 @@ int dt_opencl_get_image_height(cl_mem mem);
 
 int dt_opencl_get_image_element_size(cl_mem mem);
 
+void *dt_opencl_duplicate_image(const int devid, const cl_mem src);
+
 void dt_opencl_dump_pipe_pfm(const char* mod,
                              const int devid,
                              cl_mem img,
@@ -600,7 +605,7 @@ void dt_opencl_memory_statistics(int devid,
 gboolean dt_opencl_image_fits_device(const int devid,
                                      const size_t width,
                                      const size_t height,
-                                     const unsigned bpp,
+                                     const uint32_t bpp,
                                      const float factor,
                                      const size_t overhead);
 /** get available memory for the device */
@@ -667,7 +672,7 @@ static inline void dt_opencl_init(dt_opencl_t *cl,
   cl->error_count = 0;
   dt_conf_set_bool("opencl", FALSE);
   dt_print(DT_DEBUG_OPENCL,
-           "[opencl_init] this version of darktable was built without opencl support\n");
+           "[opencl_init] this version of darktable was built without opencl support");
 }
 static inline void dt_opencl_cleanup(dt_opencl_t *cl)
 {
@@ -681,7 +686,7 @@ static inline gboolean dt_opencl_finish_sync_pipe(const int devid,
 {
   return FALSE;
 }
-static inline int dt_opencl_lock_device(const int dev)
+static inline int dt_opencl_lock_device(const int pipetype)
 {
   return -1;
 }

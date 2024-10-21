@@ -104,8 +104,7 @@ void *legacy_params(dt_imageio_module_storage_t *self,
     } dt_imageio_latex_v1_t;
 
     const dt_imageio_latex_v1_t *o = (dt_imageio_latex_v1_t *)old_params;
-    dt_imageio_latex_v2_t *n =
-      (dt_imageio_latex_v2_t *)malloc(sizeof(dt_imageio_latex_v2_t));
+    dt_imageio_latex_v2_t *n = malloc(sizeof(dt_imageio_latex_v2_t));
 
     g_strlcpy(n->filename, o->filename, sizeof(n->filename));
     g_strlcpy(n->title, o->title, sizeof(n->title));
@@ -242,8 +241,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   char filename[PATH_MAX] = { 0 };
   char dirname[PATH_MAX] = { 0 };
-  gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, dirname, sizeof(dirname), &from_cache);
+  dt_image_full_path(imgid, dirname, sizeof(dirname), NULL);
   // we're potentially called in parallel. have sequence number synchronized:
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
   {
@@ -285,7 +283,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     if(*c == '/') *c = '\0';
     if(g_mkdir_with_parents(dirname, 0755))
     {
-      dt_print(DT_DEBUG_ALWAYS, "[imageio_storage_latex] could not create directory: `%s'!\n", dirname);
+      dt_print(DT_DEBUG_ALWAYS, "[imageio_storage_latex] could not create directory: `%s'!", dirname);
       dt_control_log(_("could not create directory `%s'!"), dirname);
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
       return 1;
@@ -370,11 +368,13 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
 
   /* export image to file */
-  dt_imageio_export(imgid, filename, format, fdata, high_quality, upscale, TRUE, export_masks, icc_type, icc_filename,
+  dt_imageio_export(imgid, filename, format, fdata, high_quality, upscale,
+                    TRUE, export_masks, icc_type, icc_filename,
                     icc_intent, self, sdata, num, total, metadata);
 
-  dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'\n", filename);
-  dt_control_log(ngettext("%d/%d exported to `%s'", "%d/%d exported to `%s'", num),
+  dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'", filename);
+  dt_control_log(ngettext("%d/%d exported to `%s'", "%d/%d exported to `%s'",
+                          num),
                  num, total, filename);
   return 0;
 }

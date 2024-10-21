@@ -24,8 +24,16 @@
 
 G_BEGIN_DECLS
 
+/** localize a string if it starts with the magic tag "_l10n_"; return the original string */
+/** if it does not have the tag */
+const char *dt_util_localize_string(const char *s);
+
+/** localize a name with possibly multiple components separated by vertical bars */
+/** caller must g_free() return value */
+gchar *dt_util_localize_segmented_name(const char *s);
+
 /** dynamically allocate and concatenate string */
-gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...) __attribute__((format(printf, 2, 3)));
+void dt_util_str_cat(gchar **str, const gchar *format, ...) __attribute__((format(printf, 2, 3)));
 
 /** replace all occurrences of pattern by substitute. the returned value has to be freed after use. */
 gchar *dt_util_str_replace(const gchar *string, const gchar *pattern, const gchar *substitute);

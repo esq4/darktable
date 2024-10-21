@@ -56,8 +56,7 @@ static void _circle_get_distance(const float x,
 
   if(!gui) return;
 
-  dt_masks_form_gui_points_t *gpt =
-    (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  dt_masks_form_gui_points_t *gpt = g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
   // we first check if we are inside the source form
@@ -166,7 +165,7 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module,
     }
     else
     {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+      dt_masks_point_circle_t *circle = form->points->data;
       // resize don't care where the mouse is inside a shape
       if(dt_modifier_is(state, GDK_SHIFT_MASK))
       {
@@ -220,8 +219,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module,
 
   if(!gui->creation)
   {
-    dt_masks_form_gui_points_t *gpt =
-      (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+    dt_masks_form_gui_points_t *gpt = g_list_nth_data(gui->points, index);
     if(!gpt) return 0;
 
     if(gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -277,8 +275,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module,
   else
   {
     // we create the circle
-    dt_masks_point_circle_t *circle =
-      (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
+    dt_masks_point_circle_t *circle = (malloc(sizeof(dt_masks_point_circle_t)));
 
     // we change the center value
     float pts[2] = { pzx * wd, pzy * ht };
@@ -329,7 +326,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module,
       int pos3 = 0, pos2 = -1;
       for(GList *fs = grp->points; fs; fs = g_list_next(fs))
       {
-        dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+        dt_masks_point_group_t *pt = fs->data;
         if(pt->formid == form->formid)
         {
           pos2 = pos3;
@@ -363,7 +360,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module,
     {
       if(crea_module)
       {
-        dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)crea_module->blend_data;
+        dt_iop_gui_blend_data_t *bd = crea_module->blend_data;
         for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
           if(bd->masks_type[n] == form->type)
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), TRUE);
@@ -417,7 +414,7 @@ static int _circle_events_button_released(struct dt_iop_module_t *module,
           forms;
           forms = g_list_next(forms))
       {
-        dt_masks_point_group_t *gpt = (dt_masks_point_group_t *)forms->data;
+        dt_masks_point_group_t *gpt = forms->data;
         if(gpt->formid == form->formid)
         {
           darktable.develop->form_visible->points
@@ -436,7 +433,7 @@ static int _circle_events_button_released(struct dt_iop_module_t *module,
   if(gui->form_dragging)
   {
     // we get the circle
-    dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+    dt_masks_point_circle_t *circle = form->points->data;
 
     // we end the form dragging
     gui->form_dragging = FALSE;
@@ -531,7 +528,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module,
 
     if(gui->form_dragging)
     {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+      dt_masks_point_circle_t *circle = form->points->data;
       circle->center[0] = pts[0] / iwidth;
       circle->center[1] = pts[1] / iheight;
     }
@@ -551,7 +548,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module,
     const float max_mask_size =
       form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
 
-    dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+    dt_masks_point_circle_t *circle = form->points->data;
 
     const float s = dt_masks_drag_factor(gui, index, gui->point_dragging, FALSE);
 
@@ -567,7 +564,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module,
     const float max_mask_border =
       form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
 
-    dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+    dt_masks_point_circle_t *circle = form->points->data;
 
     const float s = dt_masks_drag_factor(gui, index, gui->point_border_dragging, TRUE);
 
@@ -618,8 +615,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module,
 
     if(gui->form_selected)
     {
-      dt_masks_form_gui_points_t *gpt =
-        (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+      dt_masks_form_gui_points_t *gpt = g_list_nth_data(gui->points, index);
 
       const float as2 = sqf(as);
       const float dist_b = sqf(x - gpt->border[2]) + sqf(y - gpt->border[3]);
@@ -804,8 +800,7 @@ static void _circle_events_post_expose(cairo_t *cr,
 {
   (void)num_points; // unused arg, keep compiler from complaining
 
-  dt_masks_form_gui_points_t *gpt =
-    (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  dt_masks_form_gui_points_t *gpt = g_list_nth_data(gui->points, index);
 
   float wd, ht, iwidth, iheight;
   dt_masks_get_image_size(&wd, &ht, &iwidth, &iheight);
@@ -970,7 +965,7 @@ static int _circle_get_points_border(dt_develop_t *dev,
                                      const int source,
                                      const dt_iop_module_t *module)
 {
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_point_circle_t *circle = form->points->data;
 
   const float x = circle->center[0];
   const float y = circle->center[1];
@@ -1013,7 +1008,7 @@ static int _circle_get_source_area(dt_iop_module_t *module,
                                    int *posy)
 {
   // we get the circle values
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_point_circle_t *circle = form->points->data;
   const float wd = piece->pipe->iwidth;
   const float ht = piece->pipe->iheight;
 
@@ -1049,7 +1044,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module,
                             int *posy)
 {
   // we get the circle values
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_point_circle_t *circle = form->points->data;
   float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -1089,12 +1084,11 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   if(!_circle_get_area(module, piece, form, width, height, posx, posy)) return 0;
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle area took %0.04f sec\n",
+           "[masks %s] circle area took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
 
   // we get the circle values
-  dt_masks_point_circle_t *const restrict circle =
-    (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_point_circle_t *const restrict circle = form->points->data;
 
   // we create a buffer of points with all points in the area
   const int w = *width, h = *height;
@@ -1117,7 +1111,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
     }
   }
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle draw took %0.04f sec\n", form->name, dt_get_lap_time(&start2));
+           "[masks %s] circle draw took %0.04f sec", form->name, dt_get_lap_time(&start2));
 
   // we back transform all this points
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order,
@@ -1129,7 +1123,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   }
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle transform took %0.04f sec\n", form->name,
+           "[masks %s] circle transform took %0.04f sec", form->name,
            dt_get_lap_time(&start2));
 
   // we allocate the buffer
@@ -1167,7 +1161,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   dt_free_align(points);
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle fill took %0.04f sec\n",
+           "[masks %s] circle fill took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
 
   return 1;
@@ -1184,7 +1178,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   double start2 = start1;
 
   // we get the circle parameters
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_point_circle_t *circle = form->points->data;
   const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
   const float centerx = circle->center[0] * wi;
   const float centery = circle->center[1] * hi;
@@ -1211,7 +1205,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   memset(buffer, 0, sizeof(float) * w * h);
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle init took %0.04f sec\n",
+           "[masks %s] circle init took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
 
   // we look at the outer circle of the shape - no effects outside of
@@ -1260,7 +1254,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   }
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle outline took %0.04f sec\n",
+           "[masks %s] circle outline took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
 
   // we get the min/max values ...
@@ -1298,7 +1292,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   dt_free_align(circ);
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle bounding box took %0.04f sec\n",
+           "[masks %s] circle bounding box took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
 
   // check if there is anything to do at all; only if width and height
@@ -1321,7 +1315,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
     }
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle grid took %0.04f sec\n", form->name, dt_get_lap_time(&start2));
+           "[masks %s] circle grid took %0.04f sec", form->name, dt_get_lap_time(&start2));
 
   // we back transform all these points to the input image coordinates
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order,
@@ -1333,7 +1327,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   }
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle transform took %0.04f sec\n", form->name,
+           "[masks %s] circle transform took %0.04f sec", form->name,
            dt_get_lap_time(&start2));
 
   // we calculate the mask values at the transformed points;
@@ -1355,7 +1349,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
     }
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle draw took %0.04f sec\n", form->name,
+           "[masks %s] circle draw took %0.04f sec", form->name,
            dt_get_lap_time(&start2));
 
   // we fill the pre-initialized output buffer by interpolation;
@@ -1384,10 +1378,10 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   dt_free_align(points);
 
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle fill took %0.04f sec\n",
+           "[masks %s] circle fill took %0.04f sec",
            form->name, dt_get_lap_time(&start2));
   dt_print(DT_DEBUG_MASKS | DT_DEBUG_PERF,
-           "[masks %s] circle total render took %0.04f sec\n", form->name,
+           "[masks %s] circle total render took %0.04f sec", form->name,
            dt_get_lap_time(&start1));
 
   return 1;
@@ -1436,9 +1430,8 @@ static void _circle_duplicate_points(dt_develop_t *dev,
   (void)dev; // unused arg, keep compiler from complaining
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {
-    dt_masks_point_circle_t *pt = (dt_masks_point_circle_t *)pts->data;
-    dt_masks_point_circle_t *npt =
-      (dt_masks_point_circle_t *)malloc(sizeof(dt_masks_point_circle_t));
+    dt_masks_point_circle_t *pt = pts->data;
+    dt_masks_point_circle_t *npt = malloc(sizeof(dt_masks_point_circle_t));
     memcpy(npt, pt, sizeof(dt_masks_point_circle_t));
     dest->points = g_list_append(dest->points, npt);
   }

@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2022 darktable developers.
+    Copyright (C) 2009-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,10 +46,6 @@ typedef struct dt_gui_widgets_t
   GtkWidget *right_border;
   GtkWidget *bottom_border;
   GtkWidget *top_border;
-
-  /* left panel */
-  GtkGrid *panel_left; // panel grid 3 rows, top,center,bottom and file on center
-  GtkGrid *panel_right;
 
   /* resize of left/right panels */
   gboolean panel_handle_dragging;
@@ -117,13 +113,13 @@ typedef struct dt_gui_gtk_t
   dt_gui_scrollbars_t scrollbars;
 
   cairo_surface_t *surface;
-  GtkMenu *presets_popup_menu;
+
   char *last_preset;
 
   int32_t reset;
   GdkRGBA colors[DT_GUI_COLOR_LAST];
 
-  int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip
+  int32_t hide_tooltips;
 
   gboolean grouping;
   int32_t expanded_group_id;
@@ -155,6 +151,7 @@ typedef struct _gui_collapsible_section_t
   gchar *confname;      // configuration name for the toggle status
   GtkWidget *toggle;    // toggle button
   GtkWidget *expander;  // the expanded
+  GtkWidget *label;	// the label containing the section's title text
   GtkBox *container;    // the container for all widgets into the section
   struct dt_action_t *module; // the lib or iop module that contains this section
 } dt_gui_collapsible_section_t;
@@ -200,6 +197,7 @@ void dt_gui_add_class(GtkWidget *widget, const gchar *class_name);
 void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
 
 void dt_open_url(const char *url);
+int dt_gui_theme_init(dt_gui_gtk_t *gui);
 int dt_gui_gtk_init(dt_gui_gtk_t *gui);
 void dt_gui_gtk_run(dt_gui_gtk_t *gui);
 void dt_gui_gtk_cleanup(dt_gui_gtk_t *gui);
@@ -324,6 +322,9 @@ typedef enum dt_ui_border_t
   DT_UI_BORDER_SIZE
 } dt_ui_border_t;
 
+/** \brief swap the container in the left and right panels */
+void dt_ui_container_swap_left_right(struct dt_ui_t *ui,
+                                     gboolean swap);
 /** \brief add's a widget to a defined container */
 void dt_ui_container_add_widget(struct dt_ui_t *ui,
                                 const dt_ui_container_t c,
@@ -410,6 +411,14 @@ static inline GtkWidget *dt_ui_label_new(const gchar *str)
   return label;
 };
 
+static inline GtkWidget *dt_ui_entry_new(gint width_chars)
+{
+  GtkWidget *entry = gtk_entry_new();
+  gtk_drag_dest_unset(entry);
+  gtk_entry_set_width_chars(GTK_ENTRY(entry), width_chars);
+  return entry;
+};
+
 extern const struct dt_action_def_t dt_action_def_tabs_all_rgb;
 extern const struct dt_action_def_t dt_action_def_tabs_rgb;
 extern const struct dt_action_def_t dt_action_def_tabs_none;
@@ -449,7 +458,8 @@ void dt_gui_dialog_add_help(GtkDialog *dialog,
 void dt_gui_show_help(GtkWidget *widget);
 
 // load a CSS theme
-void dt_gui_load_theme(const char *theme);
+void dt_gui_load_theme(const char *theme); // read them and add user tweaks
+void dt_gui_apply_theme();                 // apply the loaded theme to darktable's windows
 
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
@@ -514,6 +524,9 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
                                     const char *label,
                                     GtkBox *parent,
                                     struct dt_action_t *module);
+// update the collapsible section's label text
+void dt_gui_collapsible_section_set_label(dt_gui_collapsible_section_t *cs,
+                                          const char *label);
 // routine to be called from gui_update
 void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs);
 
@@ -523,6 +536,16 @@ void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs);
 // is delay between first and second click/press longer than double-click time?
 gboolean dt_gui_long_click(const int second,
                            const int first);
+
+// control whether the mouse pointer displays as a "busy" cursor, e.g. watch or timer
+// the calls may be nested, but must be matched
+void dt_gui_cursor_set_busy();
+void dt_gui_cursor_clear_busy();
+
+// run all pending Gtk/GDK events
+// should be called after making Gtk calls if we won't resume the main event loop for a while
+// (i.e. the current function will do a lot of work before returning)
+void dt_gui_process_events();
 
 #ifdef __cplusplus
 } // extern "C"

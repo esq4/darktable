@@ -90,7 +90,7 @@ static int history_delete(lua_State *L)
   dt_lua_image_t imgid = NO_IMGID;
   luaA_to(L, dt_lua_image_t, &imgid, -1);
   dt_history_delete_on_image(imgid);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_TAG_CHANGED);
   return 0;
 }
 
@@ -121,7 +121,7 @@ static int generate_cache(lua_State *L)
       {
         if(g_mkdir_with_parents(dirname, 0750))
         {
-          dt_print(DT_DEBUG_ALWAYS, "[lua] could not create directory '%s'!\n", dirname);
+          dt_print(DT_DEBUG_ALWAYS, "[lua] could not create directory '%s'!", dirname);
           return 1;
         }
       }
@@ -424,8 +424,7 @@ static int image_tostring(lua_State *L)
 {
   const dt_image_t *my_image = checkreadimage(L, -1);
   char image_name[PATH_MAX] = { 0 };
-  gboolean from_cache = FALSE;
-  dt_image_full_path(my_image->id, image_name, sizeof(image_name), &from_cache);
+  dt_image_full_path(my_image->id, image_name, sizeof(image_name), NULL);
   dt_image_path_append_version(my_image->id, image_name, sizeof(image_name));
   lua_pushstring(L, image_name);
   releasereadimage(L, my_image);
@@ -526,6 +525,10 @@ int dt_lua_init_image(lua_State *L)
   luaA_struct_member(L, dt_image_t, exif_maker, char_64);
   luaA_struct_member(L, dt_image_t, exif_model, char_64);
   luaA_struct_member(L, dt_image_t, exif_lens, char_128);
+  luaA_struct_member(L, dt_image_t, exif_whitebalance, char_64);
+  luaA_struct_member(L, dt_image_t, exif_flash, char_64);
+  luaA_struct_member(L, dt_image_t, exif_exposure_program, char_64);
+  luaA_struct_member(L, dt_image_t, exif_metering_mode, char_64);
   luaA_struct_member(L, dt_image_t, filename, const char_filename_length);
   luaA_struct_member(L, dt_image_t, width, const int32_t);
   luaA_struct_member(L, dt_image_t, height, const int32_t);

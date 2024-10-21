@@ -1,6 +1,6 @@
 /*
    This file is part of darktable,
-   Copyright (C) 2013-2021 darktable developers.
+   Copyright (C) 2013-2024 darktable developers.
 
    darktable is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -55,7 +55,7 @@ int dt_lua_duplicate_image_with_history(lua_State *L)
   }
   else
   {
-    dt_history_copy_and_paste_on_image(imgid, newid, FALSE, NULL, TRUE, TRUE);
+    dt_history_copy_and_paste_on_image(imgid, newid, FALSE, NULL, TRUE, TRUE, TRUE);
     luaA_push(L, dt_lua_image_t, &newid);
     return 1;
   }
@@ -180,7 +180,7 @@ static int import_images(lua_State *L)
     // force refresh of thumbtable view
     dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                g_list_prepend(NULL, GINT_TO_POINTER(result)));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_CHANGED);
     dt_control_queue_redraw_center();
 
   }
@@ -326,8 +326,7 @@ int dt_lua_init_database(lua_State *L)
   lua_pushcfunction(L, dt_lua_event_multiinstance_destroy);
   lua_pushcfunction(L, dt_lua_event_multiinstance_trigger);
   dt_lua_event_add(L, "post-import-film");
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILMROLLS_IMPORTED, G_CALLBACK(on_film_imported),
-                            NULL);
+  DT_CONTROL_SIGNAL_CONNECT(DT_SIGNAL_FILMROLLS_IMPORTED, on_film_imported, NULL);
 
   lua_pushcfunction(L, dt_lua_event_multiinstance_register);
   lua_pushcfunction(L, dt_lua_event_multiinstance_destroy);

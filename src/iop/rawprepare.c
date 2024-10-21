@@ -119,7 +119,7 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
                                             dt_dev_pixelpipe_t *pipe,
                                             dt_dev_pixelpipe_iop_t *piece)
 {
-  return IOP_CS_RAW;
+  return (pipe && !dt_image_is_raw(&pipe->image)) ? IOP_CS_RGB : IOP_CS_RAW;
 }
 
 int legacy_params(dt_iop_module_t *self,
@@ -153,8 +153,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_rawprepare_params_v1_t;
 
     const dt_iop_rawprepare_params_v1_t *o = (dt_iop_rawprepare_params_v1_t *)old_params;
-    dt_iop_rawprepare_params_v2_t *n =
-      (dt_iop_rawprepare_params_v2_t *)malloc(sizeof(dt_iop_rawprepare_params_v2_t));
+    dt_iop_rawprepare_params_v2_t *n = malloc(sizeof(dt_iop_rawprepare_params_v2_t));
     memcpy(n, o, sizeof *o);
     n->flat_field = FLAT_FIELD_OFF;
 
@@ -167,7 +166,7 @@ int legacy_params(dt_iop_module_t *self,
   return 1;
 }
 
-const char **description(struct dt_iop_module_t *self)
+const char **description(dt_iop_module_t *self)
 {
   return dt_iop_set_description(self, _("sets technical specificities of the raw sensor.\n"
                                         "touch with great care!"),
@@ -209,7 +208,7 @@ gboolean distort_transform(dt_iop_module_t *self,
                            float *const restrict points,
                            size_t points_count)
 {
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if(d->left == 0 && d->top == 0) return TRUE;
@@ -234,7 +233,7 @@ gboolean distort_backtransform(dt_iop_module_t *self,
                                float *const restrict points,
                                size_t points_count)
 {
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if(d->left == 0 && d->top == 0) return TRUE;
@@ -255,8 +254,8 @@ gboolean distort_backtransform(dt_iop_module_t *self,
 }
 
 void distort_mask(
-        struct dt_iop_module_t *self,
-        struct dt_dev_pixelpipe_iop_t *piece,
+        dt_iop_module_t *self,
+        dt_dev_pixelpipe_iop_t *piece,
         const float *const in,
         float *const out,
         const dt_iop_roi_t *const roi_in,
@@ -273,7 +272,7 @@ void modify_roi_out(
         const dt_iop_roi_t *const roi_in)
 {
   *roi_out = *roi_in;
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   roi_out->x = roi_out->y = 0;
 
@@ -292,7 +291,7 @@ void modify_roi_in(
         dt_iop_roi_t *roi_in)
 {
   *roi_in = *roi_out;
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   const int32_t x = d->left + d->right;
   const int32_t y = d->top + d->bottom;
@@ -310,7 +309,7 @@ void output_format(
 {
   default_output_format(self, pipe, piece, dsc);
 
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   dsc->rawprepare.raw_black_level = d->rawprepare.raw_black_level;
   dsc->rawprepare.raw_white_point = d->rawprepare.raw_white_point;
@@ -339,14 +338,14 @@ static int _BL(const dt_iop_roi_t *const roi_out,
 }
 
 void process(
-        struct dt_iop_module_t *self,
+        dt_iop_module_t *self,
         dt_dev_pixelpipe_iop_t *piece,
         const void *const ivoid,
         void *const ovoid,
         const dt_iop_roi_t *const roi_in,
         const dt_iop_roi_t *const roi_out)
 {
-  const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
+  const dt_iop_rawprepare_data_t *const d = piece->data;
 
   const int csx = _compute_proper_crop(piece, roi_in, d->left);
   const int csy = _compute_proper_crop(piece, roi_in, d->top);
@@ -478,8 +477,8 @@ int process_cl(
         const dt_iop_roi_t *const roi_in,
         const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
-  dt_iop_rawprepare_global_data_t *gd = (dt_iop_rawprepare_global_data_t *)self->global_data;
+  dt_iop_rawprepare_data_t *d = piece->data;
+  dt_iop_rawprepare_global_data_t *gd = self->global_data;
 
   const int devid = piece->pipe->devid;
   cl_mem dev_sub = NULL;
@@ -607,7 +606,7 @@ static gboolean _image_set_rawcrops(
         const int top,
         const int bottom)
 {
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *img = &self->dev->image_storage;
 
   const gboolean cropvalid = (left >= 0) && (right >= 0) && (top >= 0) && (bottom >= 0)
     && (left+right < img->width / 2) && (top + bottom < img->height /2);
@@ -616,7 +615,6 @@ static gboolean _image_set_rawcrops(
       (img->p_width == img->width - left - right)
    && (img->p_height == img->height - top - bottom);
 
-  dt_image_cache_read_release(darktable.image_cache, img);
   if(testdim && cropvalid) return FALSE;
 
   if(!cropvalid)
@@ -633,10 +631,12 @@ static gboolean _image_set_rawcrops(
   else
     dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
 
-  img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  img->p_width = img->width - (cropvalid ? left + right : 0);
-  img->p_height = img->height - (cropvalid ? top + bottom : 0);
-  dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+  // we update p_width & height both in the image_storage for fast access within the pipeline
+  // and the database so we can access that also via dt_image_cache_get()
+  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  image->p_width = img->p_width = img->width - (cropvalid ? left + right : 0);
+  image->p_height = img->p_height = img->height - (cropvalid ? top + bottom : 0);
+  dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
 
   return TRUE;
 }
@@ -656,7 +656,7 @@ static gboolean _check_gain_maps(dt_iop_module_t *self, dt_dng_gain_map_t **gain
   {
     // check that each GainMap applies to one filter of a Bayer image,
     // covers the entire image, and is not a 1x1 no-op
-    dt_dng_gain_map_t *g = (dt_dng_gain_map_t *)g_list_nth_data(image->dng_gain_maps, i);
+    dt_dng_gain_map_t *g = g_list_nth_data(image->dng_gain_maps, i);
     if(g == NULL
        || g->plane != 0
        || g->planes != 1
@@ -704,7 +704,7 @@ void commit_params(
         dt_dev_pixelpipe_iop_t *piece)
 {
   const dt_iop_rawprepare_params_t *const p = (dt_iop_rawprepare_params_t *)params;
-  dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  dt_iop_rawprepare_data_t *d = piece->data;
 
   d->left = p->left;
   d->top = p->top;
@@ -749,8 +749,8 @@ void commit_params(
   else
     d->apply_gainmaps = FALSE;
 
-   if(_image_set_rawcrops(self, pipe->image.id, d->left, d->right, d->top, d->bottom))
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
+  if(_image_set_rawcrops(self, pipe->image.id, d->left, d->right, d->top, d->bottom))
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_METADATA_UPDATE);
 
   if(!(dt_image_is_rawprepare_supported(&piece->pipe->image))
      || _image_is_normalized(&piece->pipe->image))
@@ -812,7 +812,7 @@ void init_global(dt_iop_module_so_t *self)
 
 void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_rawprepare_global_data_t *gd = (dt_iop_rawprepare_global_data_t *)self->data;
+  dt_iop_rawprepare_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_rawprepare_4f);
   dt_opencl_free_kernel(gd->kernel_rawprepare_1f_unnormalized);
   dt_opencl_free_kernel(gd->kernel_rawprepare_1f);
@@ -822,8 +822,8 @@ void cleanup_global(dt_iop_module_so_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
-  dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
+  dt_iop_rawprepare_gui_data_t *g = self->gui_data;
+  dt_iop_rawprepare_params_t *p = self->params;
 
   const gboolean is_monochrome =
     (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;
@@ -862,8 +862,8 @@ void gui_update(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
-  dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
+  dt_iop_rawprepare_gui_data_t *g = self->gui_data;
+  dt_iop_rawprepare_params_t *p = self->params;
 
   const gboolean is_monochrome =
     (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;

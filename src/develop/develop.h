@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2023 darktable developers.
+    Copyright (C) 2009-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -490,6 +490,8 @@ void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group);
 uint32_t dt_dev_modulegroups_get(dt_develop_t *dev);
 /** get the activated modulegroup */
 uint32_t dt_dev_modulegroups_get_activated(dt_develop_t *dev);
+/** tests for a proper modulgroup being activated */
+gboolean dt_dev_modulegroups_test_activated(dt_develop_t *dev);
 /** test if iop group flags matches modulegroup */
 gboolean dt_dev_modulegroups_test(dt_develop_t *dev,
                                   const uint32_t group,
@@ -503,9 +505,6 @@ gboolean dt_dev_modulegroups_is_visible(dt_develop_t *dev,
 int dt_dev_modulegroups_basics_module_toggle(dt_develop_t *dev,
                                              GtkWidget *widget,
                                              const gboolean doit);
-
-/** update gliding average for pixelpipe delay */
-void dt_dev_average_delay_update(const dt_times_t *start, uint32_t *average_delay);
 
 /*
  * masks plugin hooks
@@ -555,27 +554,9 @@ gboolean dt_dev_distort_transform_plus
    const dt_dev_transform_direction_t transf_direction,
    float *points,
    const size_t points_count);
-/** same fct, but can only be called from a distort_transform function
- * called by dt_dev_distort_transform_plus */
-gboolean dt_dev_distort_transform_locked
-  (dt_develop_t *dev,
-   struct dt_dev_pixelpipe_t *pipe,
-   const double iop_order,
-   const dt_dev_transform_direction_t transf_direction,
-   float *points,
-   const size_t points_count);
 /** same fct as dt_dev_distort_backtransform, but we can specify iop
  * with priority between pmin and pmax */
 gboolean dt_dev_distort_backtransform_plus
-  (dt_develop_t *dev,
-   struct dt_dev_pixelpipe_t *pipe,
-   const double iop_order,
-   const dt_dev_transform_direction_t transf_direction,
-   float *points,
-   const size_t points_count);
-/** same fct, but can only be called from a distort_backtransform
- * function called by dt_dev_distort_backtransform_plus */
-gboolean dt_dev_distort_backtransform_locked
   (dt_develop_t *dev,
    struct dt_dev_pixelpipe_t *pipe,
    const double iop_order,
@@ -590,21 +571,13 @@ struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev,
 /*
  * hash functions
  */
-/** generate hash value out of all module settings of pixelpipe */
-dt_hash_t dt_dev_hash(dt_develop_t *dev);
-/** same function, but we can specify iop with priority between pmin and pmax */
+/** generate hash value out of all module settings of pixelpipe.
+    We specify iop with priority either up to iop_order or above iop_order depending on
+    transfer direction */
 dt_hash_t dt_dev_hash_plus(dt_develop_t *dev,
                           struct dt_dev_pixelpipe_t *pipe,
                           const double iop_order,
                           const dt_dev_transform_direction_t transf_direction);
-/** wait until hash value found in hash matches hash value defined by
- * dev/pipe/pmin/pmax with timeout */
-gboolean dt_dev_wait_hash(dt_develop_t *dev,
-                     struct dt_dev_pixelpipe_t *pipe,
-                     const double iop_order,
-                     const dt_dev_transform_direction_t transf_direction,
-                     dt_pthread_mutex_t *lock,
-                     const volatile dt_hash_t *const hash);
 /** synchronize pixelpipe by means hash values by waiting with timeout
  * and potential reprocessing */
 gboolean dt_dev_sync_pixelpipe_hash(dt_develop_t *dev,
@@ -613,9 +586,8 @@ gboolean dt_dev_sync_pixelpipe_hash(dt_develop_t *dev,
                                const dt_dev_transform_direction_t transf_direction,
                                dt_pthread_mutex_t *lock,
                                const volatile dt_hash_t *const hash);
-/** generate hash value out of module settings of all distorting modules of pixelpipe */
-dt_hash_t dt_dev_hash_distort(dt_develop_t *dev);
-/** same function, but we can specify iop with priority between pmin and pmax */
+/** generate hash value out of module settings of all distorting modules of pixelpipe
+    We can specify iop with priority between pmin and pmax */
 dt_hash_t dt_dev_hash_distort_plus(dt_develop_t *dev,
                                   struct dt_dev_pixelpipe_t *pipe,
                                   const double iop_order,
@@ -654,7 +626,7 @@ gboolean dt_dev_equal_chroma(const float *f, const double *d);
 gboolean dt_dev_is_D65_chroma(const dt_develop_t *dev);
 void dt_dev_reset_chroma(dt_develop_t *dev);
 void dt_dev_init_chroma(dt_develop_t *dev);
-
+void dt_dev_clear_chroma_troubles(dt_develop_t *dev);
 static inline struct dt_iop_module_t *dt_dev_gui_module(void)
 {
   return darktable.develop ? darktable.develop->gui_module : NULL;

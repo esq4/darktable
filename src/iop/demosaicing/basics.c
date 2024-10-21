@@ -250,7 +250,7 @@ static int color_smoothing_cl(
         const dt_iop_roi_t *const roi_out,
         const int passes)
 {
-  dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
+  dt_iop_demosaic_global_data_t *gd = self->global_data;
 
   const int devid = piece->pipe->devid;
   const int width = roi_out->width;
@@ -267,7 +267,10 @@ static int color_smoothing_cl(
                                   .sizex = 1 << 8, .sizey = 1 << 8 };
 
   if(!dt_opencl_local_buffer_opt(devid, gd->kernel_color_smoothing, &locopt))
+  {
+    err = CL_INVALID_WORK_DIMENSION;
     goto error;
+  }
 
   // two buffer references for our ping-pong
   cl_mem dev_t1 = dev_out;
@@ -301,7 +304,7 @@ static int color_smoothing_cl(
 error:
   dt_opencl_release_mem_object(dev_tmp);
   if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic_color_smoothing] problem '%s'\n", cl_errstr(err));
+    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic_color_smoothing] problem '%s'", cl_errstr(err));
   return err;
 }
 
@@ -312,8 +315,8 @@ static int green_equilibration_cl(
         cl_mem dev_out,
         const dt_iop_roi_t *const roi_in)
 {
-  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
-  dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
+  dt_iop_demosaic_data_t *data = piece->data;
+  dt_iop_demosaic_global_data_t *gd = self->global_data;
 
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
@@ -476,7 +479,7 @@ error:
   dt_opencl_release_mem_object(dev_r);
   dt_free_align(sumsum);
   if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic_green_equilibration] problem  '%s'\n", cl_errstr(err));
+    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic_green_equilibration] problem  '%s'", cl_errstr(err));
   return err;
 }
 
@@ -489,8 +492,8 @@ static int process_default_cl(
         const dt_iop_roi_t *const roi_out,
         const int demosaicing_method)
 {
-  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
-  dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
+  dt_iop_demosaic_data_t *data = piece->data;
+  dt_iop_demosaic_global_data_t *gd = self->global_data;
   const dt_image_t *img = &self->dev->image_storage;
 
   const int devid = piece->pipe->devid;
@@ -642,12 +645,14 @@ static int process_default_cl(
     }
 
     if(piece->pipe->want_detail_mask)
+    {
       err = dt_dev_write_scharr_mask_cl(piece, dev_aux, roi_in, TRUE);
-    if(err != CL_SUCCESS) goto error;
+      if(err != CL_SUCCESS) goto error;
+    }
 
     if(scaled)
     {
-      dt_print_pipe(DT_DEBUG_PIPE, "clip_and_zoom_roi", piece->pipe, self, piece->pipe->devid, roi_in, roi_out, "\n");
+      dt_print_pipe(DT_DEBUG_PIPE, "clip_and_zoom_roi", piece->pipe, self, piece->pipe->devid, roi_in, roi_out);
       // scale aux buffer to output buffer
       err = dt_iop_clip_and_zoom_roi_cl(devid, dev_out, dev_aux, roi_out, roi_in);
     }
@@ -682,7 +687,7 @@ error:
     err = color_smoothing_cl(self, piece, dev_out, dev_out, roi_out, data->color_smoothing);
 
   if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic] basic kernel problem '%s'\n", cl_errstr(err));
+    dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic] basic kernel problem '%s'", cl_errstr(err));
   return err;
 }
 

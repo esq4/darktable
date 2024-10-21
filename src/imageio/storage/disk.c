@@ -159,8 +159,7 @@ void *legacy_params(dt_imageio_module_storage_t *self,
   if(old_version == 3)
   {
     const dt_imageio_disk_v3_t *o = (dt_imageio_disk_v3_t *)old_params;
-    dt_imageio_disk_v4_t *n =
-      (dt_imageio_disk_v4_t *)malloc(sizeof(dt_imageio_disk_v4_t));
+    dt_imageio_disk_v4_t *n = malloc(sizeof(dt_imageio_disk_v4_t));
 
     g_strlcpy(n->filename, o->filename, sizeof(n->filename));
     switch(o->onsave_action)
@@ -329,8 +328,7 @@ int store(dt_imageio_module_storage_t *self,
   char input_dir[PATH_MAX] = { 0 };
   char pattern[DT_MAX_PATH_FOR_PARAMS];
   g_strlcpy(pattern, d->filename, sizeof(pattern));
-  gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, input_dir, sizeof(input_dir), &from_cache);
+  dt_image_full_path(imgid, input_dir, sizeof(input_dir), NULL);
   // set variable values to expand them afterwards in darktable variables
   dt_variables_set_max_width_height(d->vp, fdata->max_width, fdata->max_height);
   dt_variables_set_upscale(d->vp, upscale);
@@ -382,7 +380,7 @@ try_again:
     {
       // output directory could not be created
       dt_print(DT_DEBUG_ALWAYS,
-               "[imageio_storage_disk] could not create directory: `%s'!\n",
+               "[imageio_storage_disk] could not create directory: `%s'!",
                output_dir);
       dt_control_log(_("could not create directory `%s'!"), output_dir);
       fail = TRUE;
@@ -393,7 +391,7 @@ try_again:
     {
       // output directory is not writeable
       dt_print(DT_DEBUG_ALWAYS,
-               "[imageio_storage_disk] could not write to directory: `%s'!\n",
+               "[imageio_storage_disk] could not write to directory: `%s'!",
                output_dir);
       dt_control_log(_("could not write to directory `%s'!"), output_dir);
       fail = TRUE;
@@ -431,7 +429,7 @@ try_again:
       {
         // file exists, skip
         dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-        dt_print(DT_DEBUG_ALWAYS, "[export_job] skipping `%s'\n", filename);
+        dt_print(DT_DEBUG_ALWAYS, "[export_job] skipping `%s'", filename);
         dt_control_log(ngettext("%d/%d skipping `%s'", "%d/%d skipping `%s'", num),
                        num, total, filename);
         return 0;
@@ -441,23 +439,27 @@ try_again:
     // conflict handling option: overwrite if newer
     if(!fail && d->onsave_action == DT_EXPORT_ONCONFLICT_OVERWRITE_IF_CHANGED)
     {
-      // get the image data
-      const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-      GTimeSpan change_timestamp = img->change_timestamp;
-      GTimeSpan export_timestamp = img->export_timestamp;
-      dt_image_cache_read_release(darktable.image_cache, img);
-
-      // check if the export timestamp in the database is more recent than the change
-      // date, if yes skip the image
-      if(export_timestamp > change_timestamp)
+      // check if the file exists. If not, it will be exported again, regardless
+      // of the changes.
+      if(g_file_test(filename, G_FILE_TEST_EXISTS))
       {
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-        dt_print(DT_DEBUG_ALWAYS,
-                 "[export_job] skipping (not modified since export) `%s'\n", filename);
-        dt_control_log(ngettext("%d/%d skipping (not modified since export) `%s'",
-                                "%d/%d skipping (not modified since export) `%s'", num),
-                       num, total, filename);
-        return 0;
+        // get the image data
+        const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+        GTimeSpan change_timestamp = img->change_timestamp;
+        GTimeSpan export_timestamp = img->export_timestamp;
+        dt_image_cache_read_release(darktable.image_cache, img);
+
+        // check if the export timestamp in the database is more recent than the change
+        // date, if yes skip the image
+        if(export_timestamp > change_timestamp)
+        {
+          dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+          dt_print(DT_DEBUG_ALWAYS, "[export_job] skipping (not modified since export) `%s'", filename);
+          dt_control_log(ngettext("%d/%d skipping (not modified since export) `%s'",
+                                  "%d/%d skipping (not modified since export) `%s'", num),
+                         num, total, filename);
+          return 0;
+        }
       }
     }
   } // end of critical block
@@ -471,13 +473,13 @@ try_again:
                        num, total, metadata) != 0)
   {
     dt_print(DT_DEBUG_ALWAYS,
-             "[imageio_storage_disk] could not export to file: `%s'!\n",
+             "[imageio_storage_disk] could not export to file: `%s'!",
              filename);
     dt_control_log(_("could not export to file `%s'!"), filename);
     return 1;
   }
 
-  dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'\n", filename);
+  dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'", filename);
   dt_control_log(ngettext("%d/%d exported to `%s'", "%d/%d exported to `%s'", num),
                  num, total, filename);
   return 0;

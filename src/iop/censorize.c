@@ -47,16 +47,19 @@ DT_MODULE_INTROSPECTION(1, dt_iop_censorize_params_t)
 
 typedef struct dt_iop_censorize_params_t
 {
-  float radius_1;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0  $DESCRIPTION: "input blur radius"
+  float radius_1;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0 $DESCRIPTION: "input blur radius"
   float pixelate;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0 $DESCRIPTION: "pixelization radius"
-  float radius_2;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0  $DESCRIPTION: "output blur radius"
-  float noise;                 // $MIN: 0.0 $MAX: 1.0   $DEFAULT: 0.0   $DESCRIPTION: "noise level"
+  float radius_2;              // $MIN: 0.0 $MAX: 500.0 $DEFAULT: 0.0 $DESCRIPTION: "output blur radius"
+  float noise;                 // $MIN: 0.0 $MAX: 1.0   $DEFAULT: 0.0 $DESCRIPTION: "noise level"
 } dt_iop_censorize_params_t;
 
 
 typedef struct dt_iop_censorize_gui_data_t
 {
-  GtkWidget *radius_1, *pixelate, *radius_2, *noise;
+  GtkWidget *radius_1;
+  GtkWidget *pixelate;
+  GtkWidget *radius_2;
+  GtkWidget *noise;
 } dt_iop_censorize_gui_data_t;
 
 typedef dt_iop_censorize_params_t dt_iop_censorize_data_t;
@@ -68,16 +71,16 @@ typedef struct dt_iop_censorize_global_data_t
 
 typedef struct point_t
 {
-  size_t x, y;
+  size_t x;
+  size_t y;
 } point_t;
 
-const char *
-name()
+const char *name()
 {
   return _("censorize");
 }
 
-const char **description(struct dt_iop_module_t *self)
+const char **description(dt_iop_module_t *self)
 {
   return dt_iop_set_description(self, _("censorize license plates and body parts for privacy"),
                                       _("creative"),
@@ -103,14 +106,20 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
   return IOP_CS_RGB;
 }
 
-static inline void make_noise(float *const output, const float noise, const size_t width, const size_t height)
+static inline void make_noise(float *const output,
+                              const float noise,
+                              const size_t width,
+                              const size_t height)
 {
   DT_OMP_FOR(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
     {
       // Init random number generator
-      uint32_t DT_ALIGNED_ARRAY state[4] = { splitmix32(j + 1), splitmix32((j + 1) * (i + 3)), splitmix32(1337), splitmix32(666) };
+      uint32_t DT_ALIGNED_ARRAY state[4] = { splitmix32(j + 1),
+                                             splitmix32((j + 1) * (i + 3)),
+                                             splitmix32(1337),
+                                             splitmix32(666) };
       xoshiro128plus(state);
       xoshiro128plus(state);
       xoshiro128plus(state);
@@ -129,22 +138,36 @@ static inline void make_noise(float *const output, const float noise, const size
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-             void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+void process(dt_iop_module_t *self,
+             dt_dev_pixelpipe_iop_t *piece,
+             const void *const ivoid,
+             void *const ovoid,
+             const dt_iop_roi_t *const roi_in,
+             const dt_iop_roi_t *const roi_out)
 {
-  if(!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
-                                         ivoid, ovoid, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+  if(!dt_iop_have_required_input_format(4 /*we need full-color pixels*/,
+                                        self,
+                                        piece->colors,
+                                        ivoid,
+                                        ovoid,
+                                        roi_in,
+                                        roi_out))
+    // image has been copied through to output and module's trouble flag has been updated
+    return;
 
   float *restrict temp;
-  if(!dt_iop_alloc_image_buffers(self,roi_in,roi_out,
-                                 4 | DT_IMGSZ_INPUT, &temp,
-                                 0, NULL))
+  if(!dt_iop_alloc_image_buffers(self,
+                                 roi_in,
+                                 roi_out,
+                                 4 | DT_IMGSZ_INPUT,
+                                 &temp,
+                                 0,
+                                 NULL))
   {
     dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out);
     return;
   }
-  dt_iop_censorize_data_t *data = (dt_iop_censorize_data_t *)piece->data;
+  dt_iop_censorize_data_t *data = piece->data;
   const float *const restrict in = DT_IS_ALIGNED((const float *const restrict)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float *const restrict)ovoid);
 
@@ -256,11 +279,15 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
 // OpenCL not implemented yet, but the following only needs a slight modification to get it working
 #if FALSE
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_cl(dt_iop_module_t *self,
+               dt_dev_pixelpipe_iop_t *piece,
+               cl_mem dev_in,
+               cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in,
+               const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_censorize_data_t *d = (dt_iop_censorize_data_t *)piece->data;
-  dt_iop_censorize_global_data_t *gd = (dt_iop_censorize_global_data_t *)self->global_data;
+  dt_iop_censorize_data_t *d = piece->data;
+  dt_iop_censorize_global_data_t *gd = self->global_data;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
   const int devid = piece->pipe->devid;
@@ -321,7 +348,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   }
 
   err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  dev_tmp = dt_opencl_alloc_device(devid, width, height, 4 * sizeof(float));
+  dev_tmp = dt_opencl_duplicate_image(devid, dev_out);
   if(dev_tmp == NULL) goto error;
 
   dev_cm = dt_opencl_copy_host_to_device(devid, d->ctable, 256, 256, sizeof(float));
@@ -335,11 +362,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   dev_lcoeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->lunbounded_coeffs);
   if(dev_lcoeffs == NULL) goto error;
-
-  size_t origin[] = { 0, 0, 0 };
-  size_t region[] = { width, height, 1 };
-  err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, origin, origin, region);
-  if(err != CL_SUCCESS) goto error;
 
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_lowpass_mix, width, height,
     CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(saturation), CLARG(dev_cm),
@@ -357,9 +379,11 @@ error:
   return err;
 }
 
-void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                     struct dt_develop_tiling_t *tiling)
+void tiling_callback(dt_iop_module_t *self,
+                     dt_dev_pixelpipe_iop_t *piece,
+                     const dt_iop_roi_t *roi_in,
+                     const dt_iop_roi_t *roi_out,
+                     dt_develop_tiling_t *tiling)
 {
   tiling->factor = 3.0f;
   tiling->factor_cl = 5.0f;
@@ -382,7 +406,7 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  dt_iop_censorize_global_data_t *gd = (dt_iop_censorize_global_data_t *)module->data;
+  dt_iop_censorize_global_data_t *gd = module->data;
   dt_opencl_free_kernel(gd->kernel_lowpass_mix);
   free(module->data);
   module->data = NULL;
@@ -390,17 +414,17 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 #endif
 
-void gui_init(struct dt_iop_module_t *self)
+void gui_init(dt_iop_module_t *self)
 {
   dt_iop_censorize_gui_data_t *g = IOP_GUI_ALLOC(censorize);
 
-  g->radius_1 = dt_bauhaus_slider_from_params(self, N_("radius_1"));
+  g->radius_1 = dt_bauhaus_slider_from_params(self, "radius_1");
 
-  g->pixelate = dt_bauhaus_slider_from_params(self, N_("pixelate"));
+  g->pixelate = dt_bauhaus_slider_from_params(self, "pixelate");
 
-  g->radius_2 = dt_bauhaus_slider_from_params(self, N_("radius_2"));
+  g->radius_2 = dt_bauhaus_slider_from_params(self, "radius_2");
 
-  g->noise = dt_bauhaus_slider_from_params(self, N_("noise"));
+  g->noise = dt_bauhaus_slider_from_params(self, "noise");
 
   gtk_widget_set_tooltip_text(g->radius_1, _("radius of gaussian blur before pixelization"));
   gtk_widget_set_tooltip_text(g->radius_2, _("radius of gaussian blur after pixelization"));

@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2023 darktable developers.
+    Copyright (C) 2009-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@
 #include "develop/imageop.h"
 #include "develop/lightroom.h"
 #include "develop/masks.h"
+#include "libs/modulegroups.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "imageio/imageio_common.h"
@@ -60,7 +61,12 @@ void dt_dev_init(dt_develop_t *dev,
   dev->timestamp = 0;
   dev->gui_leaving = FALSE;
   dev->gui_synch = FALSE;
-  dt_pthread_mutex_init(&dev->history_mutex, NULL);
+
+  pthread_mutexattr_t recursive_locking;
+  pthread_mutexattr_init(&recursive_locking);
+  pthread_mutexattr_settype(&recursive_locking, PTHREAD_MUTEX_RECURSIVE);
+  dt_pthread_mutex_init(&dev->history_mutex, &recursive_locking);
+
   dev->snapshot_id = -1;
   dev->history_end = 0;
   dev->history = NULL; // empty list
@@ -137,7 +143,7 @@ void dt_dev_init(dt_develop_t *dev,
   dev->overexposed.lower = dt_conf_get_float("darkroom/ui/overexposed/lower");
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
 
-  dev->full.iso_12646 = FALSE;
+  dev->full.iso_12646 = dt_conf_get_bool("full_window/iso_12646");
   dev->preview2.iso_12646 = dt_conf_get_bool("second_window/iso_12646");
 
   dev->full.zoom = dev->preview2.zoom = DT_ZOOM_FIT;
@@ -220,7 +226,7 @@ void dt_dev_process_image(dt_develop_t *dev)
   const gboolean err
       = dt_control_add_job_res(darktable.control,
                                dt_dev_process_image_job_create(dev), DT_CTL_WORKER_ZOOM_1);
-  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_image] job queue exceeded!\n");
+  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_image] job queue exceeded!");
 }
 
 void dt_dev_process_preview(dt_develop_t *dev)
@@ -229,7 +235,7 @@ void dt_dev_process_preview(dt_develop_t *dev)
   const gboolean err = dt_control_add_job_res(darktable.control,
                                          dt_dev_process_preview_job_create(dev),
                                          DT_CTL_WORKER_ZOOM_FILL);
-  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_preview] job queue exceeded!\n");
+  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_preview] job queue exceeded!");
 }
 
 void dt_dev_process_preview2(dt_develop_t *dev)
@@ -237,7 +243,7 @@ void dt_dev_process_preview2(dt_develop_t *dev)
   const gboolean err = dt_control_add_job_res(darktable.control,
                                          dt_dev_process_preview2_job_create(dev),
                                          DT_CTL_WORKER_ZOOM_2);
-  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_preview2] job queue exceeded!\n");
+  if(err) dt_print(DT_DEBUG_ALWAYS, "[dev_process_preview2] job queue exceeded!");
 }
 
 void dt_dev_invalidate(dt_develop_t *dev)
@@ -269,6 +275,16 @@ void dt_dev_invalidate_preview(dt_develop_t *dev)
     dev->full.pipe->input_timestamp = dev->timestamp;
   if(dev->preview2.pipe)
     dev->preview2.pipe->input_timestamp = dev->timestamp;
+}
+
+static void _dev_average_delay_update(const dt_times_t *start,
+                                      uint32_t *average_delay)
+{
+  dt_times_t end;
+  dt_get_times(&end);
+
+  *average_delay += ((end.clock - start->clock) * 1000 / DT_DEV_AVERAGE_DELAY_COUNT
+                     - *average_delay / DT_DEV_AVERAGE_DELAY_COUNT);
 }
 
 void dt_dev_process_image_job(dt_develop_t *dev,
@@ -311,6 +327,7 @@ void dt_dev_process_image_job(dt_develop_t *dev,
                       port ? DT_MIPMAP_FULL     : DT_MIPMAP_F,
                       port ? DT_MIPMAP_BLOCKING : DT_MIPMAP_BEST_EFFORT,
                       'r');
+  dev->image_storage.load_status = buf.loader_status;
 
   dt_show_times(&start, "[dt_dev_process_image_job] loading image.");
 
@@ -423,15 +440,6 @@ restart:
 
   dt_get_times(&start);
 
-  // disable some modules if needed
-  for(GList *m = dev->module_filter_out;
-      m;
-      m = g_list_next(m))
-  {
-    char *mod = (char *)(m->data);
-    dt_dev_pixelpipe_module_enabled(port->pipe, mod, FALSE);
-  }
-
   if(dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale, devid))
   {
     // interrupted because image changed?
@@ -454,7 +462,7 @@ restart:
   dt_show_times_f(&start,
                   "[dev_process_image] pixel pipeline", "processing `%s'",
                   dev->image_storage.filename);
-  dt_dev_average_delay_update(&start, &pipe->average_delay);
+  _dev_average_delay_update(&start, &pipe->average_delay);
 
   // maybe we got zoomed/panned in the meantime?
   if(port && pipe->changed != DT_DEV_PIPE_UNCHANGED) goto restart;
@@ -469,7 +477,7 @@ restart:
   dt_pthread_mutex_unlock(&pipe->mutex);
 
   if(dev->gui_attached && !dev->gui_leaving && signal != -1)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, signal);
+    DT_CONTROL_SIGNAL_RAISE(signal);
 
   if(port) return;
 
@@ -496,7 +504,7 @@ static inline void _dt_dev_load_pipeline_defaults(dt_develop_t *dev)
       modules;
       modules = g_list_previous(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
     dt_iop_reload_defaults(module);
   }
 }
@@ -518,6 +526,7 @@ static inline void _dt_dev_load_raw(dt_develop_t *dev,
   dev->image_storage = *image;
   dt_image_cache_read_release(darktable.image_cache, image);
 
+//  dev->requested_id = (dev->image_storage.load_status == DT_IMAGEIO_OK) ? dev->image_storage.id : 0;
   dev->requested_id = dev->image_storage.id;
 }
 
@@ -698,7 +707,7 @@ static void _dev_write_history_item(const dt_imgid_t imgid,
   // write masks (if any)
   for(GList *forms = h->forms; forms; forms = g_list_next(forms))
   {
-    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+    dt_masks_form_t *form = forms->data;
     if(form)
       dt_masks_write_masks_history_item(imgid, num, form);
   }
@@ -722,7 +731,7 @@ static void _dev_auto_save(dt_develop_t *dev)
   if(saving)
   {
     dt_dev_write_history(dev);
-    dt_image_write_sidecar_file(imgid);
+    dt_image_synch_xmp(imgid);
     const double after = dt_get_wtime();
     dev->autosave_time = after;
     // if writing to database and the xmp took too long we disable
@@ -730,7 +739,7 @@ static void _dev_auto_save(dt_develop_t *dev)
     if((after - start) > 0.5)
     {
       dev->autosaving = FALSE;
-      dt_print(DT_DEBUG_DEV, "autosave history disabled, took %.3fs\n", after - start);
+      dt_print(DT_DEBUG_DEV, "autosave history disabled, took %.3fs", after - start);
 
       dt_control_log(_("autosaving history has been disabled for this image"
                        " because of a very large history or a slow drive being used"));
@@ -795,7 +804,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev,
   while(history)
   {
     GList *next = g_list_next(history);
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
     // printf("removing obsoleted history item: %s\n", hist->module->op);
 
     //check if an earlier instance of the module exists
@@ -803,7 +812,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev,
     GList *prior_history = g_list_nth(dev->history, dev->history_end - 1);
     while(prior_history)
     {
-      dt_dev_history_item_t *prior_hist = (dt_dev_history_item_t *)(prior_history->data);
+      dt_dev_history_item_t *prior_hist = prior_history->data;
       if(prior_hist->module->so == hist->module->so)
       {
         earlier_entry = TRUE;
@@ -929,7 +938,7 @@ const dt_dev_history_item_t *dt_dev_get_history_item(dt_develop_t *dev, const ch
 {
   for(GList *l = g_list_last(dev->history); l; l = g_list_previous(l))
   {
-    dt_dev_history_item_t *item = (dt_dev_history_item_t *)l->data;
+    dt_dev_history_item_t *item = l->data;
     if(!g_strcmp0(item->op_name, op))
     {
       return item;
@@ -987,12 +996,11 @@ static void _dev_add_history_item(dt_develop_t *dev,
 
   const gboolean multi_name_changed = strcmp(saved_name, module->multi_name) != 0;
 
+  dt_pthread_mutex_lock(&dev->history_mutex);
   const gboolean need_end_record =
     _dev_undo_start_record_target(dev, multi_name_changed ? NULL : target);
 
   g_free(saved_name);
-
-  dt_pthread_mutex_lock(&dev->history_mutex);
 
   if(dev->gui_attached)
   {
@@ -1013,16 +1021,16 @@ static void _dev_add_history_item(dt_develop_t *dev,
      || module != dev->gui_module)
     dt_dev_invalidate_all(dev);
 
-  dt_pthread_mutex_unlock(&dev->history_mutex);
-
   if(need_end_record)
     dt_dev_undo_end_record(dev);
+
+  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->gui_attached)
   {
     /* signal that history has changed */
     if(tag_change)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+      DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_TAG_CHANGED);
 
     /* redraw */
     dt_control_queue_redraw_center();
@@ -1064,7 +1072,7 @@ void dt_dev_add_masks_history_item_ext(dt_develop_t *dev,
   {
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
-      dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+      dt_iop_module_t *mod = modules->data;
       if(dt_iop_module_is(mod->so, "mask_manager"))
       {
         module = mod;
@@ -1079,7 +1087,7 @@ void dt_dev_add_masks_history_item_ext(dt_develop_t *dev,
   }
   else
     dt_print(DT_DEBUG_ALWAYS,
-             "[dt_dev_add_masks_history_item_ext] can't find mask manager module\n");
+             "[dt_dev_add_masks_history_item_ext] can't find mask manager module");
 }
 
 void dt_dev_add_masks_history_item(
@@ -1097,10 +1105,10 @@ void dt_dev_add_masks_history_item(
     if(fpt) target = GINT_TO_POINTER(fpt->formid);
   }
 
+  dt_pthread_mutex_lock(&dev->history_mutex);
+
   const gboolean need_end_record =
     _dev_undo_start_record_target(dev, target);
-
-  dt_pthread_mutex_lock(&dev->history_mutex);
 
   if(dev->gui_attached)
   {
@@ -1112,10 +1120,11 @@ void dt_dev_add_masks_history_item(
   dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
   dev->preview2.pipe->changed |= DT_DEV_PIPE_SYNCH;
   dt_dev_invalidate_all(dev);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(need_end_record)
     dt_dev_undo_end_record(dev);
+
+  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->gui_attached)
   {
@@ -1150,7 +1159,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   while(history)
   {
     GList *next = g_list_next(history);
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
     hist->module->multi_name_hand_edited = FALSE;
     g_strlcpy(hist->module->multi_name, "", sizeof(hist->module->multi_name));
     dt_dev_free_history_item(hist);
@@ -1162,7 +1171,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   // we have to add new module instances first
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
     if(module->multi_priority > 0)
     {
       if(!dt_iop_is_hidden(module) && !module->expander)
@@ -1209,7 +1218,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, const int32_t cnt)
   // reset gui params for all modules
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
     memcpy(module->params, module->default_params, module->params_size);
     dt_iop_commit_blend_params(module, module->default_blendop_params);
     module->enabled = module->default_enabled;
@@ -1228,7 +1237,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, const int32_t cnt)
   GList *history = dev->history;
   for(int i = 0; i < cnt && history; i++)
   {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
     if(hist->module->params_size == 0)
       memcpy(hist->module->params, hist->module->default_params, hist->module->params_size);
     else
@@ -1260,7 +1269,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, const int32_t cnt)
     history = NULL;
   for(int i = MIN(cnt, end_prev); i < MAX(cnt, end_prev) && history && !masks_changed; i++)
   {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
 
     if(hist->forms != NULL)
       masks_changed = TRUE;
@@ -1285,7 +1294,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev, const int32_t cnt)
   GList *modules = dev->iop;
   while(modules)
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
     dt_iop_gui_update(module);
     modules = g_list_next(modules);
   }
@@ -1300,8 +1309,8 @@ void dt_dev_pop_history_items(dt_develop_t *dev, const int32_t cnt)
     GList *modules_old = dev_iop;
     while(modules && modules_old)
     {
-      dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-      dt_iop_module_t *module_old = (dt_iop_module_t *)(modules_old->data);
+      dt_iop_module_t *module = modules->data;
+      dt_iop_module_t *module_old = modules_old->data;
 
       if(module->iop_order != module_old->iop_order)
       {
@@ -1364,14 +1373,14 @@ void dt_dev_write_history_ext(dt_develop_t *dev,
 
   GList *history = dev->history;
   dt_print(DT_DEBUG_IOPORDER,
-           "[dt_dev_write_history_ext] Writing history image id=%d `%s', iop version: %i\n",
+           "[dt_dev_write_history_ext] Writing history image id=%d `%s', iop version: %i",
            imgid, dev->image_storage.filename, dev->iop_order_version);
   for(int i = 0; history; i++)
   {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
     _dev_write_history_item(imgid, hist, i);
 
-    dt_print(DT_DEBUG_IOPORDER, "%20s, num %2i, order %2d, v(%i), multiprio %i%s\n",
+    dt_print(DT_DEBUG_IOPORDER, "%20s, num %2i, order %2d, v(%i), multiprio %i%s",
       hist->module->op, i, hist->iop_order, hist->module->version(), hist->multi_priority,
       (hist->enabled) ? ", enabled" : "");
 
@@ -1437,7 +1446,7 @@ static void _dev_insert_module(dt_develop_t *dev,
 
   g_free(preset_name);
 
-  dt_print(DT_DEBUG_PARAMS, "[dev_insert_module] `%s' inserted to history\n", module->op);
+  dt_print(DT_DEBUG_PARAMS, "[dev_insert_module] `%s' inserted to history", module->op);
 }
 
 static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
@@ -1480,7 +1489,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
 
       for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
       {
-        dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+        dt_iop_module_t *module = modules->data;
 
         if(module->default_enabled
            && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK)
@@ -1488,7 +1497,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
         {
           dt_print(DT_DEBUG_PARAMS,
                    "[_dev_auto_apply_presets] missing mandatory module %s"
-                   " for image id=%d `%s'\n",
+                   " for image id=%d `%s'",
                    module->op, imgid, dev->image_storage.filename);
 
           // If the module is white-balance and we are dealing with a
@@ -1717,7 +1726,7 @@ static void _dev_add_default_modules(dt_develop_t *dev,
   //start with those modules that cannot be disabled
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    dt_iop_module_t *module = modules->data;
 
     if(!dt_history_check_module_exists(imgid, module->op, FALSE)
        && module->default_enabled
@@ -1730,7 +1739,7 @@ static void _dev_add_default_modules(dt_develop_t *dev,
   //now modules that can be disabled but are auto-on
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    dt_iop_module_t *module = modules->data;
 
     if(!dt_history_check_module_exists(imgid, module->op, FALSE)
        && module->default_enabled
@@ -1855,7 +1864,7 @@ static void _dev_write_history(dt_develop_t *dev,
   GList *history = dev->history;
   for(int i = 0; history; i++)
   {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = history->data;
     _dev_write_history_item(imgid, hist, i);
     history = g_list_next(history);
   }
@@ -1893,7 +1902,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
                           "DELETE FROM memory.history", NULL, NULL, NULL);
 
-    dt_print(DT_DEBUG_PARAMS, "[dt_dev_read_history_ext] temporary history deleted\n");
+    dt_print(DT_DEBUG_PARAMS, "[dt_dev_read_history_ext] temporary history deleted");
 
     // Make sure all modules default params are loaded to init
     // history. This is important as some modules have specific
@@ -1912,14 +1921,14 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
 
     dt_print(DT_DEBUG_PARAMS,
              "[dt_dev_read_history_ext] temporary history initialised with"
-             " default params and presets\n");
+             " default params and presets");
 
     // Now merge memory.history into main.history
 
     _dev_merge_history(dev, imgid);
 
     dt_print(DT_DEBUG_PARAMS,
-             "[dt_dev_read_history_ext] temporary history merged with image history\n");
+             "[dt_dev_read_history_ext] temporary history merged with image history");
 
     //  first time we are loading the image, try to import lightroom .xmp if any
     if(dev->full.pipe && dev->full.pipe->loading && first_run)
@@ -2029,16 +2038,23 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     {
       dt_print(DT_DEBUG_ALWAYS,
                "[dev_read_history_ext] database history for image"
-               " id=%d `%s' seems to be corrupted!\n",
+               " id=%d `%s' seems to be corrupted!",
                imgid, dev->image_storage.filename);
       continue;
     }
 
     const int iop_order =
       dt_ioppr_get_iop_order(dev->iop_order_list, module_name, multi_priority);
+    if(iop_order == INT_MAX)
+    {
+      dt_print(DT_DEBUG_PIPE | DT_DEBUG_UNDO,
+               "[dev_read_history_ext] illegal iop_order for module `%s.%i' in history for image"
+               " id=%d `%s'!",
+               module_name, multi_priority, imgid, dev->image_storage.filename);
+      continue;
+    }
 
-    dt_dev_history_item_t *hist =
-      (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
+    dt_dev_history_item_t *hist = calloc(1, sizeof(dt_dev_history_item_t));
     hist->module = NULL;
 
     // Find a .so file that matches our history entry, aka a module to
@@ -2047,7 +2063,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
 
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+      dt_iop_module_t *module = modules->data;
       if(dt_iop_module_is(module->so, module_name))
       {
         // make sure that module not supporting multiple instances are
@@ -2094,7 +2110,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     {
       dt_print(DT_DEBUG_ALWAYS,
                "[dev_read_history] the module `%s' requested by image"
-               " id=%d `%s' is not installed on this computer!\n",
+               " id=%d `%s' is not installed on this computer!",
                module_name, imgid, dev->image_storage.filename);
       free(hist);
       continue;
@@ -2130,7 +2146,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
     dt_print(DT_DEBUG_PARAMS,
              "[history] successfully loaded module %s from history\n"
              "\t\t\tblendop v. %i:\tversion %s\tparams %s\n"
-             "\t\t\tparams v. %i:\tversion %s\tparams %s\n",
+             "\t\t\tparams v. %i:\tversion %s\tparams %s",
              module_name,
              blendop_version, _print_validity(is_valid_blendop_version),
              _print_validity(is_valid_blendop_size),
@@ -2195,7 +2211,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
       {
         dt_print(DT_DEBUG_ALWAYS,
                  "[dev_read_history] module `%s' version mismatch: history"
-                 " is %d, darktable is %d, image id=%d `%s'\n",
+                 " is %d, darktable is %d, image id=%d `%s'",
                  hist->module->op, modversion, hist->module->version(),
                  imgid, dev->image_storage.filename);
 
@@ -2252,7 +2268,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev,
   if(temperature && channelmixerrgb)
   {
     dt_print(DT_DEBUG_PARAMS,
-             "[dt_dev_read_history_ext] reset defaults for workflow none\n");
+             "[dt_dev_read_history_ext] reset defaults for workflow none");
     temperature->reload_defaults(temperature);
   }
 
@@ -2532,6 +2548,88 @@ static float _calculate_new_scroll_zoom_tscale(const int up,
   return tscalenew;
 }
 
+// running with the history locked
+static gboolean _dev_distort_backtransform_locked
+  (dt_develop_t *dev,
+   dt_dev_pixelpipe_t *pipe,
+   const double iop_order,
+   const dt_dev_transform_direction_t transf_direction,
+   float *points,
+   const size_t points_count)
+{
+  GList *modules = g_list_last(pipe->iop);
+  GList *pieces = g_list_last(pipe->nodes);
+  while(modules)
+  {
+    if(!pieces)
+    {
+      return FALSE;
+    }
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    if(piece->enabled
+       && piece->data
+       && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
+               && module->iop_order >= iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
+               && module->iop_order > iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL
+               && module->iop_order <= iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL
+               && module->iop_order < iop_order))
+       && !(dt_iop_module_is_skipped(dev, module)
+            && (pipe->type & DT_DEV_PIXELPIPE_BASIC)))
+    {
+      module->distort_backtransform(module, piece, points, points_count);
+    }
+    modules = g_list_previous(modules);
+    pieces = g_list_previous(pieces);
+  }
+  return TRUE;
+}
+
+// running with the history locked
+static gboolean _dev_distort_transform_locked
+  (dt_develop_t *dev,
+   dt_dev_pixelpipe_t *pipe,
+   const double iop_order,
+   const dt_dev_transform_direction_t transf_direction,
+   float *points,
+   const size_t points_count)
+{
+  GList *modules = pipe->iop;
+  GList *pieces = pipe->nodes;
+  while(modules)
+  {
+    if(!pieces)
+    {
+      return FALSE;
+    }
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    if(piece->enabled
+       && piece->data
+       && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
+               && module->iop_order >= iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
+               && module->iop_order > iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL
+               && module->iop_order <= iop_order)
+           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL
+               && module->iop_order < iop_order))
+       && !(dt_iop_module_is_skipped(dev, module)
+            && (pipe->type & DT_DEV_PIXELPIPE_BASIC)))
+    {
+      module->distort_transform(module, piece, points, points_count);
+    }
+    modules = g_list_next(modules);
+    pieces = g_list_next(pieces);
+  }
+  return TRUE;
+}
+
 void dt_dev_zoom_move(dt_dev_viewport_t *port,
                       dt_dev_zoom_t zoom,
                       float scale,
@@ -2546,7 +2644,7 @@ void dt_dev_zoom_move(dt_dev_viewport_t *port,
   dt_pthread_mutex_lock(&dev->history_mutex);
 
   float pts[2] = { port->zoom_x, port->zoom_y };
-  dt_dev_distort_transform_locked(darktable.develop, port->pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, pts, 1);
+  _dev_distort_transform_locked(darktable.develop, port->pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, pts, 1);
 
   const float old_pts0 = pts[0];
   const float old_pts1 = pts[1];
@@ -2691,7 +2789,7 @@ void dt_dev_zoom_move(dt_dev_viewport_t *port,
   gboolean has_moved = fabsf(pts[0] - old_pts0) + fabsf(pts[1] - old_pts1) > 0.5f;
   if(has_moved)
   {
-    dt_dev_distort_backtransform_locked(dev, port->pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, pts, 1);
+    _dev_distort_backtransform_locked(dev, port->pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, pts, 1);
     port->zoom_x = pts[0];
     port->zoom_y = pts[1];
   }
@@ -2705,17 +2803,10 @@ void dt_dev_zoom_move(dt_dev_viewport_t *port,
      && old_closeup == port->closeup)
     return;
 
+  if(port->widget)
+    dt_control_queue_redraw_widget(port->widget);
   if(port == &dev->full)
-  {
-    dt_dev_invalidate(dev); // FIXME not needed? redraw should determines if needs new calculation
-    dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
-  }
-  else if(port == &dev->preview2 && dev->second_wnd)
-  {
-    dev->preview2.pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-    dt_control_queue_redraw_widget(dev->second_wnd);
-  }
 }
 
 void dt_dev_get_pointer_zoom_pos(dt_dev_viewport_t *port,
@@ -2869,6 +2960,12 @@ uint32_t dt_dev_modulegroups_get(dt_develop_t *dev)
   return 0;
 }
 
+gboolean dt_dev_modulegroups_test_activated(dt_develop_t *dev)
+{
+  const uint32_t activated = dt_dev_modulegroups_get_activated(dev);
+  return activated != DT_MODULEGROUP_BASICS;
+}
+
 gboolean dt_dev_modulegroups_test(dt_develop_t *dev,
                                   const uint32_t group,
                                   dt_iop_module_t *module)
@@ -2938,17 +3035,6 @@ void dt_dev_masks_selection_change(dt_develop_t *dev,
     dev->proxy.masks.selection_change(dev->proxy.masks.module, module, selectid);
 }
 
-void dt_dev_average_delay_update(const dt_times_t *start,
-                                 uint32_t *average_delay)
-{
-  dt_times_t end;
-  dt_get_times(&end);
-
-  *average_delay += ((end.clock - start->clock) * 1000 / DT_DEV_AVERAGE_DELAY_COUNT
-                     - *average_delay / DT_DEV_AVERAGE_DELAY_COUNT);
-}
-
-
 /** duplicate a existent module */
 dt_iop_module_t *dt_dev_module_duplicate_ext(dt_develop_t *dev,
                                              dt_iop_module_t *base,
@@ -2964,7 +3050,7 @@ dt_iop_module_t *dt_dev_module_duplicate_ext(dt_develop_t *dev,
   int pmax = 0;
   for(GList *modules = base->dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    dt_iop_module_t *mod = modules->data;
     if(mod->instance == base->instance)
     {
       if(pmax < mod->multi_priority) pmax = mod->multi_priority;
@@ -2991,7 +3077,7 @@ dt_iop_module_t *dt_dev_module_duplicate_ext(dt_develop_t *dev,
 
     for(GList *modules = base->dev->iop; modules; modules = g_list_next(modules))
     {
-      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+      dt_iop_module_t *mod = modules->data;
       if(mod->instance == base->instance)
       {
         if(strcmp(mname, mod->multi_name) == 0)
@@ -3019,7 +3105,7 @@ dt_iop_module_t *dt_dev_module_duplicate_ext(dt_develop_t *dev,
   if(reorder_iop && !dt_ioppr_move_iop_after(base->dev, module, base))
   {
     dt_print(DT_DEBUG_ALWAYS,
-             "[dt_dev_module_duplicate] can't move new instance after the base one\n");
+             "[dt_dev_module_duplicate] can't move new instance after the base one");
     dt_control_log(_("duplicate module, can't move new instance after the base one\n"));
   }
 
@@ -3037,7 +3123,7 @@ void dt_dev_invalidate_history_module(GList *list,
 {
   for(; list; list = g_list_next(list))
   {
-    dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)list->data;
+    dt_dev_history_item_t *hitem = list->data;
     if(hitem->module == module)
     {
       hitem->module = NULL;
@@ -3060,7 +3146,7 @@ void dt_dev_module_remove(dt_develop_t *dev,
     while(elem != NULL)
     {
       GList *next = g_list_next(elem);
-      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(elem->data);
+      dt_dev_history_item_t *hist = elem->data;
 
       if(module == hist->module)
       {
@@ -3073,26 +3159,24 @@ void dt_dev_module_remove(dt_develop_t *dev,
     }
   }
 
-  dt_pthread_mutex_unlock(&dev->history_mutex);
-
   // and we remove it from the list
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
-    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    dt_iop_module_t *mod = modules->data;
     if(mod == module)
     {
       dev->iop = g_list_remove_link(dev->iop, modules);
       break;
     }
   }
+  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->gui_attached && del)
   {
     /* signal that history has changed */
     dt_dev_undo_end_record(dev);
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals,
-                                  DT_SIGNAL_DEVELOP_MODULE_REMOVE, module);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_MODULE_REMOVE, module);
     /* redraw */
     dt_control_queue_redraw_center();
   }
@@ -3125,49 +3209,6 @@ gboolean dt_dev_distort_backtransform(dt_develop_t *dev,
     (dev, dev->preview_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
-// only call directly or indirectly from
-// dt_dev_distort_transform_plus, so that it runs with the history
-// locked
-gboolean dt_dev_distort_transform_locked
-  (dt_develop_t *dev,
-   dt_dev_pixelpipe_t *pipe,
-   const double iop_order,
-   const dt_dev_transform_direction_t transf_direction,
-   float *points,
-   const size_t points_count)
-{
-  GList *modules = pipe->iop;
-  GList *pieces = pipe->nodes;
-  while(modules)
-  {
-    if(!pieces)
-    {
-      return FALSE;
-    }
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
-    if(piece->enabled
-       && piece->data
-       && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
-               && module->iop_order >= iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
-               && module->iop_order > iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL
-               && module->iop_order <= iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL
-               && module->iop_order < iop_order))
-       && !(dt_iop_module_is_skipped(dev, module)
-            && (pipe->type & DT_DEV_PIXELPIPE_BASIC)))
-    {
-      module->distort_transform(module, piece, points, points_count);
-    }
-    modules = g_list_next(modules);
-    pieces = g_list_next(pieces);
-  }
-  return TRUE;
-}
-
 gboolean dt_dev_distort_transform_plus
   (dt_develop_t *dev,
    dt_dev_pixelpipe_t *pipe,
@@ -3177,54 +3218,12 @@ gboolean dt_dev_distort_transform_plus
    const size_t points_count)
 {
   dt_pthread_mutex_lock(&dev->history_mutex);
-  dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction,
+  _dev_distort_transform_locked(dev, pipe, iop_order, transf_direction,
                                   points, points_count);
   dt_pthread_mutex_unlock(&dev->history_mutex);
   return TRUE;
 }
 
-// only call directly or indirectly from
-// dt_dev_distort_transform_plus, so that it runs with the history
-// locked
-gboolean dt_dev_distort_backtransform_locked
-  (dt_develop_t *dev,
-   dt_dev_pixelpipe_t *pipe,
-   const double iop_order,
-   const dt_dev_transform_direction_t transf_direction,
-   float *points,
-   const size_t points_count)
-{
-  GList *modules = g_list_last(pipe->iop);
-  GList *pieces = g_list_last(pipe->nodes);
-  while(modules)
-  {
-    if(!pieces)
-    {
-      return FALSE;
-    }
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
-    if(piece->enabled
-       && piece->data
-       && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
-               && module->iop_order >= iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
-               && module->iop_order > iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL
-               && module->iop_order <= iop_order)
-           || (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL
-               && module->iop_order < iop_order))
-       && !(dt_iop_module_is_skipped(dev, module)
-            && (pipe->type & DT_DEV_PIXELPIPE_BASIC)))
-    {
-      module->distort_backtransform(module, piece, points, points_count);
-    }
-    modules = g_list_previous(modules);
-    pieces = g_list_previous(pieces);
-  }
-  return TRUE;
-}
 
 gboolean dt_dev_distort_backtransform_plus
   (dt_develop_t *dev,
@@ -3235,7 +3234,7 @@ gboolean dt_dev_distort_backtransform_plus
    const size_t points_count)
 {
   dt_pthread_mutex_lock(&dev->history_mutex);
-  const gboolean success = dt_dev_distort_backtransform_locked
+  const gboolean success = _dev_distort_backtransform_locked
     (dev, pipe, iop_order,
      transf_direction, points, points_count);
   dt_pthread_mutex_unlock(&dev->history_mutex);
@@ -3250,18 +3249,13 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev,
       pieces;
       pieces = g_list_previous(pieces))
   {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    dt_dev_pixelpipe_iop_t *piece = pieces->data;
     if(piece->module == module)
     {
       return piece;
     }
   }
   return NULL;
-}
-
-dt_hash_t dt_dev_hash(dt_develop_t *dev)
-{
-  return dt_dev_hash_plus(dev, dev->preview_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL);
 }
 
 dt_hash_t dt_dev_hash_plus(dt_develop_t *dev,
@@ -3280,8 +3274,8 @@ dt_hash_t dt_dev_hash_plus(dt_develop_t *dev,
       dt_pthread_mutex_unlock(&dev->history_mutex);
       return 0;
     }
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    dt_iop_module_t *module = modules->data;
+    dt_dev_pixelpipe_iop_t *piece = pieces->data;
     if(piece->enabled && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
                           || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
                               && module->iop_order >= iop_order)
@@ -3301,7 +3295,7 @@ dt_hash_t dt_dev_hash_plus(dt_develop_t *dev,
   return hash;
 }
 
-gboolean dt_dev_wait_hash(dt_develop_t *dev,
+static gboolean _dev_wait_hash(dt_develop_t *dev,
                           struct dt_dev_pixelpipe_t *pipe,
                           const double iop_order,
                           const dt_dev_transform_direction_t transf_direction,
@@ -3355,7 +3349,7 @@ gboolean dt_dev_sync_pixelpipe_hash(dt_develop_t *dev,
                                     const volatile dt_hash_t *const hash)
 {
   // first wait for matching hash values
-  if(dt_dev_wait_hash(dev, pipe, iop_order, transf_direction, lock, hash))
+  if(_dev_wait_hash(dev, pipe, iop_order, transf_direction, lock, hash))
     return TRUE;
 
   // timed out. let's see if history stack has changed
@@ -3369,11 +3363,6 @@ gboolean dt_dev_sync_pixelpipe_hash(dt_develop_t *dev,
 
   // no way to get pixelpipes in sync
   return FALSE;
-}
-
-dt_hash_t dt_dev_hash_distort(dt_develop_t *dev)
-{
-  return dt_dev_hash_distort_plus(dev, dev->preview_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL);
 }
 
 dt_hash_t dt_dev_hash_distort_plus(dt_develop_t *dev,
@@ -3392,8 +3381,8 @@ dt_hash_t dt_dev_hash_distort_plus(dt_develop_t *dev,
       dt_pthread_mutex_unlock(&dev->history_mutex);
       return 0;
     }
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    dt_iop_module_t *module = modules->data;
+    dt_dev_pixelpipe_iop_t *piece = pieces->data;
     if(piece->enabled && module->operation_tags() & IOP_TAG_DISTORT
        && ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
            || (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL
@@ -3422,7 +3411,7 @@ void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
       modules;
       modules = g_list_previous(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
 
     GtkWidget *expander = module->expander;
     if(expander)
@@ -3439,8 +3428,7 @@ void dt_dev_undo_start_record(dt_develop_t *dev)
 {
   /* record current history state : before change (needed for undo) */
   if(dev->gui_attached && dt_view_get_current() == DT_VIEW_DARKROOM)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals,
-                                  DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE);
 
   dev->gui_previous_target = NULL;
 }
@@ -3449,7 +3437,7 @@ void dt_dev_undo_end_record(dt_develop_t *dev)
 {
   /* record current history state : after change (needed for undo) */
   if(dev->gui_attached && dt_view_get_current() == DT_VIEW_DARKROOM)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
 void dt_dev_image(const dt_imgid_t imgid,
@@ -3535,24 +3523,37 @@ gboolean dt_dev_is_D65_chroma(const dt_develop_t *dev)
     : dt_dev_equal_chroma(wb_coeffs, chr->D65coeffs);
 }
 
+void dt_dev_clear_chroma_troubles(dt_develop_t *dev)
+{
+  if(!dev->gui_attached)
+    return;
+
+  dt_dev_chroma_t *chr = &dev->chroma;
+  if(chr->temperature)
+    dt_iop_set_module_trouble_message(chr->temperature, NULL, NULL, NULL);
+  if(chr->adaptation)
+    dt_iop_set_module_trouble_message(chr->adaptation, NULL, NULL, NULL);
+}
+
 void dt_dev_reset_chroma(dt_develop_t *dev)
 {
+  if(!dev)
+    return;
+  dt_dev_clear_chroma_troubles(dev);
   dt_dev_chroma_t *chr = &dev->chroma;
   chr->adaptation = NULL;
-  chr->late_correction = FALSE;
+  chr->temperature = NULL;
   for_four_channels(c)
     chr->wb_coeffs[c] = 1.0;
 }
 
 void dt_dev_init_chroma(dt_develop_t *dev)
 {
+  dt_dev_reset_chroma(dev);
   dt_dev_chroma_t *chr = &dev->chroma;
-  chr->adaptation = NULL;
-  chr->temperature = NULL;
   chr->late_correction = FALSE;
   for_four_channels(c)
   {
-    chr->wb_coeffs[c] = 1.0;
     chr->D65coeffs[c] = 1.0;
     chr->as_shot[c] = 1.0;
   }

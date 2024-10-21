@@ -152,10 +152,8 @@ int legacy_params(dt_iop_module_t *self,
       } drago;
     } dt_iop_global_tonemap_params_v1_t;
 
-    const dt_iop_global_tonemap_params_v1_t *o =
-      (dt_iop_global_tonemap_params_v1_t *)old_params;
+    const dt_iop_global_tonemap_params_v1_t *o = old_params;
     dt_iop_global_tonemap_params_v3_t *n =
-      (dt_iop_global_tonemap_params_v3_t *)
       malloc(sizeof(dt_iop_global_tonemap_params_v3_t));
 
     // only appended detail, 0 is no-op
@@ -195,7 +193,7 @@ static inline void process_drago(struct dt_iop_module_t *self, dt_dev_pixelpipe_
                                  const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                  const dt_iop_roi_t *const roi_out, dt_iop_global_tonemap_data_t *data)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_gui_data_t *g = self->gui_data;
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
   const int ch = piece->colors;
@@ -293,7 +291,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, dt_dev_pixelpipe
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_global_tonemap_data_t *data = (dt_iop_global_tonemap_data_t *)piece->data;
+  dt_iop_global_tonemap_data_t *data = piece->data;
   const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
   const float sigma_r = 8.0f; // does not depend on scale
   const float iw = piece->buf_in.width / scale;
@@ -333,12 +331,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_global_tonemap_data_t *d = (dt_iop_global_tonemap_data_t *)piece->data;
-  dt_iop_global_tonemap_global_data_t *gd = (dt_iop_global_tonemap_global_data_t *)self->global_data;
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_data_t *d = piece->data;
+  dt_iop_global_tonemap_global_data_t *gd = self->global_data;
+  dt_iop_global_tonemap_gui_data_t *g = self->gui_data;
   dt_bilateral_cl_t *b = NULL;
 
-  cl_int err = DT_OPENCL_DEFAULT_ERROR;
+  cl_int err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
   cl_mem dev_m = NULL;
   cl_mem dev_r = NULL;
   float *maximum = NULL;
@@ -389,7 +387,10 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
                                       .sizex = 1 << 4, .sizey = 1 << 4 };
 
       if(!dt_opencl_local_buffer_opt(devid, gd->kernel_pixelmax_first, &flocopt))
+      {
+        err = CL_INVALID_WORK_DIMENSION;
         goto finally;
+      }
 
       const size_t bwidth = ROUNDUP(width, flocopt.sizex);
       const size_t bheight = ROUNDUP(height, flocopt.sizey);
@@ -402,7 +403,10 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
                                       .sizex = 1 << 16, .sizey = 1 };
 
       if(!dt_opencl_local_buffer_opt(devid, gd->kernel_pixelmax_second, &slocopt))
+      {
+        err = CL_INVALID_WORK_DIMENSION;
         goto finally;
+      }
 
       const int reducesize = MIN(REDUCESIZE, ROUNDUP(bufsize, slocopt.sizex) / slocopt.sizex);
 
@@ -438,6 +442,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       if(err != CL_SUCCESS) goto finally;
 
       maximum = dt_alloc_align_float((size_t)reducesize);
+      if(!maximum)
+      {
+        err = DT_OPENCL_SYSMEM_ALLOCATION;
+        goto finally;
+      }
       err = dt_opencl_read_buffer_from_device(devid, (void *)maximum, dev_r, 0,
                                             sizeof(float) * reducesize, CL_TRUE);
       if(err != CL_SUCCESS) goto finally;
@@ -520,7 +529,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
 {
-  dt_iop_global_tonemap_data_t *d = (dt_iop_global_tonemap_data_t *)piece->data;
+  dt_iop_global_tonemap_data_t *d = piece->data;
 
   const float scale = piece->iscale / roi_in->scale;
   const float iw = piece->buf_in.width / scale;
@@ -549,7 +558,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                    dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_global_tonemap_params_t *p = (dt_iop_global_tonemap_params_t *)p1;
-  dt_iop_global_tonemap_data_t *d = (dt_iop_global_tonemap_data_t *)piece->data;
+  dt_iop_global_tonemap_data_t *d = piece->data;
 
   d->operator= p->operator;
   d->drago.bias = p->drago.bias;
@@ -592,7 +601,7 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  dt_iop_global_tonemap_global_data_t *gd = (dt_iop_global_tonemap_global_data_t *)module->data;
+  dt_iop_global_tonemap_global_data_t *gd = module->data;
   dt_opencl_free_kernel(gd->kernel_pixelmax_first);
   dt_opencl_free_kernel(gd->kernel_pixelmax_second);
   dt_opencl_free_kernel(gd->kernel_global_tonemap_reinhard);
@@ -604,8 +613,8 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
-  dt_iop_global_tonemap_params_t *p = (dt_iop_global_tonemap_params_t *)self->params;
+  dt_iop_global_tonemap_gui_data_t *g = self->gui_data;
+  dt_iop_global_tonemap_params_t *p = self->params;
 
   if(!w || w == g->operator)
   {
@@ -616,7 +625,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_gui_data_t *g = self->gui_data;
 
   gui_changed(self, NULL, 0);
 

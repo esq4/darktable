@@ -74,7 +74,7 @@ static int _guides_get_value(gchar *name)
   int i = 0;
   for(GList *iter = darktable.guides; iter; iter = g_list_next(iter), i++)
   {
-    dt_guides_t *guide = (dt_guides_t *)iter->data;
+    dt_guides_t *guide = iter->data;
     if(!g_strcmp0(name, guide->name)) return i;
   }
   return -1;
@@ -99,9 +99,9 @@ static gchar *_conf_get_path(gchar *module_name, gchar *property_1, gchar *prope
   }
 
   if(property_2)
-    return dt_util_dstrcat(NULL, "guides/%s/%s%s/%s/%s", cv->module_name, lay, module_name, property_1, property_2);
+    return g_strdup_printf("guides/%s/%s%s/%s/%s", cv->module_name, lay, module_name, property_1, property_2);
   else
-    return dt_util_dstrcat(NULL, "guides/%s/%s%s/%s", cv->module_name, lay, module_name, property_1);
+    return g_strdup_printf("guides/%s/%s%s/%s", cv->module_name, lay, module_name, property_1);
 }
 
 static dt_guides_t *_conf_get_guide(gchar *module_name)
@@ -587,7 +587,7 @@ GList *dt_guides_init()
 static void _settings_update_visibility(_guides_settings_t *gw)
 {
   // show or hide the flip and extra widgets for global case
-  dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
+  dt_guides_t *guide = g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
   gtk_widget_set_visible(gw->g_flip, (guide && guide->support_flip));
   gtk_widget_set_visible(gw->g_widgets, (guide && guide->widget));
   if((guide && guide->widget))
@@ -606,7 +606,7 @@ static void _settings_flip_update(_guides_settings_t *gw)
   ++darktable.gui->reset;
 
   // we retrieve the global settings
-  dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
+  dt_guides_t *guide = g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
   if(guide && guide->support_flip)
   {
     gchar *key = _conf_get_path("global", guide->name, "flip");
@@ -620,7 +620,7 @@ static void _settings_flip_update(_guides_settings_t *gw)
 static void _settings_guides_changed(GtkWidget *w, _guides_settings_t *gw)
 {
   // we save the new setting
-  dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
+  dt_guides_t *guide = g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
   gchar *key = _conf_get_path("global", "guide", NULL);
   dt_conf_set_string(key, guide ? guide->name : "rule of thirds");
   g_free(key);
@@ -639,7 +639,7 @@ static void _settings_guides_changed(GtkWidget *w, _guides_settings_t *gw)
 static void _settings_flip_changed(GtkWidget *w, _guides_settings_t *gw)
 {
   // we save the new setting
-  dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
+  dt_guides_t *guide = g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
   if(guide)
   {
     gchar *key = _conf_get_path("global", guide->name, "flip");
