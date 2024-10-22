@@ -1067,7 +1067,8 @@ void _thumb_jump_image(gpointer user_data, int diff, gboolean by_key)
     new_offset = sqlite3_column_int(stmt, 0);
     new_id = sqlite3_column_int(stmt, 1);
     new_id = new_id;
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, new_id);
+    //DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, new_id);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE);
   }
   else if(diff > 0)
   {
@@ -1105,7 +1106,8 @@ void _thumb_jump_image(gpointer user_data, int diff, gboolean by_key)
   dt_next_img_dev_change_image(dev, new_id);
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = g_slist_prepend(NULL, GINT_TO_POINTER(imgid));
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  //DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
   dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
 
   // if it's a change by key_press, we set mouse_over to the active image
