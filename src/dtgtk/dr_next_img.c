@@ -5,11 +5,14 @@
 #include "gui/accelerators.h"
 #include "develop/blend.h"
 #include "common/collection.h"
+#include "common/overlay.h"
 
 #include "common/darktable.h"
 
+
+// из src/views/darkroom.c
 #ifdef USE_LUA
-static void __fire_darkroom_image_loaded_event(const bool clean, const int32_t imgid)
+static void _fire_darkroom_image_loaded_event(const bool clean, const dt_imgid_t imgid)
 {
   dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
       0, NULL, NULL,
@@ -20,6 +23,7 @@ static void __fire_darkroom_image_loaded_event(const bool clean, const int32_t i
 }
 #endif
 
+// _dev_load_requested_image из src/views/darkroom.c
 static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
 {
   dt_develop_t *dev = user_data;
@@ -41,7 +45,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
 
 #ifdef USE_LUA
 
-  __fire_darkroom_image_loaded_event(FALSE, imgid);
+  _fire_darkroom_image_loaded_event(FALSE, imgid);
 
 #endif
   return G_SOURCE_CONTINUE;
@@ -52,7 +56,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
 
  #ifdef USE_LUA
 
-  __fire_darkroom_image_loaded_event(FALSE, imgid);
+  _fire_darkroom_image_loaded_event(FALSE, imgid);
 
 #endif
 
@@ -65,7 +69,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
 
  #ifdef USE_LUA
 
-  __fire_darkroom_image_loaded_event(FALSE, imgid);
+  _fire_darkroom_image_loaded_event(FALSE, imgid);
 
 #endif
 
@@ -73,6 +77,8 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   }
 
   const dt_imgid_t old_imgid = dev->image_storage.id;
+
+  dt_overlay_add_from_history(old_imgid);
 
   // be sure light table will update the thumbnail
   if(!dt_history_hash_is_mipmap_synced(old_imgid))
@@ -104,7 +110,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   while(dev->history)
   {
     // clear history of old image
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(dev->history->data);
+    dt_dev_history_item_t *hist = dev->history->data;
     dt_dev_free_history_item(hist);
     dev->history = g_list_delete_link(dev->history, dev->history);
   }
@@ -120,16 +126,19 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview2.pipe);
 
+  // chroma data will be fixed by reading whitebalance data from history
+  dt_dev_reset_chroma(dev);
+
   const guint nb_iop = g_list_length(dev->iop);
   for(int i = nb_iop - 1; i >= 0; i--)
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(g_list_nth_data(dev->iop, i));
+    dt_iop_module_t *module = (g_list_nth_data(dev->iop, i));
 
     // the base module is the one with the lowest multi_priority
     int base_multi_priority = 0;
     for(const GList *l = dev->iop; l; l = g_list_next(l))
     {
-      dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
+      dt_iop_module_t *mod = l->data;
       if(dt_iop_module_is(module->so, mod->op))
         base_multi_priority = MIN(base_multi_priority, mod->multi_priority);
     }
@@ -146,7 +155,6 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
       if(!dt_iop_is_hidden(module))
       {
         dt_iop_gui_cleanup_module(module);
-        gtk_widget_destroy(module->expander);
       }
 
       // we remove the module from the list
@@ -177,14 +185,13 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
   if(dev->preview2.widget && GTK_IS_WIDGET(dev->preview2.widget))
     dt_dev_pixelpipe_create_nodes(dev->preview2.pipe, dev);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
   dt_dev_read_history(dev);
 
   // we have to init all module instances other than "base" instance
   char option[1024];
   for(const GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_iop_module_t *module = modules->data;
     if(module->multi_priority > 0)
     {
       if(!dt_iop_is_hidden(module))
@@ -211,6 +218,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   }
 
   dt_dev_pop_history_items(dev, dev->history_end);
+  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   // set the module list order
   dt_dev_reorder_gui_module_list(dev);
@@ -233,7 +241,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
     gboolean valid = FALSE;
     for(const GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
-      dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+      dt_iop_module_t *module = modules->data;
       if(dt_iop_module_is(module->so, active_plugin))
       {
         valid = TRUE;
@@ -247,7 +255,7 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
   }
 
   // Signal develop initialize
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   // release pixel pipe mutices
   dt_pthread_mutex_BAD_unlock(&dev->preview2.pipe->mutex);
@@ -276,24 +284,24 @@ static gboolean dt_next_img_dev_load_requested_image(gpointer user_data)
 
 #ifdef USE_LUA
 
-  __fire_darkroom_image_loaded_event(TRUE, imgid);
+  _fire_darkroom_image_loaded_event(TRUE, imgid);
 
 #endif
 
   return G_SOURCE_REMOVE;
 }
 
+
 // _dev_change_image из src/views/darkroom.c
 static void dt_next_img_dev_change_image(dt_develop_t *dev, const dt_imgid_t imgid)
 {
   // Pipe reset needed when changing image
   // FIXME: synch with dev_init() and dev_cleanup() instead of redoing it
-  dt_dev_reset_chroma(dev);
 
   // change active image
   g_slist_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = g_slist_prepend(NULL, GINT_TO_POINTER(imgid));
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 
   // if the previous shown image is selected and the selection is unique
   // then we change the selected image to the new one
@@ -364,9 +372,13 @@ static void dt_next_img_dev_change_image(dt_develop_t *dev, const dt_imgid_t img
   dt_dev_write_history(dev);
 
   dev->requested_id = imgid;
+  dt_dev_clear_chroma_troubles(dev);
+
+  // possible enable autosaving due to conf setting but wait for some seconds for first save
+  darktable.develop->autosaving = (double)dt_conf_get_int("autosave_interval") > 1.0;
+  darktable.develop->autosave_time = dt_get_wtime() + 10.0;
 
   g_idle_add(dt_next_img_dev_load_requested_image, dev);
 }
-
 
 
