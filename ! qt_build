@@ -5,6 +5,9 @@ bash ../build.sh --prefix /opt/dbg/darktable --build-type Debug
 bash ../build.sh --prefix /opt/darktable-dev --build-type Release
 ~/darktable/tools/get_git_version_string.sh
 
+cd ..
+sh /home/a/darktable/tools/create_version_c.sh /home/a/darktable/build/bin/version_gen.c
+
 cmake --build "/home/a/darktable/build" --target install -- -j16
 
 cd /home/a/darktable/build/
