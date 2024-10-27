@@ -1,6 +1,6 @@
 /*
   This file is part of darktable,
-  Copyright (C) 2010-2023 darktable developers.
+  Copyright (C) 2010-2024 darktable developers.
 
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -422,21 +422,21 @@ error:
 }
 #endif
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
   const int program = 8; // extended.cl, from programs.conf
-  dt_iop_channelmixer_global_data_t *gd
-      = (dt_iop_channelmixer_global_data_t *)malloc(sizeof(dt_iop_channelmixer_global_data_t));
-  module->data = gd;
+
+  dt_iop_channelmixer_global_data_t *gd = malloc(sizeof(dt_iop_channelmixer_global_data_t));
+  self->data = gd;
   gd->kernel_channelmixer = dt_opencl_create_kernel(program, "channelmixer");
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_channelmixer_global_data_t *gd = module->data;
+  dt_iop_channelmixer_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_channelmixer);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 static void red_callback(GtkWidget *slider, dt_iop_module_t *self)
@@ -589,17 +589,17 @@ void gui_update(dt_iop_module_t *self)
   }
 }
 
-void init(dt_iop_module_t *module)
+void init(dt_iop_module_t *self)
 {
-  dt_iop_default_init(module);
+  dt_iop_default_init(self);
 
-  dt_iop_channelmixer_params_t *d = module->default_params;
+  dt_iop_channelmixer_params_t *d = self->default_params;
 
   d->algorithm_version = CHANNEL_MIXER_VERSION_2;
   d->red[CHANNEL_RED] = d->green[CHANNEL_GREEN] = d->blue[CHANNEL_BLUE] = 1.0;
 }
 
-void gui_init(struct dt_iop_module_t *self)
+void gui_init(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_gui_data_t *g = IOP_GUI_ALLOC(channelmixer);
   const dt_iop_channelmixer_params_t *const p = self->default_params;

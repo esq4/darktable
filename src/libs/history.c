@@ -121,7 +121,7 @@ int position(const dt_lib_module_t *self)
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
-  dt_lib_history_t *d = (dt_lib_history_t *)g_malloc0(sizeof(dt_lib_history_t));
+  dt_lib_history_t *d = g_malloc0(sizeof(dt_lib_history_t));
   self->data = (void *)d;
 
   d->record_undo = TRUE;
@@ -527,7 +527,7 @@ static gboolean _create_deleted_modules(GList **_iop_list, GList *history_list)
       // able to write the history items. From there we reload the
       // whole history back and this will recreate the proper module
       // instances.
-      dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+      dt_iop_module_t *module = calloc(1, sizeof(dt_iop_module_t));
       if(dt_iop_load_module(module, base_module->so, base_module->dev))
       {
         return changed;

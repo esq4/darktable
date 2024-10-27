@@ -102,7 +102,7 @@ char *dt_sqlite3_escape_wildcards(const char *s)
     if (*t == '%' || *t == '_' || *t == '~')
       count++;
   }
-  char *result = (char*)malloc(count+1);
+  char *result = malloc(count+1);
   if(!result)
     return result;
   char *dest = result;
@@ -282,7 +282,7 @@ dt_filmid_t dt_film_import(const char *dirname)
   GError *error = NULL;
 
   /* initialize a film object*/
-  dt_film_t *film = (dt_film_t *)malloc(sizeof(dt_film_t));
+  dt_film_t *film = malloc(sizeof(dt_film_t));
   dt_film_init(film);
 
   dt_film_new(film, dirname);

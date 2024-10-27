@@ -552,7 +552,7 @@ void process(dt_iop_module_t *self,
 }
 
 #ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_filmic_data_t *d = piece->data;
@@ -1217,7 +1217,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   d->contrast = contrast;
 
   // compute the curves and their LUT
-  dt_iop_filmic_nodes_t *nodes_data = (dt_iop_filmic_nodes_t *)malloc(sizeof(dt_iop_filmic_nodes_t));
+  dt_iop_filmic_nodes_t *nodes_data = malloc(sizeof(dt_iop_filmic_nodes_t));
   compute_curve_lut(p, d->table, d->table_temp, 0x10000, d, nodes_data);
   free(nodes_data);
   nodes_data = NULL;
@@ -1289,15 +1289,15 @@ void gui_update(dt_iop_module_t *self)
 
 }
 
-void init(dt_iop_module_t *module)
+void init(dt_iop_module_t *self)
 {
-  module->params = calloc(1, sizeof(dt_iop_filmic_params_t));
-  module->default_params = calloc(1, sizeof(dt_iop_filmic_params_t));
-  module->default_enabled = FALSE;
-  module->params_size = sizeof(dt_iop_filmic_params_t);
-  module->gui_data = NULL;
+  self->params = calloc(1, sizeof(dt_iop_filmic_params_t));
+  self->default_params = calloc(1, sizeof(dt_iop_filmic_params_t));
+  self->default_enabled = FALSE;
+  self->params_size = sizeof(dt_iop_filmic_params_t);
+  self->gui_data = NULL;
 
-  *(dt_iop_filmic_params_t *)module->default_params
+  *(dt_iop_filmic_params_t *)self->default_params
     = (dt_iop_filmic_params_t){
                                  .grey_point_source   = 18, // source grey
                                  .black_point_source  = -8.65,  // source black
@@ -1317,30 +1317,29 @@ void init(dt_iop_module_t *module)
                               };
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
   const int program = 22; // filmic.cl, from programs.conf
-  dt_iop_filmic_global_data_t *gd
-      = (dt_iop_filmic_global_data_t *)malloc(sizeof(dt_iop_filmic_global_data_t));
+  dt_iop_filmic_global_data_t *gd = malloc(sizeof(dt_iop_filmic_global_data_t));
 
-  module->data = gd;
+  self->data = gd;
   gd->kernel_filmic = dt_opencl_create_kernel(program, "filmic");
 }
 
-void cleanup(dt_iop_module_t *module)
+void cleanup(dt_iop_module_t *self)
 {
-  free(module->params);
-  module->params = NULL;
-  free(module->default_params);
-  module->default_params = NULL;
+  free(self->params);
+  self->params = NULL;
+  free(self->default_params);
+  self->default_params = NULL;
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_filmic_global_data_t *gd = module->data;
+  dt_iop_filmic_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_filmic);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 void gui_reset(dt_iop_module_t *self)
@@ -1357,7 +1356,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
 {
   dt_iop_filmic_gui_data_t *g = self->gui_data;
   dt_iop_filmic_params_t *p = self->params;
-  dt_iop_filmic_nodes_t *nodes_data = (dt_iop_filmic_nodes_t *)malloc(sizeof(dt_iop_filmic_nodes_t));
+  dt_iop_filmic_nodes_t *nodes_data = malloc(sizeof(dt_iop_filmic_nodes_t));
   compute_curve_lut(p, g->table, g->table_temp, 256, NULL, nodes_data);
 
   const int inset = DT_GUI_CURVE_EDITOR_INSET;

@@ -1375,25 +1375,24 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
   _check_tuner_picker_labels(self);
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
   const int program = 8; // extended.cl, from programs.conf
-  dt_iop_colorbalance_global_data_t *gd
-      = (dt_iop_colorbalance_global_data_t *)malloc(sizeof(dt_iop_colorbalance_global_data_t));
-  module->data = gd;
+  dt_iop_colorbalance_global_data_t *gd = malloc(sizeof(dt_iop_colorbalance_global_data_t));
+  self->data = gd;
   gd->kernel_colorbalance = dt_opencl_create_kernel(program, "colorbalance");
   gd->kernel_colorbalance_lgg = dt_opencl_create_kernel(program, "colorbalance_lgg");
   gd->kernel_colorbalance_cdl = dt_opencl_create_kernel(program, "colorbalance_cdl");
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorbalance_global_data_t *gd = module->data;
+  dt_iop_colorbalance_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_colorbalance);
   dt_opencl_free_kernel(gd->kernel_colorbalance_lgg);
   dt_opencl_free_kernel(gd->kernel_colorbalance_cdl);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
@@ -1621,7 +1620,7 @@ static gboolean dt_iop_area_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t
 
   /* Create an image initialized with the ring colors */
   gint stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
-  guint32 *buf = (guint32 *)malloc(sizeof(guint32) * height * stride / 4);
+  guint32 *buf = malloc(sizeof(guint32) * height * stride / 4);
 
   for(int y = 0; y < height; y++)
   {

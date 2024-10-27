@@ -530,7 +530,7 @@ void init_pipe(dt_iop_module_t *self,
                dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_lowpass_data_t *d = (dt_iop_lowpass_data_t *)calloc(1, sizeof(dt_iop_lowpass_data_t));
+  dt_iop_lowpass_data_t *d = calloc(1, sizeof(dt_iop_lowpass_data_t));
   piece->data = (void *)d;
   for(int k = 0; k < 0x10000; k++) d->ctable[k] = d->ltable[k] = 100.0f * k / 0x10000; // identity
 }
@@ -543,12 +543,11 @@ void cleanup_pipe(dt_iop_module_t *self,
   piece->data = NULL;
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
   const int program = 6; // gaussian.cl, from programs.conf
-  dt_iop_lowpass_global_data_t *gd
-      = (dt_iop_lowpass_global_data_t *)malloc(sizeof(dt_iop_lowpass_global_data_t));
-  module->data = gd;
+  dt_iop_lowpass_global_data_t *gd = malloc(sizeof(dt_iop_lowpass_global_data_t));
+  self->data = gd;
   gd->kernel_lowpass_mix = dt_opencl_create_kernel(program, "lowpass_mix");
 }
 
@@ -563,12 +562,12 @@ void init_presets(dt_iop_module_so_t *self)
   dt_database_release_transaction(darktable.db);
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_lowpass_global_data_t *gd = module->data;
+  dt_iop_lowpass_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_lowpass_mix);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 void gui_init(dt_iop_module_t *self)

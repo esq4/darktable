@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2016-2023 darktable developers.
+    Copyright (C) 2016-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -205,8 +205,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_colorchecker_params_v1_t;
 
     const dt_iop_colorchecker_params_v1_t *o = old_params;
-    dt_iop_colorchecker_params_v2_t  *n =
-      (dt_iop_colorchecker_params_v2_t  *)malloc(sizeof(dt_iop_colorchecker_params_v2_t));
+    dt_iop_colorchecker_params_v2_t *n = malloc(sizeof(dt_iop_colorchecker_params_v2_t));
 
     n->num_patches = 24;
     for(int k=0; k<24; k++)
@@ -841,7 +840,7 @@ void _colorchecker_rebuild_patch_list(dt_iop_module_t *self)
   }
 }
 
-void _colorchecker_update_sliders(struct dt_iop_module_t *self)
+void _colorchecker_update_sliders(dt_iop_module_t *self)
 {
   dt_iop_colorchecker_params_t *p = self->params;
   dt_iop_colorchecker_gui_data_t *g = self->gui_data;
@@ -888,15 +887,15 @@ void gui_update(dt_iop_module_t *self)
   gtk_widget_queue_draw(g->area);
 }
 
-void init(dt_iop_module_t *module)
+void init(dt_iop_module_t *self)
 {
-  module->params = calloc(1, sizeof(dt_iop_colorchecker_params_t));
-  module->default_params = calloc(1, sizeof(dt_iop_colorchecker_params_t));
-  module->default_enabled = FALSE;
-  module->params_size = sizeof(dt_iop_colorchecker_params_t);
-  module->gui_data = NULL;
+  self->params = calloc(1, sizeof(dt_iop_colorchecker_params_t));
+  self->default_params = calloc(1, sizeof(dt_iop_colorchecker_params_t));
+  self->default_enabled = FALSE;
+  self->params_size = sizeof(dt_iop_colorchecker_params_t);
+  self->gui_data = NULL;
 
-  dt_iop_colorchecker_params_t *d = module->default_params;
+  dt_iop_colorchecker_params_t *d = self->default_params;
   d->num_patches = colorchecker_patches;
   for(int k = 0; k < d->num_patches; k++)
   {
@@ -906,22 +905,21 @@ void init(dt_iop_module_t *module)
   }
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorchecker_global_data_t *gd
-      = (dt_iop_colorchecker_global_data_t *)malloc(sizeof(dt_iop_colorchecker_global_data_t));
-  module->data = gd;
+  dt_iop_colorchecker_global_data_t *gd = malloc(sizeof(dt_iop_colorchecker_global_data_t));
+  self->data = gd;
 
   const int program = 8; // extended.cl, from programs.conf
   gd->kernel_colorchecker = dt_opencl_create_kernel(program, "colorchecker");
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorchecker_global_data_t *gd = module->data;
+  dt_iop_colorchecker_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_colorchecker);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 void color_picker_apply(dt_iop_module_t *self,

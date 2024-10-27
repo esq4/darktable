@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2011-2023 darktable developers.
+    Copyright (C) 2011-2024 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -581,13 +581,13 @@ void gui_update(dt_iop_module_t *self)
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-void init(dt_iop_module_t *module)
+void init(dt_iop_module_t *self)
 {
-  dt_iop_default_init(module);
+  dt_iop_default_init(self);
 
-  module->request_histogram |= DT_REQUEST_ON;
+  self->request_histogram |= DT_REQUEST_ON;
 
-  dt_iop_levels_params_t *d = module->default_params;
+  dt_iop_levels_params_t *d = self->default_params;
 
   d->levels[0] = 0.0f;
   d->levels[1] = 0.5f;
@@ -597,8 +597,7 @@ void init(dt_iop_module_t *module)
 void init_global(dt_iop_module_so_t *self)
 {
   const int program = 2; // basic.cl, from programs.conf
-  dt_iop_levels_global_data_t *gd
-      = (dt_iop_levels_global_data_t *)malloc(sizeof(dt_iop_levels_global_data_t));
+  dt_iop_levels_global_data_t *gd = malloc(sizeof(dt_iop_levels_global_data_t));
   self->data = gd;
   gd->kernel_levels = dt_opencl_create_kernel(program, "levels");
 }

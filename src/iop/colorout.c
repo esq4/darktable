@@ -228,21 +228,20 @@ int legacy_params(dt_iop_module_t *self,
 #undef DT_IOP_COLOR_ICC_LEN_V4
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
   const int program = 2; // basic.cl, from programs.conf
-  dt_iop_colorout_global_data_t *gd
-      = (dt_iop_colorout_global_data_t *)malloc(sizeof(dt_iop_colorout_global_data_t));
-  module->data = gd;
+  dt_iop_colorout_global_data_t *gd = malloc(sizeof(dt_iop_colorout_global_data_t));
+  self->data = gd;
   gd->kernel_colorout = dt_opencl_create_kernel(program, "colorout");
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorout_global_data_t *gd = module->data;
+  dt_iop_colorout_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_colorout);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 static void intent_changed(GtkWidget *widget, dt_iop_module_t *self)
@@ -807,12 +806,12 @@ void gui_update(dt_iop_module_t *self)
            dt_colorspaces_get_name(p->type, p->filename));
 }
 
-void init(dt_iop_module_t *module)
+void init(dt_iop_module_t *self)
 {
-  dt_iop_default_init(module);
+  dt_iop_default_init(self);
 
-  module->hide_enable_button = TRUE;
-  module->default_enabled = TRUE;
+  self->hide_enable_button = TRUE;
+  self->default_enabled = TRUE;
 }
 
 static void _preference_changed(gpointer instance, dt_iop_module_t *self)

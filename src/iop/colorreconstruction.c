@@ -307,7 +307,7 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
 {
   if(!b) return NULL;
 
-  dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
+  dt_iop_colorreconstruct_bilateral_frozen_t *bf = malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
   if(!bf)
   {
     dt_print(DT_DEBUG_ALWAYS, "[color reconstruction] not able to allocate buffer (c)");
@@ -343,7 +343,7 @@ static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_th
 {
   if(!bf) return NULL;
 
-  dt_iop_colorreconstruct_bilateral_t *b = (dt_iop_colorreconstruct_bilateral_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_t));
+  dt_iop_colorreconstruct_bilateral_t *b = malloc(sizeof(dt_iop_colorreconstruct_bilateral_t));
   if(!b)
   {
     dt_print(DT_DEBUG_ALWAYS, "[color reconstruction] not able to allocate buffer (e)");
@@ -731,7 +731,7 @@ static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral
     return NULL;
   }
 
-  dt_iop_colorreconstruct_bilateral_cl_t *b = (dt_iop_colorreconstruct_bilateral_cl_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
+  dt_iop_colorreconstruct_bilateral_cl_t *b = malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
   if(!b)
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (a)");
@@ -801,7 +801,7 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
 {
   if(!b) return NULL;
 
-  dt_iop_colorreconstruct_bilateral_frozen_t *bf = (dt_iop_colorreconstruct_bilateral_frozen_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
+  dt_iop_colorreconstruct_bilateral_frozen_t *bf = malloc(sizeof(dt_iop_colorreconstruct_bilateral_frozen_t));
   if(!bf)
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (d)");
@@ -871,7 +871,7 @@ static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral
     return NULL;
   }
 
-  dt_iop_colorreconstruct_bilateral_cl_t *b = (dt_iop_colorreconstruct_bilateral_cl_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
+  dt_iop_colorreconstruct_bilateral_cl_t *b = malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
   if(!b)
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (f)");
@@ -1169,7 +1169,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_colorreconstruct_data_t *d = (dt_iop_colorreconstruct_data_t *)calloc(1, sizeof(dt_iop_colorreconstruct_data_t));
+  dt_iop_colorreconstruct_data_t *d = calloc(1, sizeof(dt_iop_colorreconstruct_data_t));
   piece->data = (void *)d;
 }
 
@@ -1197,11 +1197,10 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_gui_leave_critical_section(self);
 }
 
-void init_global(dt_iop_module_so_t *module)
+void init_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorreconstruct_global_data_t *gd
-      = (dt_iop_colorreconstruct_global_data_t *)malloc(sizeof(dt_iop_colorreconstruct_global_data_t));
-  module->data = gd;
+  dt_iop_colorreconstruct_global_data_t *gd = malloc(sizeof(dt_iop_colorreconstruct_global_data_t));
+  self->data = gd;
   const int program = 13; // colorcorrection.cl, from programs.conf
   gd->kernel_colorreconstruct_zero = dt_opencl_create_kernel(program, "colorreconstruction_zero");
   gd->kernel_colorreconstruct_splat = dt_opencl_create_kernel(program, "colorreconstruction_splat");
@@ -1209,15 +1208,15 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_colorreconstruct_slice = dt_opencl_create_kernel(program, "colorreconstruction_slice");
 }
 
-void cleanup_global(dt_iop_module_so_t *module)
+void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_colorreconstruct_global_data_t *gd = module->data;
+  dt_iop_colorreconstruct_global_data_t *gd = self->data;
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_zero);
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_splat);
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_blur_line);
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_slice);
-  free(module->data);
-  module->data = NULL;
+  free(self->data);
+  self->data = NULL;
 }
 
 

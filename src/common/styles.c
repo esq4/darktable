@@ -669,7 +669,7 @@ void dt_styles_apply_style_item(dt_develop_t *dev,
 
   if(mod_src)
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+    dt_iop_module_t *module = calloc(1, sizeof(dt_iop_module_t));
 
     if(module)
       module->dev = dev;
@@ -886,7 +886,7 @@ void _styles_apply_to_image_ext(const char *name,
     GList *si_list = NULL;
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
-      dt_style_item_t *style_item = (dt_style_item_t *)malloc(sizeof(dt_style_item_t));
+      dt_style_item_t *style_item = malloc(sizeof(dt_style_item_t));
 
       style_item->num = sqlite3_column_int(stmt, 0);
       style_item->selimg_num = 0;
@@ -1209,7 +1209,7 @@ char *dt_styles_get_item_list_as_string(const char *name)
   }
   names = g_list_reverse(names);  // list was built in reverse order, so un-reverse it
 
-  char *result = dt_util_glist_to_str("", names);
+  char *result = dt_util_glist_to_str("\n", names);
   g_list_free_full(names, g_free);
   g_list_free_full(items, dt_style_item_free);
   return result;

@@ -207,8 +207,7 @@ GList *dt_control_crawler_run(void)
       // step 1: check if the xmp is newer than our db entry
       if(timestamp + MAX_TIME_SKEW < statbuf.st_mtime)
       {
-        dt_control_crawler_result_t *item
-            = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
+        dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
         item->id = id;
         item->timestamp_xmp = statbuf.st_mtime;
         item->timestamp_db = timestamp;
@@ -229,7 +228,7 @@ GList *dt_control_crawler_run(void)
     while((c > image_path) && (*c != '.')) c--;
     len = c - image_path + 1;
 
-    char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
+    char *extra_path = calloc(len + 3 + 1, sizeof(char));
     if(extra_path)
     {
       g_strlcpy(extra_path, image_path, len + 1);

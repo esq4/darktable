@@ -469,7 +469,7 @@ static int _gradient_events_button_released(dt_iop_module_t *module,
     const float zoom_scale = dt_dev_get_zoom_scale_full();
 
     // we create the gradient
-    dt_masks_point_gradient_t *gradient = (malloc(sizeof(dt_masks_point_gradient_t)));
+    dt_masks_point_gradient_t *gradient = malloc(sizeof(dt_masks_point_gradient_t));
 
     // get the rotation angle only if we are not too close from starting point
     _gradient_init_values(zoom_scale, gui, gui->posx, gui->posy, pzx * wd, pzy * ht,
@@ -1430,7 +1430,7 @@ static void _gradient_sanitize_config(dt_masks_type_t type)
   dt_conf_set_float(DT_MASKS_CONF(type, gradient, curvature), 0.0f);
 }
 
-static void _gradient_set_form_name(struct dt_masks_form_t *const form,
+static void _gradient_set_form_name(dt_masks_form_t *const form,
                                     const size_t nb)
 {
   snprintf(form->name, sizeof(form->name), _("gradient #%d"), (int)nb);
