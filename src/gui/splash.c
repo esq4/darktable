@@ -268,6 +268,7 @@ void darktable_splash_screen_create(GtkWindow *parent_window,
 
   gtk_window_set_decorated(GTK_WINDOW(splash_screen), FALSE);
   gtk_widget_show_all(splash_screen);
+  gtk_widget_hide(GTK_WIDGET(remaining_box)); //ab
   gtk_window_set_keep_above(GTK_WINDOW(splash_screen), TRUE);
   _process_all_gui_events();
 }
@@ -298,8 +299,9 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
     char *text = g_strdup_printf(msg, percent);
     gtk_label_set_text(GTK_LABEL(progress_text), text);
     g_free(text);
-    gtk_widget_show(progress_text);
+    //gtk_widget_show(progress_text);
 
+    gtk_widget_show_all(splash_screen);
     if(elapsed >= 2.0 && fraction > 0.001)
     {
       const double total = elapsed / fraction;
@@ -318,7 +320,6 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
       gtk_label_set_text(GTK_LABEL(remaining_text), "--:--"); //ba
       gtk_widget_hide(GTK_WIDGET(remaining_box)); //ab
     }
-    gtk_widget_show_all(splash_screen);
     showing_remaining = TRUE;
     _process_all_gui_events();
   }
