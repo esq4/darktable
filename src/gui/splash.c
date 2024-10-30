@@ -310,7 +310,6 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
       const int seconds = remain - (60 * minutes);
       //ab char *rem_text = g_strdup_printf("⏲%4d:%02d", minutes, seconds);
       char *rem_text = g_strdup_printf("%4d:%02d", minutes, seconds); //ba
-      gtk_widget_show(GTK_WIDGET(remaining_box)); //ab
       gtk_label_set_text(GTK_LABEL(remaining_text), rem_text);
       g_free(rem_text);
     }
