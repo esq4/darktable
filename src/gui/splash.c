@@ -238,7 +238,6 @@ void darktable_splash_screen_create(GtkWindow *parent_window,
   gtk_widget_show(hbar);
   gtk_box_pack_start(content, hbar, FALSE, FALSE, 0);
   gtk_box_pack_start(content, progress_text, FALSE, FALSE, 0);
-//  gtk_box_pack_start(content, remaining_text, FALSE, FALSE, 0);
 
   GtkWidget *clock;
   gchar *clock_file = g_strdup_printf("%s/pixmaps/clock24.gif", darktable.datadir);
@@ -265,7 +264,6 @@ void darktable_splash_screen_set_progress(const char *msg)
     gtk_widget_show(progress_text);
     if(showing_remaining)
     {
-//      gtk_label_set_text(GTK_LABEL(remaining_text), "");
       gtk_widget_hide(GTK_WIDGET(remaining_box));
       showing_remaining = FALSE;
     }
@@ -283,7 +281,6 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
     char *text = g_strdup_printf(msg, percent);
     gtk_label_set_text(GTK_LABEL(progress_text), text);
     g_free(text);
-//    gtk_widget_show(progress_text);
 
     gtk_widget_show_all(splash_screen);
     if(elapsed >= 2.0 && fraction > 0.001)
@@ -292,14 +289,12 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
       const double remain = total - elapsed;
       const int minutes = remain / 60;
       const int seconds = remain - (60 * minutes);
-//      char *rem_text = g_strdup_printf("⏲%4d:%02d", minutes, seconds);
       char *rem_text = g_strdup_printf("%4d:%02d", minutes, seconds);
       gtk_label_set_text(GTK_LABEL(remaining_text), rem_text);
       g_free(rem_text);
     }
     else
     {
-//      gtk_label_set_text(GTK_LABEL(remaining_text), "⏲  --:--");
       gtk_label_set_text(GTK_LABEL(remaining_text), "--:--");
       gtk_widget_hide(GTK_WIDGET(remaining_box));
     }
