@@ -47,6 +47,8 @@ static GtkWidget *progress_text = NULL;
 static GtkWidget *remaining_text = NULL;
 static gboolean showing_remaining = FALSE;
 static GtkBox *remaining_box = NULL; //ab
+static GtkWidget *remaining_clock; //ab
+static int remaining_clock_count = 0; //ab
 
 static GtkWidget *exit_screen = NULL;
 
@@ -240,25 +242,19 @@ void darktable_splash_screen_create(GtkWindow *parent_window,
   gtk_box_pack_start(content, progress_text, FALSE, FALSE, 0);
 //ab gtk_box_pack_start(content, remaining_text, FALSE, FALSE, 0);
 //ab
-//  GtkImage *clock;
-//  gchar *clock_file = g_strdup_printf("%s/pixmaps/clock24.gif", darktable.datadir);
-//  GdkPixbufAnimation *clock_image = gdk_pixbuf_animation_new_from_file(clock_file, NULL);
-//  gtk_image_set_from_animation(GTK_IMAGE(clock), clock_image);
-//  g_free(clock_file);
-//  g_object_unref(clock_image);
-
-  GtkWidget *clock;
-  gchar *clock_file = g_strdup_printf("%s/pixmaps/clock24.gif", darktable.datadir);
-//  GdkPixbuf *clock_image = gdk_pixbuf_new_from_file_at_size(clock_file, 20, -1, NULL);
-//  clock = gtk_image_new_from_pixbuf(clock_image);
-  clock = gtk_image_new_from_file(clock_file);
+  gchar *clock_file = g_strdup_printf("%s/pixmaps/clock/clock0.svg", darktable.datadir);
+  GdkPixbuf *clock_image = gdk_pixbuf_new_from_file_at_size(clock_file, -1, 20, NULL);
+  remaining_clock = gtk_image_new_from_pixbuf(clock_image);
+  g_object_unref(clock_image);
   g_free(clock_file);
-//  g_object_unref(clock_image);
 
-//  gtk_box_pack_start(content, GTK_WIDGET(clock), FALSE, FALSE, 0);
+//  GtkWidget *clock;
+//  gchar *clock_file = g_strdup_printf("%s/pixmaps/clock24.gif", darktable.datadir);
+//  clock = gtk_image_new_from_file(clock_file);
+//  g_free(clock_file);
 
   remaining_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
-  gtk_box_pack_start(remaining_box, GTK_WIDGET(clock), FALSE, FALSE, 0);
+  gtk_box_pack_start(remaining_box, GTK_WIDGET(remaining_clock), FALSE, FALSE, 0);
   gtk_box_pack_start(remaining_box, remaining_text, FALSE, FALSE, 0);
   gtk_box_pack_start(content, GTK_WIDGET(remaining_box), FALSE, FALSE, 0);
 
@@ -281,13 +277,23 @@ void darktable_splash_screen_set_progress(const char *msg)
     gtk_widget_show(progress_text);
     if(showing_remaining)
     {
-      //ab gtk_label_set_text(GTK_LABEL(remaining_text), "");
       gtk_widget_hide(GTK_WIDGET(remaining_box)); //ab
+      //ab gtk_label_set_text(GTK_LABEL(remaining_text), "");
       showing_remaining = FALSE;
     }
     _process_all_gui_events();
   }
 }
+
+//ab
+void darktable_splash_screen_set_remaining_clock(int _remaining_clock_count)
+{
+  gchar *clock_file = g_strdup_printf("%s/pixmaps/clock/clock%1d.svg", darktable.datadir, _remaining_clock_count);
+  GdkPixbuf *clock_image = gdk_pixbuf_new_from_file_at_size(clock_file, -1, 20, NULL);
+  gtk_image_set_from_pixbuf(GTK_IMAGE(remaining_clock), clock_image);
+  g_object_unref(clock_image);
+}
+//ba
 
 void darktable_splash_screen_set_progress_percent(const char *msg,
                                                   const double fraction,
@@ -301,24 +307,29 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
     g_free(text);
     //gtk_widget_show(progress_text);
 
-    gtk_widget_show_all(splash_screen);
-    if(elapsed >= 2.0 && fraction > 0.001)
+    if(elapsed >= 2.0 && fraction > 0.2)
     {
       const double total = elapsed / fraction;
       const double remain = total - elapsed;
       const int minutes = remain / 60;
       const int seconds = remain - (60 * minutes);
-      //ab char *rem_text = g_strdup_printf("⏲%4d:%02d", minutes, seconds);
-      char *rem_text = g_strdup_printf("%4d:%02d", minutes, seconds); //ba
+      char *rem_text = g_strdup_printf(" %4d:%02d", minutes, seconds); //ba
       gtk_label_set_text(GTK_LABEL(remaining_text), rem_text);
+      //ab char *rem_text = g_strdup_printf("⏲%4d:%02d", minutes, seconds);
       g_free(rem_text);
+
+      darktable_splash_screen_set_remaining_clock(remaining_clock_count);
+      if (remaining_clock_count++ > 11)
+      {
+          remaining_clock_count = 0;
+      }
     }
     else
     {
+      gtk_label_set_text(GTK_LABEL(remaining_text), "   --:--"); //ba
       //ab gtk_label_set_text(GTK_LABEL(remaining_text), "⏲  --:--");
-      gtk_label_set_text(GTK_LABEL(remaining_text), "--:--"); //ba
-      gtk_widget_hide(GTK_WIDGET(remaining_box)); //ab
     }
+    gtk_widget_show_all(splash_screen);
     showing_remaining = TRUE;
     _process_all_gui_events();
   }
