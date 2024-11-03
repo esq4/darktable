@@ -45,6 +45,30 @@ typedef struct dt_undo_ratings_t
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/dr_next_img.c"
 
+gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...)
+{
+  va_list args;
+  gchar *ns;
+  va_start(args, format);
+  const size_t clen = str ? strlen(str) : 0;
+  const int alen = g_vsnprintf(NULL, 0, format, args);
+  const int nsize = alen + clen + 1;
+
+  /* realloc for new string */
+  ns = g_realloc(str, nsize);
+  if(str == NULL) ns[0] = '\0';
+  va_end(args);
+
+  /* append string */
+  va_start(args, format);
+  g_vsnprintf(ns + clen, alen + 1, format, args);
+  va_end(args);
+
+  ns[nsize - 1] = '\0';
+
+  return ns;
+}
+
 gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
 {
   int new_offset = 1;
