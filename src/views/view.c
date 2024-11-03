@@ -755,7 +755,7 @@ dt_view_surface_value_t dt_view_image_get_surface(const dt_imgid_t imgid,
 
   // we transfer cached image on a cairo_surface (with colorspace transform if needed)
   cairo_surface_t *tmp_surface = NULL;
-  uint8_t *rgbbuf = calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
+  uint8_t *rgbbuf = (uint8_t *)calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
   if(rgbbuf)
   {
     gboolean have_lock = FALSE;
@@ -1322,7 +1322,7 @@ GSList *dt_mouse_action_create_simple(GSList *actions,
                                       const GdkModifierType accel,
                                       const char *const description)
 {
-  dt_mouse_action_t *a = calloc(1, sizeof(dt_mouse_action_t));
+  dt_mouse_action_t *a = (dt_mouse_action_t *)calloc(1, sizeof(dt_mouse_action_t));
   if(a)
   {
     a->action = type;
@@ -1340,7 +1340,7 @@ GSList *dt_mouse_action_create_format(GSList *actions,
                                       const char *const format_string,
                                       const char *const replacement)
 {
-  dt_mouse_action_t *a = calloc(1, sizeof(dt_mouse_action_t));
+  dt_mouse_action_t *a = (dt_mouse_action_t *)calloc(1, sizeof(dt_mouse_action_t));
   if(a)
   {
     a->action = type;
@@ -1356,44 +1356,44 @@ static gchar *_mouse_action_get_string(dt_mouse_action_t *ma)
 {
   gchar *atxt = NULL;
   if(ma->mods & GDK_SHIFT_MASK  )
-    atxt = dt_util_dstrcat(atxt, "%s+", _("shift"));
+    dt_util_str_cat(&atxt, "%s+", _("shift"));
   if(ma->mods & GDK_CONTROL_MASK)
-    atxt = dt_util_dstrcat(atxt, "%s+", _("ctrl"));
+    dt_util_str_cat(&atxt, "%s+", _("ctrl"));
   if(ma->mods & GDK_MOD1_MASK   )
 #ifdef __APPLE__
-    atxt = dt_util_dstrcat(atxt, "%s+", _("option"));
+    dt_util_str_cat(&atxt, "%s+", _("option"));
 #else
-    atxt = dt_util_dstrcat(atxt, "%s+", _("alt"));
+    dt_util_str_cat(&atxt, "%s+", _("alt"));
 #endif
 
   switch(ma->action)
   {
     case DT_MOUSE_ACTION_LEFT:
-      atxt = dt_util_dstrcat(atxt, _("left click"));
+      dt_util_str_cat(&atxt, _("left click"));
       break;
     case DT_MOUSE_ACTION_RIGHT:
-      atxt = dt_util_dstrcat(atxt, _("right click"));
+      dt_util_str_cat(&atxt, _("right click"));
       break;
     case DT_MOUSE_ACTION_MIDDLE:
-      atxt = dt_util_dstrcat(atxt, _("middle click"));
+      dt_util_str_cat(&atxt, _("middle click"));
       break;
     case DT_MOUSE_ACTION_SCROLL:
-      atxt = dt_util_dstrcat(atxt, _("scroll"));
+      dt_util_str_cat(&atxt, _("scroll"));
       break;
     case DT_MOUSE_ACTION_DOUBLE_LEFT:
-      atxt = dt_util_dstrcat(atxt, _("left double-click"));
+      dt_util_str_cat(&atxt, _("left double-click"));
       break;
     case DT_MOUSE_ACTION_DOUBLE_RIGHT:
-      atxt = dt_util_dstrcat(atxt, _("right double-click"));
+      dt_util_str_cat(&atxt, _("right double-click"));
       break;
     case DT_MOUSE_ACTION_DRAG_DROP:
-      atxt = dt_util_dstrcat(atxt, _("drag and drop"));
+      dt_util_str_cat(&atxt, _("drag and drop"));
       break;
     case DT_MOUSE_ACTION_LEFT_DRAG:
-      atxt = dt_util_dstrcat(atxt, _("left click+drag"));
+      dt_util_str_cat(&atxt, _("left click+drag"));
       break;
     case DT_MOUSE_ACTION_RIGHT_DRAG:
-      atxt = dt_util_dstrcat(atxt, _("right click+drag"));
+      dt_util_str_cat(&atxt, _("right click+drag"));
       break;
   }
 
