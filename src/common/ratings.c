@@ -40,6 +40,78 @@ typedef struct dt_undo_ratings_t
   int after;
 } dt_undo_ratings_t;
 
+//ab
+#include "dtgtk/thumbnail.h"
+#include "dtgtk/thumbtable.h"
+#include "dtgtk/dr_next_img.c"
+
+gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...)
+{
+  va_list args;
+  gchar *ns;
+  va_start(args, format);
+  const size_t clen = str ? strlen(str) : 0;
+  const int alen = g_vsnprintf(NULL, 0, format, args);
+  const int nsize = alen + clen + 1;
+
+  /* realloc for new string */
+  ns = g_realloc(str, nsize);
+  if(str == NULL) ns[0] = '\0';
+  va_end(args);
+
+  /* append string */
+  va_start(args, format);
+  g_vsnprintf(ns + clen, alen + 1, format, args);
+  va_end(args);
+
+  ns[nsize - 1] = '\0';
+
+  return ns;
+}
+
+gboolean _ratings_event_rating_release(dt_develop_t *user_data,int imgid)
+{
+  int new_offset = 1;
+  int new_id = -1;
+  int diff = 1;
+
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+
+  // we new offset and imgid after the jump
+  sqlite3_stmt *stmt;
+  gchar *query = dt_util_dstrcat(NULL, "SELECT rowid, imgid "
+                                          "FROM memory.collected_images "
+                                          "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
+                                 imgid, diff);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    new_offset = sqlite3_column_int(stmt, 0);
+    new_id = sqlite3_column_int(stmt, 1);
+  }
+  else
+  {
+    // if we are here, that means that the current is not anymore in the list
+    // in this case, let's use the current offset image
+    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
+    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+  }
+  g_free(query);
+  sqlite3_finalize(stmt);
+
+  if(new_id < 0 || new_id == imgid) return FALSE;
+  if(!dt_collection_image_offset(imgid))
+  {
+    dt_next_img_dev_change_image(dev, new_id);
+    //dr_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+    dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, FALSE);
+    // if it's a change by key_press, we set mouse_over to the active image
+    dt_control_set_mouse_over_id(new_id);
+  }
+  return TRUE;
+}
+//ba
+
 int dt_ratings_get(const dt_imgid_t imgid)
 {
   int stars = 0;
@@ -175,6 +247,10 @@ static void _ratings_apply(const GList *imgs,
       new_rating = DT_RATINGS_REJECT;
 
     _ratings_apply_to_image(image_id, new_rating);
+    if(rating != DT_VIEW_DESERT) //ab
+    {
+      _ratings_event_rating_release(darktable.develop, image_id);
+    } //ba
   }
 }
 
