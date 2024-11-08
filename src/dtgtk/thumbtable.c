@@ -1044,6 +1044,77 @@ void dt_thumbtable_zoom_changed(dt_thumbtable_t *table,
   }
 }
 
+//ab 211121 static void _thumb_jump_image(int32_t imgid, int diff, gboolean by_key)
+#include "dtgtk/dr_next_img.c"
+void _thumb_jump_image(gpointer user_data, int diff, gboolean by_key)
+{
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+  //dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
+  //int32_t  imgid = thumb->imgid;
+  int32_t  imgid = _thumb_get_imgid(dt_ui_thumbtable(darktable.gui->ui)->offset);
+  int new_id = -1;
+  int new_offset = 1;
+
+  // we new offset and imgid after the jump
+  sqlite3_stmt *stmt;
+  gchar *query = g_strdup_printf("SELECT rowid, imgid "
+                                 "FROM memory.collected_images "
+                                 "WHERE rowid=(SELECT rowid FROM memory.collected_images WHERE imgid=%d)+%d",
+                                 imgid, diff);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    new_offset = sqlite3_column_int(stmt, 0);
+    new_id = sqlite3_column_int(stmt, 1);
+    new_id = new_id;
+    //DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, new_id);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE);
+  }
+  else if(diff > 0)
+  {
+    // if we are here, that means that the current is not anymore in the list
+    // in this case, let's use the current offset image
+//    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
+//    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+  }
+  else if(diff < 0)
+  {
+//    // if we are here, that means that the current is not anymore in the list
+//    // in this case, let's use the image before current offset
+//    new_offset = MAX(1, dt_ui_thumbtable(darktable.gui->ui)->offset - 1);
+//    sqlite3_stmt *stmt2;
+//    gchar *query2 = g_strdup_printf("SELECT imgid FROM memory.collected_images WHERE rowid=%d", new_offset);
+//    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query2, -1, &stmt2, NULL);
+//    if(sqlite3_step(stmt2) == SQLITE_ROW)
+//    {
+//      new_id = sqlite3_column_int(stmt2, 0);
+//    }
+//    else
+//    {
+//      new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
+//      new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+//    }
+//    g_free(query2);
+//    sqlite3_finalize(stmt2);
+  }
+  g_free(query);
+  sqlite3_finalize(stmt);
+
+  if(new_id < 0 || new_id == imgid || new_offset == 0) return;
+
+  // if id seems valid, we change the image and move filmstrip
+  dt_next_img_dev_change_image(dev, new_id);
+  g_slist_free(darktable.view_manager->active_images);
+  darktable.view_manager->active_images = g_slist_prepend(NULL, GINT_TO_POINTER(imgid));
+  //DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+
+  // if it's a change by key_press, we set mouse_over to the active image
+  if(by_key) dt_control_set_mouse_over_id(new_id);
+}
+//ba 211121GDK_BUTTON3_MASK &&
+
 static gboolean _event_scroll_compressed(gpointer user_data)
 {
   if (!user_data) return FALSE;
