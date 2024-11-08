@@ -2747,17 +2747,16 @@ void dt_collection_hint_message(const dt_collection_t *collection)
       selected++;
     }
     g_list_free(selected_imgids);
-    message = g_strdup_printf(_("<b>%d</b> image (#<b>%d</b>) selected of <b>%d</b>"),
-                              cs, selected, c);
+    message = g_strdup_printf(_("<b>%d</b> img (#<b>%d</b>) of <b>%d</b>"), cs, selected, c);  //ab
   }
   else
   {
     message = g_strdup_printf(
       ngettext(
-        "<b>%d</b> image selected of <b>%d</b>",
-        "<b>%d</b> images selected of <b>%d</b>",
+        "<b>%d</b> img sel. of <b>%d</b>",
+        "<b>%d</b> imgs sel. of <b>%d</b>",
         cs),
-      cs, c);
+      cs, c);    //ab
   }
 
   g_idle_add(dt_collection_hint_message_internal, message);
