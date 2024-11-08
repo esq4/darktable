@@ -3066,7 +3066,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           && darktable.control->button_down_which == 3
           && dev->proxy.rotate)
   {
-    dev->proxy.rotate->mouse_moved(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, zoom_scale);
+    //ab pkm dev->proxy.rotate->mouse_moved(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, zoom_scale);
   }
 }
 
@@ -3099,7 +3099,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
   // rotate
   if(which == 3 && dev->proxy.rotate)
-    handled = dev->proxy.rotate->button_released(dev->proxy.rotate, zoom_x, zoom_y, which, state, zoom_scale);
+    //ab pkm handled = dev->proxy.rotate->button_released(dev->proxy.rotate, zoom_x, zoom_y, which, state, zoom_scale);
   if(handled) return handled;
   // masks
   if(dev->form_visible)
@@ -3138,8 +3138,8 @@ int button_pressed(dt_view_t *self,
       dt_control_change_cursor(GDK_HAND1);
       return 1;
     }
-    else if(which == 3 && dev->proxy.rotate)
-      return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, type, state, zoom_scale);
+    //ab pkm else if(which == 3 && dev->proxy.rotate)
+      //ab pkm return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, type, state, zoom_scale);
   }
 
   int handled = 0;
@@ -3262,8 +3262,8 @@ int button_pressed(dt_view_t *self,
 
   if(which == 2  && type == GDK_BUTTON_PRESS) // Middle mouse button
     dt_dev_zoom_move(&dev->full, DT_ZOOM_1, 0.0f, -2, x, y, !dt_modifier_is(state, GDK_CONTROL_MASK));
-  if(which == 3 && dev->proxy.rotate)
-    return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, type, state, zoom_scale);
+  //ab pkm if(which == 3 && dev->proxy.rotate)
+    //ab pkm return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y, pressure, which, type, state, zoom_scale);
 
   return 0;
 }
@@ -3279,6 +3279,18 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
 
   float zoom_x, zoom_y, zoom_scale;
   dt_dev_get_pointer_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
+
+  //ab pkm
+  if(!dt_iop_color_picker_is_visible(dev))
+  {
+    if(dt_key_modifier_state() & GDK_BUTTON3_MASK)
+    {
+      dt_dev_jump_image(dev, up ? -1 :  1, TRUE);
+      return;
+    }
+  }
+  //ba pkm
+
 
   int handled = 0;
 
