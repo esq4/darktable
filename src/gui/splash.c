@@ -48,7 +48,7 @@ static GtkWidget *remaining_text = NULL;
 static gboolean showing_remaining = FALSE;
 static GtkBox *remaining_box = NULL;
 static GtkWidget *remaining_clock; //ab
-static int remaining_clock_count = 0; //ab
+static int clock_count = 0; //ab for remaining_clock
 
 static GtkWidget *exit_screen = NULL;
 
@@ -288,7 +288,7 @@ void darktable_splash_screen_set_progress(const char *msg)
 }
 
 //ab
-void darktable_splash_screen_set_remaining_clock(int _remaining_clock_count)
+void darktable_splash_screen_set_remaining_clock(const int _remaining_clock_count)
 {
   gchar *clock_file = g_strdup_printf("%s/pixmaps/clock/clock%1d.svg", darktable.datadir, _remaining_clock_count);
   GdkPixbuf *clock_image = gdk_pixbuf_new_from_file_at_size(clock_file, -1, 20, NULL);
@@ -319,11 +319,14 @@ void darktable_splash_screen_set_progress_percent(const char *msg,
       //ab char *rem_text = g_strdup_printf("⏲%4d:%02d", minutes, seconds);
       g_free(rem_text);
 
-      if (remaining_clock_count++ > 11)
-      {
-          remaining_clock_count = 0;
-      }
-      darktable_splash_screen_set_remaining_clock(remaining_clock_count);
+//      if (remaining_clock_count++ > 11)
+//      {
+//          remaining_clock_count = 0;
+//      }
+
+      clock_count = (clock_count + 1) % 12;
+
+      darktable_splash_screen_set_remaining_clock(clock_count);
     }
     else
     {
