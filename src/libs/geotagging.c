@@ -558,6 +558,15 @@ static void _refresh_display_all_tracks(dt_lib_module_t *self)
   _refresh_displayed_images(self);
 }
 
+static gboolean _click_on_track_segments(GtkEntry *spin, GdkEventButton *event, dt_lib_module_t *self)
+{
+  if((event->button == 2)||(event->button == 1 && event->type == GDK_3BUTTON_PRESS))
+  {
+    _refresh_display_all_tracks(self);
+  }
+  return FALSE;
+}
+
 static void _track_seg_toggled(GtkCellRendererToggle *cell_renderer, gchar *path_str, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = self->data;
@@ -1899,6 +1908,7 @@ void gui_init(dt_lib_module_t *self)
 
   g_object_set(G_OBJECT(d->map.gpx_view), "has-tooltip", TRUE, NULL);
   g_signal_connect(G_OBJECT(d->map.gpx_view), "query-tooltip", G_CALLBACK(_row_tooltip_setup), self);
+  g_signal_connect(G_OBJECT(d->map.gpx_view), "button-press-event", G_CALLBACK(_click_on_track_segments), self);
 
   // avoid ugly console pixman messages due to headers
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), FALSE);
