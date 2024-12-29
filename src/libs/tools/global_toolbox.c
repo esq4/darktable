@@ -534,7 +534,10 @@ void gui_cleanup(dt_lib_module_t *self)
 
 void _lib_preferences_button_clicked(GtkWidget *widget, gpointer user_data)
 {
+  darktable.gui->hide_tooltips = 0;
   dt_gui_preferences_show();
+  gboolean tooltip_hidden = dt_conf_get_bool("ui/hide_tooltips");
+  darktable.gui->hide_tooltips = tooltip_hidden ? 1 : 0;
 }
 
 static void _lib_filter_grouping_button_clicked(GtkWidget *widget, gpointer user_data)

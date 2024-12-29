@@ -1517,7 +1517,7 @@ static gboolean _event_band_motion(GtkWidget *widget, GdkEventMotion *event, gpo
 
   // if we are outside the graph, don't go further
   const gboolean inside = (range->current_x_px >= 0 && range->current_x_px <= range->alloc_padding.width);
-  if(!inside)
+  if(!inside || darktable.gui->hide_tooltips)
   {
     range->mouse_inside = HOVER_OUTSIDE;
     dt_control_change_cursor(GDK_LEFT_PTR);
