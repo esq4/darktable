@@ -1027,11 +1027,12 @@ gboolean dt_shortcut_tooltip_callback(GtkWidget *widget,
   const gchar *widget_name = gtk_widget_get_name(widget);
 
   // if(_is_not_thumb_main(widget))
-  if(strcmp(widget_name, "thumb-main")
+  if((strcmp(widget_name, "thumb-main")
      && strcmp(widget_name, "thumb-altered")
      && strcmp(widget_name, "thumb-group-audio"))
+     || !(darktable.gui->hide_tooltips & 2))
   {
-    if(darktable.gui->hide_tooltips)
+    if(darktable.gui->hide_tooltips & 1)
       return FALSE;
   }
 

@@ -186,10 +186,11 @@ static void _fullscreen_key_accel_callback(dt_action_t *action)
 
 static void _toggle_tooltip_visibility(dt_action_t *action)
 {
-  gboolean tooltip_hidden = !dt_conf_get_bool("ui/hide_tooltips");
-  dt_conf_set_bool("ui/hide_tooltips", tooltip_hidden);
-  darktable.gui->hide_tooltips += tooltip_hidden ? 1 : -1;
-  dt_toast_log(tooltip_hidden ? _("tooltips off") : _("tooltips on"));
+  gboolean conf_hide = !dt_conf_get_bool("ui/hide_tooltips");
+  gboolean conf_thumbs = dt_conf_get_bool("ui/show_thumbs_tips");
+  darktable.gui->hide_tooltips = (conf_hide ? 1 : 0) + (conf_thumbs ? 2 : 0) ;
+  dt_conf_set_bool("ui/hide_tooltips", conf_hide);
+  dt_toast_log(conf_hide ? _("tooltips off") : _("tooltips on"));
 }
 
 static inline void _update_focus_peaking_button()
@@ -1353,7 +1354,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   if(!gui->ui)
     gui->ui = g_malloc0(sizeof(dt_ui_t));
   gui->surface = NULL;
-  gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
+  //gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
+  //gui->hide_tooltips = dt_conf_get_int("ui/hide_tooltips");
+  gui->hide_tooltips = (dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0)
+      + (dt_conf_get_bool("ui/show_thumbs_tips") ? 2 : 0);
   gui->grouping = dt_conf_get_bool("ui_last/grouping");
   gui->expanded_group_id = NO_IMGID;
   gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
