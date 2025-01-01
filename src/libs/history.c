@@ -861,7 +861,7 @@ static gboolean _changes_tooltip_callback(GtkWidget *widget,
   dt_iop_params_t *old_params = hitem->module->default_params;
   dt_develop_blend_params_t *old_blend = hitem->module->default_blendop_params;
 
-  if(darktable.gui->hide_tooltips)
+  if(darktable.gui->hide_tooltips & 1)
     return FALSE;
 
   for(const GList *find_old = darktable.develop->history;
