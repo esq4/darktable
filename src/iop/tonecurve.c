@@ -1165,8 +1165,7 @@ static gboolean _scrolled(GtkWidget *widget,
   dt_iop_tonecurve_params_t *p = self->params;
   dt_iop_tonecurve_gui_data_t *g = self->gui_data;
 
-  if(dt_gui_ignore_scroll(event))
-    return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   const int ch = g->channel;
   const int autoscale_ab = p->tonecurve_autoscale_ab;
@@ -1363,6 +1362,7 @@ static gboolean dt_iop_tonecurve_leave_notify(GtkWidget *widget,
   if(!(event->state & GDK_BUTTON1_MASK))
     g->selected = -1;
   gtk_widget_queue_draw(widget);
+  darktable.gui->scroll_input = FALSE;
   return FALSE;
 }
 
@@ -1971,6 +1971,10 @@ static gboolean dt_iop_tonecurve_button_press(GtkWidget *widget,
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget + ch);
     return TRUE;
+  }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
   }
   return FALSE;
 }

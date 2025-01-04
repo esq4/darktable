@@ -1272,12 +1272,17 @@ static void _display_offset(const GTimeSpan offset_int, const gboolean valid, dt
 #endif
 }
 
+static void _datetime_leave_event(GtkWidget *widget, GdkEventCrossing *event);
+
 static void _display_datetime(dt_lib_datetime_t *dtw, GDateTime *datetime,
                               const gboolean lock, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = self->data;
   for(int i = 0; lock && i < DT_GEOTAG_PARTS_NB; i++)
+  {
     g_signal_handlers_block_by_func(d->dt.widget[i], _datetime_entry_changed, self);
+    g_signal_connect(d->dt.widget[i], "leave_notify_event", G_CALLBACK(_datetime_leave_event), self);
+  }
   if(datetime)
   {
     char value[8] = {0};
@@ -1442,7 +1447,7 @@ static void _selection_changed_callback(gpointer instance, dt_lib_module_t *self
 
 static gboolean _datetime_scroll_over(GtkWidget *w, GdkEventScroll *event, dt_lib_module_t *self)
 {
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   dt_lib_geotagging_t *d = self->data;
   if(!d->editing)
@@ -1560,6 +1565,18 @@ static GtkWidget *_gui_init_datetime(gchar *text, dt_lib_datetime_t *dt, const i
   gtk_container_foreach(GTK_CONTAINER(flow2), (GtkCallback)gtk_widget_set_can_focus, GINT_TO_POINTER(FALSE));
 
   return flow;
+}
+
+static void _datetime_button_pressed(GtkWidget *entry, GdkEventButton *event)
+{
+  if(event->button == 2) darktable.gui->scroll_input = TRUE;
+  return;
+}
+
+static void _datetime_leave_event(GtkWidget *widget, GdkEventCrossing *event)
+{
+  if(event->type == GDK_LEAVE_NOTIFY) darktable.gui->scroll_input = FALSE;
+  return;
 }
 
 static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
@@ -1978,6 +1995,7 @@ void gui_init(dt_lib_module_t *self)
   {
     g_signal_connect(d->dt.widget[i], "changed", G_CALLBACK(_datetime_entry_changed), self);
     g_signal_connect(d->dt.widget[i], "key-press-event", G_CALLBACK(_datetime_key_pressed), self);
+    g_signal_connect(d->dt.widget[i], "button-press-event", G_CALLBACK(_datetime_button_pressed), self);
     g_signal_connect(d->dt.widget[i], "scroll-event", G_CALLBACK(_datetime_scroll_over), self);
   }
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_SELECTION_CHANGED, _selection_changed_callback);
