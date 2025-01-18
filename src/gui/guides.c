@@ -980,19 +980,19 @@ void dt_guides_draw(cairo_t *cr,
   cairo_restore(cr);
 }
 
-static void _settings_autoshow_change(GtkWidget *mi,
-                                      dt_iop_module_t *module)
-{
-  // we inverse the autoshow value for the module
-  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
-  dt_conf_set_bool(key, !dt_conf_get_bool(key));
-  darktable.gui->reset++;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->guides_combo),
-                               dt_conf_get_bool(key));
-  darktable.gui->reset--;
-  g_free(key);
-  dt_control_queue_redraw_center();
-}
+//static void _settings_autoshow_change(GtkWidget *mi,
+//                                      dt_iop_module_t *module)
+//{
+//  // we inverse the autoshow value for the module
+//  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
+//  dt_conf_set_bool(key, !dt_conf_get_bool(key));
+//  darktable.gui->reset++;
+//  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->guides_combo),
+//                               dt_conf_get_bool(key));
+//  darktable.gui->reset--;
+//  g_free(key);
+//  dt_control_queue_redraw_center();
+//}
 
 void dt_guides_add_module_menuitem(void *menu,
                                    dt_iop_module_t *module)
@@ -1001,8 +1001,8 @@ void dt_guides_add_module_menuitem(void *menu,
   gchar *key = _conf_get_path(module->op, "autoshow", NULL);
   gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), dt_conf_get_bool(key));
   g_free(key);
-  g_signal_connect(G_OBJECT(mi), "activate",
-                   G_CALLBACK(_settings_autoshow_change), module);
+//  g_signal_connect(G_OBJECT(mi), "activate",
+//                   G_CALLBACK(_settings_autoshow_change), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 }
 
