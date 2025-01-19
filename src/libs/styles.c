@@ -225,8 +225,9 @@ static void _styles_row_activated_callback(GtkTreeView *view,
                                            dt_lib_styles_t *d)
 {
   // This works on double click, so it's for single style
-  GtkTreeModel *model = gtk_tree_view_get_model(d->tree);
+  GtkTreeModel *model;
   GtkTreeIter iter;
+  model = gtk_tree_view_get_model(d->tree);
 
   if(!gtk_tree_model_get_iter(model, &iter, path)) return;
 
