@@ -959,6 +959,29 @@ GList *dt_tag_get_hierarchical(const dt_imgid_t imgid)
   return tags;
 }
 
+GList *dt_tag_get_(const dt_imgid_t imgid)
+{
+  GList *taglist = NULL;
+  GList *tags = NULL;
+
+  const gboolean ignore_dt_tags = !dt_conf_get_bool("plugins/lighttable/tagging/dttags");
+  const uint32_t count = dt_tag_get_attached(imgid, &taglist, ignore_dt_tags);
+
+  if(count < 1)
+    return NULL;
+
+  for(GList *tag_iter = taglist; tag_iter; tag_iter = g_list_next(tag_iter))
+  {
+    dt_tag_t *t = tag_iter->data;
+    tags = g_list_prepend(tags, g_strdup(t->tag));
+  }
+
+  dt_tag_free_result(&taglist);
+
+  tags = g_list_reverse(tags);
+  return tags;
+}
+
 static GList *_tag_get_tags(const dt_imgid_t imgid,
                             const dt_tag_type_t type)
 {
