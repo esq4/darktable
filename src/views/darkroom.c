@@ -3885,7 +3885,7 @@ void mouse_moved(dt_view_t *self,
     ctl->button_x = x;
     ctl->button_y = y;
   }
-  else if(darktable.control->button_down
+/*  else if(darktable.control->button_down
           && !handled
           && darktable.control->button_down_which == GDK_BUTTON_SECONDARY
           && dev->proxy.rotate)
@@ -3893,7 +3893,7 @@ void mouse_moved(dt_view_t *self,
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     dev->proxy.rotate->mouse_moved(dev->proxy.rotate, zoom_x, zoom_y,
                                    pressure, which, zoom_scale);
-  }
+  }*/
 }
 
 
@@ -3926,13 +3926,13 @@ int button_released(dt_view_t *self,
 
   float zoom_x = FLT_MAX, zoom_y, zoom_scale;
   // rotate
-  if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
+/*  if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     handled = dev->proxy.rotate->button_released(dev->proxy.rotate, zoom_x, zoom_y,
                                                  which, state, zoom_scale);
     if(handled) return handled;
-  }
+  }*/
   // masks
   if(dev->form_visible)
   {
@@ -3979,12 +3979,12 @@ int button_pressed(dt_view_t *self,
       dt_control_change_cursor("pointer");
       return 1;
     }
-    else if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
+/*    else if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
     {
       _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
       return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y, pressure,
                                                which, type, state, zoom_scale);
-    }
+    }*/
   }
 
   int handled = 0;
@@ -4142,12 +4142,12 @@ int button_pressed(dt_view_t *self,
   if(which == GDK_BUTTON_MIDDLE  && type == GDK_BUTTON_PRESS) // Middle mouse button
     dt_dev_zoom_move(&dev->full, DT_ZOOM_1, 0.0f, -2, x, y,
                      !dt_modifier_is(state, GDK_CONTROL_MASK));
-  if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
+/*  if(which == GDK_BUTTON_SECONDARY && dev->proxy.rotate)
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     return dev->proxy.rotate->button_pressed(dev->proxy.rotate, zoom_x, zoom_y,
                                              pressure, which, type, state, zoom_scale);
-  }
+  }*/
   return 0;
 }
 
@@ -4168,6 +4168,17 @@ void scrolled(dt_view_t *self,
 
   float zoom_x = FLT_MAX, zoom_y, zoom_scale;
   int handled = 0;
+
+  //ab pkm
+  if(!dt_iop_color_picker_is_visible(dev))
+  {
+    if(dt_key_modifier_state() & GDK_BUTTON3_MASK)
+    {
+      _dev_jump_image(dev, up ? -1 :  1, TRUE);
+      return;
+    }
+  }
+  //ba pkm
 
   // masks
   if(dev->form_visible
