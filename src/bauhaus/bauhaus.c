@@ -676,6 +676,9 @@ static void dt_bh_init(DtBauhausWidget *w)
 
 static gboolean _widget_enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 {
+  const gchar *widget_name = gtk_widget_get_name(widget);
+  if(!strcmp(widget_name, "bauhaus-slider") && (event->type == GDK_LEAVE_NOTIFY))
+    darktable.gui->scroll_input = FALSE;
   if(event->type == GDK_ENTER_NOTIFY)
     // gtk_widget_set_state_flags triggers resize&draw avalanche
     // instead add GTK_STATE_FLAG_PRELIGHT in _widget_draw
@@ -2909,7 +2912,7 @@ static void _slider_add_step(GtkWidget *widget,
 static gboolean _widget_scroll(GtkWidget *widget,
                                GdkEventScroll *event)
 {
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   // handle speed adjustment in mapping mode in dispatcher
   if(darktable.control->mapping_widget)
@@ -3416,6 +3419,7 @@ static gboolean _widget_button_press(GtkWidget *widget,
   {
     _slider_zoom_range(w, 0); // reset zoom range to soft min/max
     _slider_zoom_toast(w);
+    darktable.gui->scroll_input = TRUE;
   }
   else
   {

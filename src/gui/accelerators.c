@@ -978,6 +978,25 @@ static void _tooltip_reposition(GtkWidget *widget,
     gdk_window_move(window, nx, wy);
 }
 
+/*gboolean _is_not_thumb_main(GtkWidget *widget)
+{
+  const gchar *widget_name = gtk_widget_get_name(widget);
+  if(!strcmp(widget_name, "thumb-main"))
+    return FALSE;
+  return TRUE;
+}*/
+
+/*gboolean show_tooltip(GtkWidget *widget) //ab
+{
+  static int show_element = 0;
+  const gchar *widget_name = gtk_widget_get_name(widget);
+  if(!((!strcmp(widget_name, "thumb-group-audio"))||(!strcmp(widget_name, "thumb-altered"))||(!strcmp(widget_name, "thumb-star"))||(!strcmp(widget_name, "module-header"))||(!strcmp(widget_name, "thumb-main"))||(!strcmp(widget_name, "GtkBox"))||(!strcmp(widget_name, "outer-border"))||(!strcmp(widget_name, "GtkDarktableToggleButton"))||(!strcmp(widget_name, "GtkEventBox"))))
+  {
+    show_element++;
+  }
+  return FALSE;
+}*/
+
 gboolean dt_shortcut_tooltip_callback(GtkWidget *widget,
                                       gint x,
                                       gint y,
@@ -989,11 +1008,11 @@ gboolean dt_shortcut_tooltip_callback(GtkWidget *widget,
   if(!gtk_window_is_active(top)
      && gtk_window_get_window_type(top) != GTK_WINDOW_POPUP)
     return FALSE;
+  //ab  show_tooltip(widget);
 
   if(dt_key_modifier_state() & (GDK_BUTTON1_MASK|GDK_BUTTON2_MASK|GDK_BUTTON3_MASK
                                |GDK_SHIFT_MASK|GDK_CONTROL_MASK|GDK_MOD1_MASK)
-     || darktable.bauhaus->current
-     || darktable.gui->hide_tooltips)
+     || darktable.bauhaus->current)
     return FALSE;
 
   gchar *markup_text = NULL;
@@ -1006,6 +1025,16 @@ gboolean dt_shortcut_tooltip_callback(GtkWidget *widget,
   gchar *original_markup =
     dt_bauhaus_widget_get_tooltip_markup(widget, darktable.control->element);
   const gchar *widget_name = gtk_widget_get_name(widget);
+
+  // if(_is_not_thumb_main(widget))
+  if((strcmp(widget_name, "thumb-main")
+     && strcmp(widget_name, "thumb-altered")
+     && strcmp(widget_name, "thumb-group-audio"))
+     || !(darktable.gui->hide_tooltips & 2))
+  {
+    if(darktable.gui->hide_tooltips & 1)
+      return FALSE;
+  }
 
   if(!strcmp(widget_name, "actions_view") || !strcmp(widget_name, "shortcuts_view"))
   {

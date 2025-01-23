@@ -179,6 +179,8 @@ GList *dt_tag_get_list_export(const dt_imgid_t imgid,
  *  "darktable|" tags. */
 GList *dt_tag_get_hierarchical(const dt_imgid_t imgid);
 
+GList *dt_tag_get_(const dt_imgid_t imgid);
+
 /** get a flat list of only hierarchical tags, the difference to
  *  dt_tag_get_hierarchical() is that this one checks option for
  *  exportation */

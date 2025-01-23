@@ -87,6 +87,7 @@ typedef struct
   gchar *info_line;
   gboolean is_altered;
   gboolean has_audio;
+  gboolean has_tags;
   gboolean is_grouped;
   gboolean is_bw;
   gboolean is_bw_flow;
@@ -116,6 +117,7 @@ typedef struct
   GtkWidget *w_local_copy; // GtkDarktableThumbnailBtn -- localcopy triangle
   GtkWidget *w_altered;    // GtkDarktableThumbnailBtn -- Altered icon
   GtkWidget *w_group;      // GtkDarktableThumbnailBtn -- Grouping icon
+  GtkWidget *w_tags;      // GtkDarktableThumbnailBtn -- Tags icon
   GtkWidget *w_audio;      // GtkDarktableThumbnailBtn -- Audio sidecar icon
 
   GtkWidget *w_zoom_eb; // GtkEventBox -- container for the zoom level widget
@@ -206,6 +208,7 @@ void dt_thumbnail_image_refresh_position(dt_thumbnail_t *thumb);
 float dt_thumbnail_get_zoom100(dt_thumbnail_t *thumb);
 // get the zoom ratio from 0 ("image to fit") to 1 ("max zoom value")
 float dt_thumbnail_get_zoom_ratio(dt_thumbnail_t *thumb);
+void _thumb_jump_image(gpointer user_data, int diff, gboolean by_key);
 
 // reset the image surface
 void dt_thumbnail_surface_destroy(dt_thumbnail_t *thumb);

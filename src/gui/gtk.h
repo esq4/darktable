@@ -119,7 +119,8 @@ typedef struct dt_gui_gtk_t
   int32_t reset;
   GdkRGBA colors[DT_GUI_COLOR_LAST];
 
-  int32_t hide_tooltips;
+  unsigned char hide_tooltips; // bit 1: 1 - always show thumbnail tooltips;
+                               // bit 0: 0 - show tooltips, 1 - hide tooltips.
 
   gboolean grouping;
   dt_imgid_t expanded_group_id;
@@ -139,6 +140,10 @@ typedef struct dt_gui_gtk_t
 
   gint scroll_mask;
   guint sidebar_scroll_mask;
+
+  /** when "mouse wheel scrolls modules side panel by default" is enable,
+   *  MMB-click to use the mouse wheel for data entry just like ctrl+alt . */
+  gboolean scroll_input;
 
   cairo_filter_t filter_image;    // filtering used to scale images to screen
 

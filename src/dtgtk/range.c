@@ -589,7 +589,7 @@ static void _current_set_text(GtkDarktableRangeSelect *range, const double curre
 static void _current_hide_popup(GtkDarktableRangeSelect *range)
 {
   if(!range->cur_window) return;
-  darktable.gui->hide_tooltips--;
+  darktable.gui->hide_tooltips = (darktable.gui->hide_tooltips & 2) + (dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0);
   gtk_widget_destroy(range->cur_window);
   range->cur_window = NULL;
 }
@@ -597,7 +597,7 @@ static void _current_hide_popup(GtkDarktableRangeSelect *range)
 static void _current_show_popup(GtkDarktableRangeSelect *range)
 {
   if(range->cur_window) return;
-  darktable.gui->hide_tooltips++;
+  darktable.gui->hide_tooltips = darktable.gui->hide_tooltips & 2;
   range->cur_window = gtk_popover_new(range->band);
   gtk_widget_set_name(range->cur_window, "range-current");
   gtk_popover_set_modal(GTK_POPOVER(range->cur_window), FALSE);
@@ -1517,7 +1517,7 @@ static gboolean _event_band_motion(GtkWidget *widget, GdkEventMotion *event, gpo
 
   // if we are outside the graph, don't go further
   const gboolean inside = (range->current_x_px >= 0 && range->current_x_px <= range->alloc_padding.width);
-  if(!inside)
+  if(!inside || darktable.gui->hide_tooltips & 1)
   {
     range->mouse_inside = HOVER_OUTSIDE;
     dt_control_change_cursor(GDK_LEFT_PTR);

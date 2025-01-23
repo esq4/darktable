@@ -186,10 +186,11 @@ static void _fullscreen_key_accel_callback(dt_action_t *action)
 
 static void _toggle_tooltip_visibility(dt_action_t *action)
 {
-  gboolean tooltip_hidden = !dt_conf_get_bool("ui/hide_tooltips");
-  dt_conf_set_bool("ui/hide_tooltips", tooltip_hidden);
-  darktable.gui->hide_tooltips += tooltip_hidden ? 1 : -1;
-  dt_toast_log(tooltip_hidden ? _("tooltips off") : _("tooltips on"));
+  gboolean conf_hide = !dt_conf_get_bool("ui/hide_tooltips");
+  gboolean conf_thumbs = dt_conf_get_bool("ui/show_thumbs_tips");
+  darktable.gui->hide_tooltips = (conf_hide ? 1 : 0) + (conf_thumbs ? 2 : 0) ;
+  dt_conf_set_bool("ui/hide_tooltips", conf_hide);
+  dt_toast_log(conf_hide ? _("tooltips off") : _("tooltips on"));
 }
 
 static inline void _update_focus_peaking_button()
@@ -775,8 +776,8 @@ int dt_gui_gtk_load_config()
   const gint x = MAX(0, dt_conf_get_int("ui_last/window_x"));
   const gint y = MAX(0, dt_conf_get_int("ui_last/window_y"));
 
-  gtk_window_move(GTK_WINDOW(widget), x, y);
   gtk_window_resize(GTK_WINDOW(widget), width, height);
+  gtk_window_move(GTK_WINDOW(widget), x, y);
   const gboolean fullscreen = dt_conf_get_bool("ui_last/fullscreen");
 
   if(fullscreen)
@@ -1353,7 +1354,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   if(!gui->ui)
     gui->ui = g_malloc0(sizeof(dt_ui_t));
   gui->surface = NULL;
-  gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
+  //gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
+  //gui->hide_tooltips = dt_conf_get_int("ui/hide_tooltips");
+  gui->hide_tooltips = (dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0)
+      + (dt_conf_get_bool("ui/show_thumbs_tips") ? 2 : 0);
   gui->grouping = dt_conf_get_bool("ui_last/grouping");
   gui->expanded_group_id = NO_IMGID;
   gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
@@ -1789,20 +1793,13 @@ static void _init_widgets(dt_gui_gtk_t *gui)
 
   // Showing everything, to ensure proper instantiation and initialization
   // then we hide the scroll bars and popup messages again
-  // before doing this, request that the window be minimized (some WMs
-  // don't support this, so we can hide it below, but that had issues)
-//  gtk_window_iconify(GTK_WINDOW(dt_ui_main_window(gui->ui)));
-// unfortunately, on some systems the above results in a window which can only be manually deiconified....
   gtk_widget_show_all(dt_ui_main_window(gui->ui));
   gtk_widget_set_visible(dt_ui_log_msg(gui->ui), FALSE);
   gtk_widget_set_visible(dt_ui_toast_msg(gui->ui), FALSE);
   gtk_widget_set_visible(gui->scrollbars.hscrollbar, FALSE);
   gtk_widget_set_visible(gui->scrollbars.vscrollbar, FALSE);
-
-  // if the WM doesn't support minimization, we want to hide the
-  // window so that we don't actually see it until the rest of the
-  // initialization is complete
-//  gtk_widget_hide(dt_ui_main_window(gui->ui));  //FIXME: on some systems, the main window never un-hides later...
+  // hide the main window, so that it doesn't cover up the splash screen
+  gtk_widget_set_visible(dt_ui_main_window(gui->ui), FALSE);
 
   // finally, process all accumulated GUI events so that everything is properly
   // set up before proceeding
@@ -3484,13 +3481,13 @@ void dt_gui_load_theme(const char *theme)
   g_free(path);
   g_free(usercsspath);
 
-  if(dt_conf_get_bool("ui/hide_tooltips"))
-  {
-    gchar *newcss = g_strjoin(NULL, themecss,
-                              " tooltip {opacity: 0; background: transparent;}", NULL);
-    g_free(themecss);
-    themecss = newcss;
-  }
+//  if(dt_conf_get_bool("ui/hide_tooltips"))
+//  {
+//    gchar *newcss = g_strjoin(NULL, themecss,
+//                              " tooltip {opacity: 0; background: transparent;}", NULL);
+//    g_free(themecss);
+//    themecss = newcss;
+//  }
 
   if(!gtk_css_provider_load_from_data(GTK_CSS_PROVIDER(themes_style_provider),
                                       themecss, -1, &error))

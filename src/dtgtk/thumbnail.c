@@ -79,6 +79,23 @@ static void _thumb_update_extended_infos_line(dt_thumbnail_t *thumb)
   g_free(pattern);
 }
 
+static void _thumb_update_tags_tooltip(dt_thumbnail_t *thumb)
+{
+//  gtk_widget_set_visible(thumb->w_tags, TRUE);
+  char *tooltip = dt_util_glist_to_str("\n", dt_tag_get_(thumb->imgid));
+  if(tooltip)
+  {
+    gtk_widget_set_tooltip_text(thumb->w_tags, tooltip);
+    thumb->has_tags = TRUE;
+    g_free(tooltip);
+  }
+  else
+  {
+    thumb->has_tags = FALSE;
+//    gtk_widget_set_has_tooltip(thumb->w_tags, FALSE);
+  }
+}
+
 static void _thumb_update_altered_tooltip(dt_thumbnail_t *thumb)
 {
   thumb->is_altered = dt_image_altered(thumb->imgid);
@@ -881,6 +898,8 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
   _set_flag(thumb->w_main, GTK_STATE_FLAG_SELECTED, thumb->selected);
 
   gtk_widget_set_visible(thumb->w_altered, thumb->is_altered);
+  _thumb_update_tags_tooltip(thumb);
+  gtk_widget_set_visible(thumb->w_tags, thumb->has_tags);
 }
 
 static gboolean _thumbs_hide_overlays(gpointer user_data)
@@ -900,6 +919,7 @@ static gboolean _thumbs_hide_overlays(gpointer user_data)
   gtk_widget_hide(thumb->w_color);
   gtk_widget_hide(thumb->w_local_copy);
   gtk_widget_hide(thumb->w_altered);
+  gtk_widget_hide(thumb->w_tags);
   gtk_widget_hide(thumb->w_group);
   gtk_widget_hide(thumb->w_audio);
   gtk_widget_hide(thumb->w_zoom_eb);
@@ -1253,7 +1273,11 @@ static gboolean _event_btn_enter_leave(GtkWidget *widget,
   if(thumb->disable_actions)
     return TRUE;
   if(event->type == GDK_ENTER_NOTIFY)
+  {
     _set_flag(thumb->w_image_box, GTK_STATE_FLAG_PRELIGHT, TRUE);
+    dt_tag_get_(thumb->imgid);
+    _thumb_update_tags_tooltip(thumb);
+  }
   return FALSE;
 }
 
@@ -1574,6 +1598,18 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb,
                      G_CALLBACK(_event_btn_enter_leave), thumb);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlays_parent), thumb->w_altered);
 
+    // the tags icon
+    thumb->w_tags = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_tags, 0, NULL);
+    gtk_widget_set_name(thumb->w_tags, "thumb-tags");
+    gtk_widget_set_valign(thumb->w_tags, GTK_ALIGN_START);
+    gtk_widget_set_halign(thumb->w_tags, GTK_ALIGN_END);
+    gtk_widget_set_no_show_all(thumb->w_tags, TRUE);
+    g_signal_connect(G_OBJECT(thumb->w_tags), "enter-notify-event",
+                     G_CALLBACK(_event_btn_enter_leave), thumb);
+    g_signal_connect(G_OBJECT(thumb->w_tags), "leave-notify-event",
+                     G_CALLBACK(_event_btn_enter_leave), thumb);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlays_parent), thumb->w_tags);
+
     // the group bouton
     thumb->w_group = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_grouping, 0, NULL);
     gtk_widget_set_name(thumb->w_group, "thumb-group-audio");
@@ -1693,10 +1729,22 @@ dt_thumbnail_t *dt_thumbnail_new(const int width,
     }
   }
 
+//  // set tooltip for altered icon if needed
+////  if(thumb->is_altered)
+////  {
+//    char *tooltip_txt = dt_util_glist_to_str("\n", dt_tag_get_(thumb->imgid));
+//    if(tooltip_txt)
+//    {
+//      gtk_widget_set_tooltip_text(thumb->w_tags, tooltip_txt);
+//      g_free(tooltip_txt);
+//    }
+////  }
+
   // update tooltips
   _image_update_group_tooltip(thumb);
   _thumb_update_tooltip_text(thumb);
   _thumb_update_altered_tooltip(thumb);
+  _thumb_update_tags_tooltip(thumb);
 
   // get the file extension
   _thumb_write_extension(thumb);
@@ -1837,17 +1885,23 @@ static void _thumb_resize_overlays(dt_thumbnail_t *thumb)
     gtk_widget_set_margin_top(thumb->w_altered, thumb->img_margin->top);
     gtk_widget_set_margin_end(thumb->w_altered, thumb->img_margin->right);
 
+    // the tags icon
+    gtk_widget_set_size_request(thumb->w_tags, 2.0 * r1, 2.0 * r1);
+    gtk_widget_set_halign(thumb->w_tags, GTK_ALIGN_END);
+    gtk_widget_set_margin_top(thumb->w_tags, thumb->img_margin->top);
+    gtk_widget_set_margin_end(thumb->w_tags, thumb->img_margin->right + 2.5 * r1);
+
     // the group bouton
     gtk_widget_set_size_request(thumb->w_group, 2.0 * r1, 2.0 * r1);
     gtk_widget_set_halign(thumb->w_group, GTK_ALIGN_END);
     gtk_widget_set_margin_top(thumb->w_group, thumb->img_margin->top);
-    gtk_widget_set_margin_end(thumb->w_group, thumb->img_margin->right + 2.5 * r1);
+    gtk_widget_set_margin_end(thumb->w_group, thumb->img_margin->right + 5.0 * r1);
 
     // the sound icon
     gtk_widget_set_size_request(thumb->w_audio, 2.0 * r1, 2.0 * r1);
     gtk_widget_set_halign(thumb->w_audio, GTK_ALIGN_END);
     gtk_widget_set_margin_top(thumb->w_audio, thumb->img_margin->top);
-    gtk_widget_set_margin_end(thumb->w_audio, thumb->img_margin->right + 5.0 * r1);
+    gtk_widget_set_margin_end(thumb->w_audio, thumb->img_margin->right + 7.5 * r1);
 
     // the filmstrip cursor
     gtk_widget_set_size_request(thumb->w_cursor, 6.0 * r1, 1.5 * r1);
@@ -1862,8 +1916,8 @@ static void _thumb_resize_overlays(dt_thumbnail_t *thumb)
     const int py = (h - height) / 2;
 
     // we need to squeeze 5 stars + 1 reject + 1 colorlabels symbols
-    // on a thumbnail width all icons having a width of 3.0 * r1 => 21
-    // * r1 we want r1 spaces at extremities, after reject, before
+    // on a thumbnail width. all icons having a width of 3.0 * r1 => 21 * r1.
+    // we want r1 spaces at extremities, after reject, before
     // colorlables => 4 * r1
     const float r1 = fminf(max_size / 2.0f, width / 25.0f);
 
@@ -1949,12 +2003,17 @@ static void _thumb_resize_overlays(dt_thumbnail_t *thumb)
     gtk_widget_set_size_request(thumb->w_local_copy, icon_size2, icon_size2);
     gtk_widget_set_halign(thumb->w_local_copy, GTK_ALIGN_START);
     gtk_widget_set_margin_top(thumb->w_local_copy, line3 + py);
-    gtk_widget_set_margin_start(thumb->w_local_copy, 10.0 * r1 + px);
+    gtk_widget_set_margin_start(thumb->w_local_copy, 13.0 * r1 + px);
     // the altered icon
     gtk_widget_set_size_request(thumb->w_altered, icon_size2, icon_size2);
     gtk_widget_set_halign(thumb->w_altered, GTK_ALIGN_START);
     gtk_widget_set_margin_top(thumb->w_altered, line3 + py);
-    gtk_widget_set_margin_start(thumb->w_altered, 7.0 * r1 + px);
+    gtk_widget_set_margin_start(thumb->w_altered, 10.0 * r1 + px);
+    // the tags icon
+    gtk_widget_set_size_request(thumb->w_tags, icon_size2, icon_size2);
+    gtk_widget_set_halign(thumb->w_tags, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(thumb->w_tags, line3 + py);
+    gtk_widget_set_margin_start(thumb->w_tags, 7.0 * r1 + px);
     // the group bouton
     gtk_widget_set_size_request(thumb->w_group, icon_size2, icon_size2);
     gtk_widget_set_halign(thumb->w_group, GTK_ALIGN_START);
@@ -2194,6 +2253,7 @@ void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb,
     _widget_change_parent_overlay(thumb->w_color, overlays_parent);
     _widget_change_parent_overlay(thumb->w_local_copy, overlays_parent);
     _widget_change_parent_overlay(thumb->w_altered, overlays_parent);
+    _widget_change_parent_overlay(thumb->w_tags, overlays_parent);
     _widget_change_parent_overlay(thumb->w_group, overlays_parent);
     _widget_change_parent_overlay(thumb->w_audio, overlays_parent);
     _widget_change_parent_overlay(thumb->w_zoom_eb, overlays_parent);
