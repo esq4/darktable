@@ -1324,7 +1324,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   GtkWidget *widget;
   if(!gui->ui)
     gui->ui = g_malloc0(sizeof(dt_ui_t));
-  gui->surface = NULL;
   //gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
   //gui->hide_tooltips = dt_conf_get_int("ui/hide_tooltips");
   gui->hide_tooltips = (dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0)
