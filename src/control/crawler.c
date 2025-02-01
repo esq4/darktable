@@ -58,7 +58,8 @@ typedef struct dt_control_crawler_result_t
   dt_imgid_t id;
   time_t timestamp_xmp;
   time_t timestamp_db;
-  char *image_path, *xmp_path;
+  char *image_path, *xmp_path, *dir_path; //ab
+  gboolean missing; //ab
 } dt_control_crawler_result_t;
 
 static void _free_crawler_result(dt_control_crawler_result_t *entry)
@@ -130,7 +131,7 @@ GList *dt_control_crawler_run(void)
   // clang-format off
   sqlite3_prepare_v2(dt_database_get(darktable.db),
                      "SELECT i.id, write_timestamp, version,"
-                     "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
+                     "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags, folder"
                      " FROM main.images i, main.film_rolls f"
                      " ON i.film_id = f.id"
                      " ORDER BY f.id, filename",
@@ -157,6 +158,7 @@ GList *dt_control_crawler_run(void)
     const int version = sqlite3_column_int(stmt, 2);
     const gchar *image_path = (char *)sqlite3_column_text(stmt, 3);
     int flags = sqlite3_column_int(stmt, 4);
+    const gchar *dir_path = (char *)sqlite3_column_text(stmt, 5);
     ++image_count;
 
     // update the progress message - five times per second for first four seconds, then once per second
@@ -170,9 +172,21 @@ GList *dt_control_crawler_run(void)
       last_time = curr_time;
     }
 
-    // if the image is missing we ignore it.
+    // if the image is missing we suggest removing it.
     if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
     {
+      //ab
+      dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+      item->id = id;
+      item->timestamp_xmp = 0;
+      item->timestamp_db = timestamp;
+      item->image_path = g_strdup(image_path);
+      item->xmp_path = g_strdup("");
+      item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
+      item->missing = TRUE;
+      result = g_list_prepend(result, item);
+      //ba
+
       dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing", image_path, id);
       continue;
     }
@@ -221,6 +235,8 @@ GList *dt_control_crawler_run(void)
         item->timestamp_db = timestamp;
         item->image_path = g_strdup(image_path);
         item->xmp_path = g_strdup(xmp_path);
+        item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
+        item->missing = FALSE;
 
         result = g_list_prepend(result, item);
         dt_print(DT_DEBUG_CONTROL,
@@ -309,6 +325,9 @@ typedef struct dt_control_crawler_gui_t
   GtkWidget *log;
   GtkWidget *spinner;
   GList *rows_to_remove;
+  GtkTreeView *missing_tree;
+  GtkTreeModel *missing_model;
+  GList *missing_rows_to_remove;
 } dt_control_crawler_gui_t;
 
 // close the window and clean up
@@ -323,11 +342,9 @@ static void dt_control_crawler_response_callback(GtkWidget *dialog,
 }
 
 
-static void _delete_selected_rows(dt_control_crawler_gui_t *gui)
+static void _delete_selected_rows(GList *rr_list,
+                                  GtkTreeModel *model)
 {
-  GList *rr_list = gui->rows_to_remove;
-  GtkTreeModel *model = gui->model;
-
   // Remove TreeView rows from rr_list. It needs to be populated before
   for(GList *node = rr_list; node != NULL; node = g_list_next(node))
   {
@@ -439,6 +456,24 @@ static void _log_synchronization(dt_control_crawler_gui_t *gui,
   g_free(message);
 }
 
+//ab
+static void remove_from_db(GtkTreeModel *model,
+                           GtkTreePath *path,
+                           GtkTreeIter *iter,
+                           gpointer user_data)
+{
+  dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
+  dt_control_crawler_result_t entry = { NO_IMGID };
+  _get_crawler_entry_from_model(model, iter, &entry);
+
+  //const gboolean error = dt_history_load_and_apply(entry.id, entry.xmp_path, 0);
+
+  _append_row_to_remove(model, path, &gui->missing_rows_to_remove);
+  _log_synchronization(gui, _("SUCCESS: %s removed from DB"), entry.image_path);
+
+  _free_crawler_result(&entry);
+}
+//ba
 
 static void sync_xmp_to_db(GtkTreeModel *model,
                            GtkTreePath *path,
@@ -637,6 +672,18 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   _free_crawler_result(&entry);
 }
 
+//ab
+static void _remove_button_clicked(GtkButton *button, gpointer user_data)
+{
+  dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(gui->missing_tree);
+  gui->missing_rows_to_remove = NULL;
+  gtk_spinner_start(GTK_SPINNER(gui->spinner));
+  gtk_tree_selection_selected_foreach(selection, remove_from_db, gui);
+  _delete_selected_rows(gui->missing_rows_to_remove, gui->missing_model);
+  gtk_spinner_stop(GTK_SPINNER(gui->spinner));
+} //ba
+
 // overwrite database with xmp
 static void _reload_button_clicked(GtkButton *button, gpointer user_data)
 {
@@ -645,7 +692,7 @@ static void _reload_button_clicked(GtkButton *button, gpointer user_data)
   gui->rows_to_remove = NULL;
   gtk_spinner_start(GTK_SPINNER(gui->spinner));
   gtk_tree_selection_selected_foreach(selection, sync_xmp_to_db, gui);
-  _delete_selected_rows(gui);
+  _delete_selected_rows(gui->rows_to_remove, gui->model);
   gtk_spinner_stop(GTK_SPINNER(gui->spinner));
 }
 
@@ -657,7 +704,7 @@ void _overwrite_button_clicked(GtkButton *button, gpointer user_data)
   gui->rows_to_remove = NULL;
   gtk_spinner_start(GTK_SPINNER(gui->spinner));
   gtk_tree_selection_selected_foreach(selection, sync_db_to_xmp, gui);
-  _delete_selected_rows(gui);
+  _delete_selected_rows(gui->rows_to_remove, gui->model);
   gtk_spinner_stop(GTK_SPINNER(gui->spinner));
 }
 
@@ -669,7 +716,7 @@ static void _newest_button_clicked(GtkButton *button, gpointer user_data)
   gui->rows_to_remove = NULL;
   gtk_spinner_start(GTK_SPINNER(gui->spinner));
   gtk_tree_selection_selected_foreach(selection, sync_newest_to_oldest, gui);
-  _delete_selected_rows(gui);
+  _delete_selected_rows(gui->rows_to_remove, gui->model);
   gtk_spinner_stop(GTK_SPINNER(gui->spinner));
 }
 
@@ -681,7 +728,7 @@ static void _oldest_button_clicked(GtkButton *button, gpointer user_data)
   gui->rows_to_remove = NULL;
   gtk_spinner_start(GTK_SPINNER(gui->spinner));
   gtk_tree_selection_selected_foreach(selection, sync_oldest_to_newest, gui);
-  _delete_selected_rows(gui);
+  _delete_selected_rows(gui->rows_to_remove, gui->model);
   gtk_spinner_stop(GTK_SPINNER(gui->spinner));
 }
 
@@ -723,8 +770,14 @@ void dt_control_crawler_show_image_list(GList *images)
                                            G_TYPE_INT,
                                            G_TYPE_STRING, // report: newer version
                                            G_TYPE_STRING);// time delta
-
   gui->model = GTK_TREE_MODEL(store);
+
+  GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_widget_set_vexpand(missing_scroll, TRUE);
+  GtkListStore *missing_store = gtk_list_store_new(2,
+                                           G_TYPE_INT,    // id
+                                           G_TYPE_STRING); // image path
+   gui->missing_model = GTK_TREE_MODEL(missing_store);
 
   for(GList *list_iter = images; list_iter; list_iter = g_list_next(list_iter))
   {
@@ -740,25 +793,59 @@ void dt_control_crawler_show_image_list(GList *images)
     const time_t time_delta = llabs(item->timestamp_db - item->timestamp_xmp);
     gchar *timestamp_delta = str_time_delta(time_delta);
 
-    gtk_list_store_append(store, &iter);
-    gtk_list_store_set
-      (store, &iter,
-       DT_CONTROL_CRAWLER_COL_ID, item->id,
-       DT_CONTROL_CRAWLER_COL_IMAGE_PATH, item->image_path,
-       DT_CONTROL_CRAWLER_COL_XMP_PATH, item->xmp_path,
-       DT_CONTROL_CRAWLER_COL_TS_XMP, timestamp_xmp,
-       DT_CONTROL_CRAWLER_COL_TS_DB, timestamp_db,
-       DT_CONTROL_CRAWLER_COL_TS_XMP_INT, item->timestamp_xmp,
-       DT_CONTROL_CRAWLER_COL_TS_DB_INT, item->timestamp_db,
-       DT_CONTROL_CRAWLER_COL_REPORT, (item->timestamp_xmp > item->timestamp_db)
-                                      ? _("XMP")
-                                      : _("database"),
-       DT_CONTROL_CRAWLER_COL_TIME_DELTA, timestamp_delta,
-       -1);
+    if(!item->missing)
+    {
+      gtk_list_store_append(store, &iter);
+      gtk_list_store_set
+          (store, &iter,
+           DT_CONTROL_CRAWLER_COL_ID, item->id,
+           DT_CONTROL_CRAWLER_COL_IMAGE_PATH, item->image_path,
+           DT_CONTROL_CRAWLER_COL_XMP_PATH, item->xmp_path,
+           DT_CONTROL_CRAWLER_COL_TS_XMP, timestamp_xmp,
+           DT_CONTROL_CRAWLER_COL_TS_DB, timestamp_db,
+           DT_CONTROL_CRAWLER_COL_TS_XMP_INT, item->timestamp_xmp,
+           DT_CONTROL_CRAWLER_COL_TS_DB_INT, item->timestamp_db,
+           DT_CONTROL_CRAWLER_COL_REPORT, (item->timestamp_xmp > item->timestamp_db)
+           ? _("XMP")
+           : _("database"),
+           DT_CONTROL_CRAWLER_COL_TIME_DELTA, timestamp_delta,
+           -1);
+    }
+    else  //ab
+    {
+      gtk_list_store_append(missing_store, &iter);
+      gtk_list_store_set
+          (missing_store, &iter,
+           DT_CONTROL_CRAWLER_COL_ID, item->id,
+           DT_CONTROL_CRAWLER_COL_IMAGE_PATH, item->image_path,
+           -1);
+    }  //ba
     _free_crawler_result(item);
     g_free(timestamp_delta);
   }
   g_list_free_full(images, g_free);
+
+  //ab
+  GtkWidget *missing_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(missing_store));
+  GtkTreeSelection *missing_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(missing_tree));
+  gtk_tree_selection_set_mode(missing_selection, GTK_SELECTION_MULTIPLE);
+
+  gui->missing_tree = GTK_TREE_VIEW(missing_tree); // FIXME: do we need to free that later ?
+
+  GtkCellRenderer *missing_renderer_text = gtk_cell_renderer_text_new();
+  column = gtk_tree_view_column_new_with_attributes
+    (_("missing images"), missing_renderer_text, "text",
+     DT_CONTROL_CRAWLER_COL_IMAGE_PATH, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(missing_tree), column);
+  gtk_tree_view_column_set_expand(column, TRUE);
+  gtk_tree_view_column_set_resizable(column, TRUE);
+  gtk_tree_view_column_set_min_width(column, DT_PIXEL_APPLY_DPI(200));
+  g_object_set(missing_renderer_text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
+
+  gtk_container_add(GTK_CONTAINER(missing_scroll), missing_tree);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(missing_scroll),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  //ba
 
   GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
@@ -776,7 +863,7 @@ void dt_control_crawler_show_image_list(GList *images)
   gtk_tree_view_column_set_min_width(column, DT_PIXEL_APPLY_DPI(200));
   g_object_set(renderer_text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
 
-  column = gtk_tree_view_column_new_with_attributes
+    column = gtk_tree_view_column_new_with_attributes
     (_("XMP timestamp"), gtk_cell_renderer_text_new(), "text",
      DT_CONTROL_CRAWLER_COL_TS_XMP, NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
@@ -818,6 +905,18 @@ void dt_control_crawler_show_image_list(GList *images)
 
   GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(content_area), content_box);
+
+  //ab
+  gtk_box_pack_start(GTK_BOX(content_box), missing_scroll, TRUE, TRUE, 0);
+
+  GtkWidget *missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(content_box), missing_box, FALSE, FALSE, 1);
+  GtkWidget *remove_button = gtk_button_new_with_label(_("remove selected entries from image library"));
+  gtk_box_pack_start(GTK_BOX(missing_box), remove_button, FALSE, FALSE, 0);
+  gtk_widget_set_margin_bottom(remove_button, 10);
+  g_signal_connect(remove_button, "clicked", G_CALLBACK(_remove_button_clicked), gui);
+  //ba
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 0);
