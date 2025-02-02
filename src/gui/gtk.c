@@ -884,10 +884,7 @@ static gboolean _gui_quit_callback(GtkWidget *widget,
       dt_dev_write_history(darktable.develop);
 
     if(dt_check_gimpmode_ok("file"))
-    {
       darktable.gimp.error = !dt_export_gimp_file(darktable.gimp.imgid);
-      dt_image_write_sidecar_file(darktable.gimp.imgid);
-    }
 
     dt_control_quit();
   }
@@ -912,10 +909,7 @@ static void _quit_callback(dt_action_t *action)
   {
     dt_dev_write_history(darktable.develop);
     if(dt_check_gimpmode_ok("file"))
-    {
       darktable.gimp.error = !dt_export_gimp_file(darktable.gimp.imgid);
-      dt_image_write_sidecar_file(darktable.gimp.imgid);
-    }
   }
 
   dt_control_quit();
@@ -1789,13 +1783,20 @@ static void _init_widgets(dt_gui_gtk_t *gui)
 
   // Showing everything, to ensure proper instantiation and initialization
   // then we hide the scroll bars and popup messages again
+  // before doing this, request that the window be minimized (some WMs
+  // don't support this, so we can hide it below, but that had issues)
+//  gtk_window_iconify(GTK_WINDOW(dt_ui_main_window(gui->ui)));
+// unfortunately, on some systems the above results in a window which can only be manually deiconified....
   gtk_widget_show_all(dt_ui_main_window(gui->ui));
   gtk_widget_set_visible(dt_ui_log_msg(gui->ui), FALSE);
   gtk_widget_set_visible(dt_ui_toast_msg(gui->ui), FALSE);
   gtk_widget_set_visible(gui->scrollbars.hscrollbar, FALSE);
   gtk_widget_set_visible(gui->scrollbars.vscrollbar, FALSE);
-  // hide the main window, so that it doesn't cover up the splash screen
-  gtk_widget_set_visible(dt_ui_main_window(gui->ui), FALSE);
+
+  // if the WM doesn't support minimization, we want to hide the
+  // window so that we don't actually see it until the rest of the
+  // initialization is complete
+//  gtk_widget_hide(dt_ui_main_window(gui->ui));  //FIXME: on some systems, the main window never un-hides later...
 
   // finally, process all accumulated GUI events so that everything is properly
   // set up before proceeding
@@ -4458,7 +4459,6 @@ void dt_gui_cursor_set_busy()
     GtkWidget *toplevel = darktable.gui->ui->main_window;
     GdkWindow *window = gtk_widget_get_window(toplevel);
     busy_prev_cursor = gdk_window_get_cursor(window);
-    g_object_ref(busy_prev_cursor);
     GdkCursor *watch = gdk_cursor_new_for_display(gtk_widget_get_display(toplevel), GDK_WATCH);
     gdk_window_set_cursor(window, watch);
     g_object_unref(watch);
@@ -4483,7 +4483,6 @@ void dt_gui_cursor_clear_busy()
       GdkWindow *window = gtk_widget_get_window(toplevel);
       gdk_window_set_cursor(window, busy_prev_cursor);
       dt_gui_process_events();
-      g_object_unref(busy_prev_cursor);
       busy_prev_cursor = NULL;
       dt_control_allow_change_cursor();
       gtk_grab_remove(darktable.control->progress_system.proxy.module->widget);
