@@ -1867,7 +1867,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
   dt_iop_colorzones_gui_data_t *g = self->gui_data;
   dt_iop_colorzones_params_t *p = self->params;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(dt_modifier_is(event->state, GDK_MOD1_MASK))
     return gtk_widget_event(GTK_WIDGET(g->channel_tabs), (GdkEvent*)event);
@@ -2227,6 +2227,10 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
 
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
 
   return FALSE;
 }
@@ -2257,6 +2261,7 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget,
   g->mouse_y = -fabs(g->mouse_y);
   if(!(event->state & GDK_BUTTON1_MASK))
     g->selected = -1;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(widget);
   return TRUE;
 }

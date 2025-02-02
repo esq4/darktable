@@ -2225,6 +2225,7 @@ static gboolean _eventbox_leave_notify_callback(GtkWidget *widget,
     dt_lib_histogram_t *d = (dt_lib_histogram_t *)user_data;
     gtk_widget_hide(d->button_box_main);
     gtk_widget_hide(d->button_box_opt);
+    darktable.gui->scroll_input = FALSE;
   }
   return FALSE;
 }

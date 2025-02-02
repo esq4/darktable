@@ -423,6 +423,10 @@ static gboolean dt_iop_colorcorrection_button_press(GtkWidget *widget, GdkEventB
     }
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -430,6 +434,7 @@ static gboolean dt_iop_colorcorrection_leave_notify(GtkWidget *widget, GdkEventC
                                                     dt_iop_module_t *self)
 {
   dt_iop_colorcorrection_gui_data_t *g = self->gui_data;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
 }
@@ -439,7 +444,7 @@ static gboolean dt_iop_colorcorrection_scrolled(GtkWidget *widget, GdkEventScrol
   dt_iop_colorcorrection_gui_data_t *g = self->gui_data;
   dt_iop_colorcorrection_params_t *p = self->params;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   int delta_y;
   if(dt_gui_get_scroll_unit_delta(event, &delta_y))

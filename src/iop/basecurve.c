@@ -1589,6 +1589,7 @@ static gboolean dt_iop_basecurve_leave_notify(GtkWidget *widget,
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
   if(!(event->state & GDK_BUTTON1_MASK))
     g->selected = -1;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(widget);
   return FALSE;
 }
@@ -2009,6 +2010,10 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget,
     dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -2044,7 +2049,7 @@ static gboolean _scrolled(GtkWidget *widget, GdkEventScroll *event, dt_iop_modul
 {
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(g->selected < 0) return TRUE;
 

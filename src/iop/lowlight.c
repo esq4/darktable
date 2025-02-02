@@ -748,6 +748,10 @@ static gboolean lowlight_button_press(GtkWidget *widget, GdkEventButton *event, 
     g->dragging = 1;
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -766,6 +770,7 @@ static gboolean lowlight_leave_notify(GtkWidget *widget, GdkEventCrossing *event
 {
   dt_iop_lowlight_gui_data_t *g = self->gui_data;
   if(!g->dragging) g->mouse_y = -1.0;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(widget);
   return TRUE;
 }
@@ -774,7 +779,7 @@ static gboolean lowlight_scrolled(GtkWidget *widget, GdkEventScroll *event, dt_i
 {
   dt_iop_lowlight_gui_data_t *g = self->gui_data;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   int delta_y;
   if(dt_gui_get_scroll_unit_delta(event, &delta_y))
