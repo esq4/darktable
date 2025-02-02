@@ -3844,4 +3844,10 @@
     <shortdescription>order or exclude MIDI devices</shortdescription>
     <longdescription>comma-separated list of device name fragments that if matched load MIDI device at id given by location in list\nor if preceded by '-' prevent matching devices from loading. add encoding and number of knobs like 'BeatStep:63:16'</longdescription>
   </dtconfig>
+  <dtconfig prefs="misc" section="interface">
+    <name>ui/hide_tooltips</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>hide tooltips</shortdescription>
+  </dtconfig>
 </dtconfiglist>

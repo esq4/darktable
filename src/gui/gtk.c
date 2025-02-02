@@ -3402,13 +3402,13 @@ void dt_gui_load_theme(const char *theme)
   g_free(path);
   g_free(usercsspath);
 
-  if(dt_conf_get_bool("ui/hide_tooltips"))
-  {
-    gchar *newcss = g_strjoin(NULL, themecss,
-                              " tooltip {opacity: 0; background: transparent;}", NULL);
-    g_free(themecss);
-    themecss = newcss;
-  }
+//  if(dt_conf_get_bool("ui/hide_tooltips"))
+//  {
+//    gchar *newcss = g_strjoin(NULL, themecss,
+//                              " tooltip {opacity: 0; background: transparent;}", NULL);
+//    g_free(themecss);
+//    themecss = newcss;
+//  }
 
   if(!gtk_css_provider_load_from_data(GTK_CSS_PROVIDER(themes_style_provider),
                                       themecss, -1, &error))
