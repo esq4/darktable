@@ -184,6 +184,7 @@ GList *dt_control_crawler_run(void)
       item->xmp_path = g_strdup("");
       item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
       item->missing = TRUE;
+//ab добавить номер копии
       result = g_list_prepend(result, item);
       //ba
 
@@ -224,7 +225,42 @@ GList *dt_control_crawler_run(void)
       stat_res = stat(xmp_path_locale, &statbuf);
 #endif
       g_free(xmp_path_locale);
-      if(stat_res) continue; // TODO: shall we report these?
+      if(stat_res)
+      {
+        //ab
+        //ab TODO обработка случая когда через управление копиями удалён основной (version==0) XMP
+        //ab в.1) запретить его удалять (так себе :/ )
+        //        +++ остальной функционал уже есть (удаление копий)
+        //        -- разбираться с управлением копиями
+        //        --- ограничение действий пользователя (хочу оставить только 99-ю копию)
+        //        --- скорее всего не согласятся
+        //ab в.2) переименовывать минимальную копию в "0" (???)
+        //        +++ остальной функционал уже есть (удаление копий)
+        //        --- разбираться с управлением копиями
+        //        - изменение нумерации копий (но, возможно, никто ею не пользуется.? или нет?)
+        //        !! учесть что timestamp_xmp д.б. > timestamp_db
+        //        ! только на уровне изменения штатного функционала управления копиями
+        //        --- вероятно не согласятся
+        //ab в.3) ввести в main.images новое поле "xmp" (??? изменения в БД ради чуть-чуть)
+        //ab
+        dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+        if(version)
+        {
+          item->id = id;
+          item->timestamp_xmp = 0;
+          item->timestamp_db = timestamp;
+          item->image_path = g_strdup(image_path);
+          item->xmp_path = g_strdup("");
+          item->dir_path = g_strdup(dir_path);
+          item->missing = TRUE;
+          result = g_list_prepend(result, item);
+//ab добавить номер копии
+
+          dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, id);
+        }
+        //ba
+        continue; // TODO: shall we report these?
+      }
 
       // step 1: check if the xmp is newer than our db entry
       if(timestamp + MAX_TIME_SKEW < statbuf.st_mtime)
@@ -237,7 +273,7 @@ GList *dt_control_crawler_run(void)
         item->xmp_path = g_strdup(xmp_path);
         item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
         item->missing = FALSE;
-
+//ab добавить номер копии
         result = g_list_prepend(result, item);
         dt_print(DT_DEBUG_CONTROL,
                  "[crawler] `%s' (id: %d) is a newer XMP file", xmp_path, id);
@@ -328,6 +364,7 @@ typedef struct dt_control_crawler_gui_t
   GtkTreeView *missing_tree;
   GtkTreeModel *missing_model;
   GList *missing_rows_to_remove;
+//ab добавить номер копии
 } dt_control_crawler_gui_t;
 
 // close the window and clean up
@@ -456,7 +493,20 @@ static void _log_synchronization(dt_control_crawler_gui_t *gui,
   g_free(message);
 }
 
+
 //ab
+#include "common/collection.h"
+static void _set_remove_flag(char *imgs)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2
+    (dt_database_get(darktable.db),
+     "UPDATE main.images SET flags = (flags|?1) WHERE id IN (?2)", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_REMOVE);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgs, -1, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
 static void remove_from_db(GtkTreeModel *model,
                            GtkTreePath *path,
                            GtkTreeIter *iter,
@@ -464,9 +514,30 @@ static void remove_from_db(GtkTreeModel *model,
 {
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { NO_IMGID };
-  _get_crawler_entry_from_model(model, iter, &entry);
+  gtk_tree_model_get(model, iter,
+                     DT_CONTROL_CRAWLER_COL_ID,         &entry.id,
+                     DT_CONTROL_CRAWLER_COL_IMAGE_PATH, &entry.image_path,
+                     -1);
 
-  //const gboolean error = dt_history_load_and_apply(entry.id, entry.xmp_path, 0);
+  dt_image_remove(entry.id);
+
+  // update remove status
+  _set_remove_flag(g_strdup_printf("%i", entry.id));
+
+  dt_collection_update(darktable.collection);
+
+  dt_image_synch_all_xmp(entry.image_path);
+
+  dt_film_remove_empty();
+
+  GList *l = NULL;
+  l = g_list_append(l, g_strdup_printf("%i", entry.id));
+  dt_collection_update_query(darktable.collection,
+                             DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+                             g_list_copy(l));
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_CHANGED);
+  dt_control_queue_redraw_center();
+
 
   _append_row_to_remove(model, path, &gui->missing_rows_to_remove);
   _log_synchronization(gui, _("SUCCESS: %s removed from DB"), entry.image_path);
@@ -474,6 +545,7 @@ static void remove_from_db(GtkTreeModel *model,
   _free_crawler_result(&entry);
 }
 //ba
+
 
 static void sync_xmp_to_db(GtkTreeModel *model,
                            GtkTreePath *path,
@@ -624,7 +696,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
       _log_synchronization(gui,
                            _("ERROR: %s NOT synced old (XMP) → new (DB)"),
                            entry.image_path);
-    _log_synchronization(gui,
+      _log_synchronization(gui,
                          _("ERROR: cannot write the database."
                            " the destination may be full, offline or read-only."), NULL);
     }
@@ -775,9 +847,9 @@ void dt_control_crawler_show_image_list(GList *images)
   GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(missing_scroll, TRUE);
   GtkListStore *missing_store = gtk_list_store_new(2,
-                                           G_TYPE_INT,    // id
+                                           G_TYPE_INT,     // id
                                            G_TYPE_STRING); // image path
-   gui->missing_model = GTK_TREE_MODEL(missing_store);
+  gui->missing_model = GTK_TREE_MODEL(missing_store);
 
   for(GList *list_iter = images; list_iter; list_iter = g_list_next(list_iter))
   {
@@ -818,6 +890,7 @@ void dt_control_crawler_show_image_list(GList *images)
           (missing_store, &iter,
            DT_CONTROL_CRAWLER_COL_ID, item->id,
            DT_CONTROL_CRAWLER_COL_IMAGE_PATH, item->image_path,
+           //ab добавить номер копии
            -1);
     }  //ba
     _free_crawler_result(item);
