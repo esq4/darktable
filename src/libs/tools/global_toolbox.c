@@ -530,7 +530,9 @@ void gui_cleanup(dt_lib_module_t *self)
 
 void _lib_preferences_button_clicked(GtkWidget *widget, gpointer user_data)
 {
+  darktable.gui->scroll_input = TRUE;
   dt_gui_preferences_show();
+  darktable.gui->scroll_input = FALSE;
 }
 
 static void _lib_filter_grouping_button_clicked(GtkWidget *widget, gpointer user_data)

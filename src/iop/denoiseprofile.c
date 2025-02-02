@@ -3578,6 +3578,10 @@ static gboolean denoiseprofile_button_press(GtkWidget *widget,
     g->dragging = 1;
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -3600,6 +3604,7 @@ static gboolean denoiseprofile_leave_notify(GtkWidget *widget,
 {
   dt_iop_denoiseprofile_gui_data_t *g = self->gui_data;
   if(!g->dragging) g->mouse_y = -1.0;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(widget);
   return TRUE;
 }
@@ -3610,7 +3615,7 @@ static gboolean denoiseprofile_scrolled(GtkWidget *widget,
 {
   dt_iop_denoiseprofile_gui_data_t *g = self->gui_data;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(dt_modifier_is(event->state, GDK_MOD1_MASK))
     return gtk_widget_event(GTK_WIDGET(g->channel > DT_DENOISE_PROFILE_B ? g->channel_tabs_Y0U0V0 : g->channel_tabs), (GdkEvent*)event);

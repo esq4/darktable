@@ -1238,6 +1238,7 @@ static gboolean rt_wdbar_leave_notify(GtkWidget *widget,
   g->lower_cursor = g->upper_cursor = FALSE;
   g->lower_margin = g->upper_margin = FALSE;
 
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(g->wd_bar);
   return TRUE;
 }
@@ -1276,6 +1277,10 @@ static gboolean rt_wdbar_button_press(GtkWidget *widget,
     else if(g->curr_scale >= 0)
       rt_curr_scale_update(g->curr_scale, self);
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
 
   gtk_widget_queue_draw(g->wd_bar);
   return TRUE;
@@ -1298,8 +1303,7 @@ static gboolean rt_wdbar_scrolled(GtkWidget *widget,
                                   GdkEventScroll *event,
                                   dt_iop_module_t *self)
 {
-  if(dt_gui_ignore_scroll(event))
-    return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(darktable.gui->reset)
     return TRUE;
