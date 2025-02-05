@@ -55,7 +55,7 @@ typedef enum dt_control_crawler_cols_t
 
 typedef struct dt_control_crawler_result_t
 {
-  dt_imgid_t id;
+  dt_imgid_t id, version; //ab
   time_t timestamp_xmp;
   time_t timestamp_db;
   char *image_path, *xmp_path, *dir_path; //ab
@@ -184,7 +184,7 @@ GList *dt_control_crawler_run(void)
       item->xmp_path = g_strdup("");
       item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
       item->missing = TRUE;
-//ab добавить номер копии
+      item->version = version;
       result = g_list_prepend(result, item);
       //ba
 
@@ -253,8 +253,8 @@ GList *dt_control_crawler_run(void)
           item->xmp_path = g_strdup("");
           item->dir_path = g_strdup(dir_path);
           item->missing = TRUE;
+          item->version = version;
           result = g_list_prepend(result, item);
-//ab добавить номер копии
 
           dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, id);
         }
@@ -273,7 +273,7 @@ GList *dt_control_crawler_run(void)
         item->xmp_path = g_strdup(xmp_path);
         item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
         item->missing = FALSE;
-//ab добавить номер копии
+        item->version = version;
         result = g_list_prepend(result, item);
         dt_print(DT_DEBUG_CONTROL,
                  "[crawler] `%s' (id: %d) is a newer XMP file", xmp_path, id);
@@ -343,6 +343,8 @@ GList *dt_control_crawler_run(void)
     }
   }
 
+
+
   dt_database_release_transaction(darktable.db);
 
   sqlite3_finalize(stmt);
@@ -350,7 +352,6 @@ GList *dt_control_crawler_run(void)
 
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
-
 
 /********************* the gui stuff *********************/
 
@@ -364,7 +365,6 @@ typedef struct dt_control_crawler_gui_t
   GtkTreeView *missing_tree;
   GtkTreeModel *missing_model;
   GList *missing_rows_to_remove;
-//ab добавить номер копии
 } dt_control_crawler_gui_t;
 
 // close the window and clean up
@@ -515,8 +515,9 @@ static void remove_from_db(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { NO_IMGID };
   gtk_tree_model_get(model, iter,
-                     DT_CONTROL_CRAWLER_COL_ID,         &entry.id,
-                     DT_CONTROL_CRAWLER_COL_IMAGE_PATH, &entry.image_path,
+                     0, &entry.id,
+                     1, &entry.image_path,
+                     2, &entry.version,
                      -1);
 
   dt_image_remove(entry.id);
@@ -821,9 +822,53 @@ static gchar* str_time_delta(const int time_delta)
   return g_strdup_printf(_("%id %02dh %02dm %02ds"), days, hours, minutes, seconds);
 }
 
+//ab GList *_get_list_xmp(void)
+void _get_list_xmp(void)
+{
+  GList *_list = NULL;
+  sqlite3_stmt *stmt;
+  const gboolean look_for_xmp = dt_image_get_xmp_mode() != DT_WRITE_XMP_NEVER;
+
+  if(look_for_xmp)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT folder || '" G_DIR_SEPARATOR_S "' FROM main.film_rolls",
+                                -1, &stmt, NULL);
+    // clang-format on
+
+    dt_database_start_transaction(darktable.db);
+
+    while(sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      const gchar *dir_path = (char *)sqlite3_column_text(stmt, 0);
+      DIR *dir;
+      struct dirent *de;
+      dir = opendir(dir_path);
+      if (dir) {
+        while ((de = readdir(dir)) != NULL)
+        {
+          size_t name_len = strlen(de->d_name);
+          const gchar *ext = (de->d_name) + name_len - 4;
+          if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+            printf("%s%s\n", dir_path, de->d_name);
+        }
+        closedir(dir);
+      }
+    }
+    g_list_free(_list);
+    dt_database_release_transaction(darktable.db);
+
+    sqlite3_finalize(stmt);
+  }
+//  return _list;
+}
+//ba
+
 // show a popup window with a list of updated images/xmp files and allow the user to tell dt what to do about them
 void dt_control_crawler_show_image_list(GList *images)
 {
+  _get_list_xmp();
   if(!images) return;
 
   dt_control_crawler_gui_t *gui = malloc(sizeof(dt_control_crawler_gui_t));
@@ -846,9 +891,10 @@ void dt_control_crawler_show_image_list(GList *images)
 
   GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(missing_scroll, TRUE);
-  GtkListStore *missing_store = gtk_list_store_new(2,
+  GtkListStore *missing_store = gtk_list_store_new(3,
                                            G_TYPE_INT,     // id
-                                           G_TYPE_STRING); // image path
+                                           G_TYPE_STRING,  // image path
+                                           G_TYPE_INT);    // version
   gui->missing_model = GTK_TREE_MODEL(missing_store);
 
   for(GList *list_iter = images; list_iter; list_iter = g_list_next(list_iter))
@@ -888,8 +934,9 @@ void dt_control_crawler_show_image_list(GList *images)
       gtk_list_store_append(missing_store, &iter);
       gtk_list_store_set
           (missing_store, &iter,
-           DT_CONTROL_CRAWLER_COL_ID, item->id,
-           DT_CONTROL_CRAWLER_COL_IMAGE_PATH, item->image_path,
+           0, item->id,
+           1, item->image_path,
+           2, item->version,
            //ab добавить номер копии
            -1);
     }  //ba
@@ -907,13 +954,16 @@ void dt_control_crawler_show_image_list(GList *images)
 
   GtkCellRenderer *missing_renderer_text = gtk_cell_renderer_text_new();
   column = gtk_tree_view_column_new_with_attributes
-    (_("missing images"), missing_renderer_text, "text",
-     DT_CONTROL_CRAWLER_COL_IMAGE_PATH, NULL);
+    (_("missing images"), missing_renderer_text, "text", 1, NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(missing_tree), column);
   gtk_tree_view_column_set_expand(column, TRUE);
   gtk_tree_view_column_set_resizable(column, TRUE);
   gtk_tree_view_column_set_min_width(column, DT_PIXEL_APPLY_DPI(200));
   g_object_set(missing_renderer_text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
+
+  column = gtk_tree_view_column_new_with_attributes
+    (_("version (duplicate)"), gtk_cell_renderer_text_new(), "text", 2, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(missing_tree), column);
 
   gtk_container_add(GTK_CONTAINER(missing_scroll), missing_tree);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(missing_scroll),
@@ -936,7 +986,7 @@ void dt_control_crawler_show_image_list(GList *images)
   gtk_tree_view_column_set_min_width(column, DT_PIXEL_APPLY_DPI(200));
   g_object_set(renderer_text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
 
-    column = gtk_tree_view_column_new_with_attributes
+  column = gtk_tree_view_column_new_with_attributes
     (_("XMP timestamp"), gtk_cell_renderer_text_new(), "text",
      DT_CONTROL_CRAWLER_COL_TS_XMP, NULL);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
