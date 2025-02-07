@@ -362,9 +362,14 @@ typedef struct dt_control_crawler_gui_t
   GtkWidget *log;
   GtkWidget *spinner;
   GList *rows_to_remove;
+  //ab
   GtkTreeView *missing_tree;
   GtkTreeModel *missing_model;
   GList *missing_rows_to_remove;
+  GtkTreeView *new_dups_tree;
+  GtkTreeModel *new_dups_model;
+  GList *new_dups_rows_to_remove;
+  //ba
 } dt_control_crawler_gui_t;
 
 // close the window and clean up
@@ -822,8 +827,8 @@ static gchar* str_time_delta(const int time_delta)
   return g_strdup_printf(_("%id %02dh %02dm %02ds"), days, hours, minutes, seconds);
 }
 
-//ab GList *_get_list_xmp(void)
-void _get_list_xmp(void)
+//ab void _get_list_xmp(void)
+GList *_get_list_xmp(void)
 {
   GList *_list = NULL;
   sqlite3_stmt *stmt;
@@ -851,29 +856,41 @@ void _get_list_xmp(void)
           size_t name_len = strlen(de->d_name);
           const gchar *ext = (de->d_name) + name_len - 4;
           if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
-            printf("%s%s\n", dir_path, de->d_name);
+          {
+            //printf("%s%s\n", dir_path, de->d_name);
+            /*gchar *full_name = g_strconcat(dir_path, de->d_name, NULL);
+            _list = g_list_prepend(_list, g_strdup(full_name));*/
+            _list = g_list_append(_list, g_strconcat(dir_path, de->d_name, NULL));
+          }
         }
         closedir(dir);
       }
     }
-    g_list_free(_list);
     dt_database_release_transaction(darktable.db);
-
     sqlite3_finalize(stmt);
   }
-//  return _list;
+  return _list;
 }
 //ba
+
 
 // show a popup window with a list of updated images/xmp files and allow the user to tell dt what to do about them
 void dt_control_crawler_show_image_list(GList *images)
 {
-  _get_list_xmp();
   if(!images) return;
 
   dt_control_crawler_gui_t *gui = malloc(sizeof(dt_control_crawler_gui_t));
 
-  // a list with all the images
+  //ab
+  GtkNotebook *nb = GTK_NOTEBOOK(gtk_notebook_new());
+  GtkWidget *page1 = dt_ui_notebook_page(nb, N_("удалённые"), NULL);
+  GtkWidget *page2 = dt_ui_notebook_page(nb, N_("изменённые"), NULL);
+  GtkWidget *page3 = dt_ui_notebook_page(nb, N_("новые"), NULL);
+  gtk_widget_show(gtk_notebook_get_nth_page(nb, 1));
+  gtk_notebook_set_current_page(nb, 1);
+  //ba
+
+    // a list with all the images
   GtkTreeViewColumn *column;
   GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(scroll, TRUE);
@@ -889,13 +906,21 @@ void dt_control_crawler_show_image_list(GList *images)
                                            G_TYPE_STRING);// time delta
   gui->model = GTK_TREE_MODEL(store);
 
-  GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
+  //ab
+    GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(missing_scroll, TRUE);
   GtkListStore *missing_store = gtk_list_store_new(3,
                                            G_TYPE_INT,     // id
                                            G_TYPE_STRING,  // image path
                                            G_TYPE_INT);    // version
   gui->missing_model = GTK_TREE_MODEL(missing_store);
+
+  GtkWidget *new_dups_scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_widget_set_vexpand(new_dups_scroll, TRUE);
+  GtkListStore *new_dups_store = gtk_list_store_new(1,
+                                           G_TYPE_STRING);  // image path
+  gui->new_dups_model = GTK_TREE_MODEL(new_dups_store);
+  //ba
 
   for(GList *list_iter = images; list_iter; list_iter = g_list_next(list_iter))
   {
@@ -937,7 +962,6 @@ void dt_control_crawler_show_image_list(GList *images)
            0, item->id,
            1, item->image_path,
            2, item->version,
-           //ab добавить номер копии
            -1);
     }  //ba
     _free_crawler_result(item);
@@ -946,12 +970,41 @@ void dt_control_crawler_show_image_list(GList *images)
   g_list_free_full(images, g_free);
 
   //ab
+  GList *_new_dups = _get_list_xmp();
+  for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
+  {
+    GtkTreeIter iter;
+    char *item = (char *)(list_iter->data);
+    g_printf("%s\n", item);
+    gtk_list_store_append(new_dups_store, &iter);
+    gtk_list_store_set
+        (new_dups_store, &iter,
+         0, item,
+         -1);
+  }
+  g_list_free_full(_new_dups, g_free);
+
+  GtkWidget *new_dups_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(new_dups_store));
+  GtkTreeSelection *new_dups_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(new_dups_tree));
+  gtk_tree_selection_set_mode(new_dups_selection, GTK_SELECTION_MULTIPLE);
+  gui->new_dups_tree = GTK_TREE_VIEW(new_dups_tree); // FIXME: do we need to free that later ?
+  GtkCellRenderer *new_dups_renderer_text = gtk_cell_renderer_text_new();
+  column = gtk_tree_view_column_new_with_attributes
+    (_("new images"), new_dups_renderer_text, "text", 0, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(new_dups_tree), column);
+  gtk_tree_view_column_set_expand(column, TRUE);
+  gtk_tree_view_column_set_resizable(column, TRUE);
+  gtk_tree_view_column_set_min_width(column, DT_PIXEL_APPLY_DPI(200));
+  g_object_set(new_dups_renderer_text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
+
+  gtk_container_add(GTK_CONTAINER(new_dups_scroll), new_dups_tree);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(new_dups_scroll),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+
   GtkWidget *missing_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(missing_store));
   GtkTreeSelection *missing_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(missing_tree));
   gtk_tree_selection_set_mode(missing_selection, GTK_SELECTION_MULTIPLE);
-
   gui->missing_tree = GTK_TREE_VIEW(missing_tree); // FIXME: do we need to free that later ?
-
   GtkCellRenderer *missing_renderer_text = gtk_cell_renderer_text_new();
   column = gtk_tree_view_column_new_with_attributes
     (_("missing images"), missing_renderer_text, "text", 1, NULL);
@@ -1030,19 +1083,31 @@ void dt_control_crawler_show_image_list(GList *images)
   gtk_container_add(GTK_CONTAINER(content_area), content_box);
 
   //ab
-  gtk_box_pack_start(GTK_BOX(content_box), missing_scroll, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(content_box), GTK_WIDGET(nb), TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(page1), missing_scroll);
+  gtk_container_add(GTK_CONTAINER(page3), new_dups_scroll);
 
   GtkWidget *missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(content_box), missing_box, FALSE, FALSE, 1);
+  //gtk_box_pack_start(GTK_BOX(content_box), missing_box, FALSE, FALSE, 1);
+  gtk_box_pack_start(GTK_BOX(page1), missing_box, FALSE, FALSE, 1);
   GtkWidget *remove_button = gtk_button_new_with_label(_("remove selected entries from image library"));
   gtk_box_pack_start(GTK_BOX(missing_box), remove_button, FALSE, FALSE, 0);
   gtk_widget_set_margin_bottom(remove_button, 10);
   g_signal_connect(remove_button, "clicked", G_CALLBACK(_remove_button_clicked), gui);
+
+  GtkWidget *new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(page3), new_box, FALSE, FALSE, 1);
+  GtkWidget *add_dups_button = gtk_button_new_with_label(_("add selected entries to image library"));
+  gtk_box_pack_start(GTK_BOX(new_box), add_dups_button, FALSE, FALSE, 0);
+  gtk_widget_set_margin_bottom(add_dups_button, 10);
+//  g_signal_connect(add_dups_button, "clicked", G_CALLBACK(_add_dups_button_clicked), gui);
   //ba
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 0);
+  //ab gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(page2), box, FALSE, FALSE, 0); //ab
   GtkWidget *select_all = gtk_button_new_with_label(_("select all"));
   GtkWidget *select_none = gtk_button_new_with_label(_("select none"));
   GtkWidget *select_invert = gtk_button_new_with_label(_("invert selection"));
@@ -1053,10 +1118,12 @@ void dt_control_crawler_show_image_list(GList *images)
   g_signal_connect(select_none, "clicked", G_CALLBACK(_select_none_callback), gui);
   g_signal_connect(select_invert, "clicked", G_CALLBACK(_select_invert_callback), gui);
 
-  gtk_box_pack_start(GTK_BOX(content_box), scroll, TRUE, TRUE, 0);
+  //ab gtk_box_pack_start(GTK_BOX(content_box), scroll, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(page2), scroll, TRUE, TRUE, 0); //ab
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 1);
+  //ab gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 1);
+  gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 1);//ab
   GtkWidget *label = gtk_label_new_with_mnemonic(_("on the selection:"));
   GtkWidget *reload_button = gtk_button_new_with_label(_("keep the XMP edit"));
   GtkWidget *overwrite_button = gtk_button_new_with_label(_("keep the database edit"));
