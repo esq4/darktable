@@ -53,13 +53,20 @@ typedef enum dt_control_crawler_cols_t
   DT_CONTROL_CRAWLER_NUM_COLS
 } dt_control_crawler_cols_t;
 
+typedef enum xmp_condition
+{
+  DT_XMP_CONDITION_MISSING = 0,
+  DT_XMP_CONDITION_CHANGED,
+  DT_XMP_CONDITION_NEW
+} xmp_condition;
+
 typedef struct dt_control_crawler_result_t
 {
   dt_imgid_t id, version; //ab
   time_t timestamp_xmp;
   time_t timestamp_db;
   char *image_path, *xmp_path, *dir_path; //ab
-  gboolean missing; //ab
+  xmp_condition condition; //ab
 } dt_control_crawler_result_t;
 
 static void _free_crawler_result(dt_control_crawler_result_t *entry)
@@ -111,6 +118,9 @@ static void _set_modification_time(char *filename,
 #define FAST_UPDATE 0.2
 #define SLOW_UPDATE 1.0
 
+//ab
+GList *_get_list_xmp(void);
+
 GList *dt_control_crawler_run(void)
 {
   sqlite3_stmt *stmt, *inner_stmt;
@@ -151,6 +161,8 @@ GList *dt_control_crawler_run(void)
   // appear when done with zero delay) while minimizing the delay
   double last_time = start_time - (FAST_UPDATE-0.01);
 
+  GList *_new_dups = _get_list_xmp(); //ab
+
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const dt_imgid_t id = sqlite3_column_int(stmt, 0);
@@ -183,7 +195,7 @@ GList *dt_control_crawler_run(void)
       item->image_path = g_strdup(image_path);
       item->xmp_path = g_strdup("");
       item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
-      item->missing = TRUE;
+      item->condition = DT_XMP_CONDITION_MISSING;
       item->version = version;
       result = g_list_prepend(result, item);
       //ba
@@ -191,6 +203,7 @@ GList *dt_control_crawler_run(void)
       dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing", image_path, id);
       continue;
     }
+
 
     // no need to look for xmp files if none get written anyway.
     if(look_for_xmp)
@@ -206,6 +219,17 @@ GList *dt_control_crawler_run(void)
       xmp_path[len++] = 'm';
       xmp_path[len++] = 'p';
       xmp_path[len] = '\0';
+
+      //ab
+      for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
+      {
+        char *item = (char *)(list_iter->data);
+        if(strcmp(item, xmp_path) == 0 ? TRUE : FALSE)
+        {
+          _new_dups = g_list_delete_link(_new_dups, list_iter);
+        }
+      }
+      //ba
 
       // on Windows the encoding might not be UTF8
       gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
@@ -252,7 +276,7 @@ GList *dt_control_crawler_run(void)
           item->image_path = g_strdup(image_path);
           item->xmp_path = g_strdup("");
           item->dir_path = g_strdup(dir_path);
-          item->missing = TRUE;
+          item->condition = DT_XMP_CONDITION_MISSING;
           item->version = version;
           result = g_list_prepend(result, item);
 
@@ -272,7 +296,7 @@ GList *dt_control_crawler_run(void)
         item->image_path = g_strdup(image_path);
         item->xmp_path = g_strdup(xmp_path);
         item->dir_path = g_strdup(dir_path); //ab пригодится для поиска дубликатов
-        item->missing = FALSE;
+        item->condition = DT_XMP_CONDITION_CHANGED;
         item->version = version;
         result = g_list_prepend(result, item);
         dt_print(DT_DEBUG_CONTROL,
@@ -293,27 +317,27 @@ GList *dt_control_crawler_run(void)
     {
       g_strlcpy(extra_path, image_path, len + 1);
 
-      extra_path[len] = 't';
+      extra_path[len]     = 't';
       extra_path[len + 1] = 'x';
       extra_path[len + 2] = 't';
       gboolean has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
 
       if(!has_txt)
       {
-        extra_path[len] = 'T';
+        extra_path[len]     = 'T';
         extra_path[len + 1] = 'X';
         extra_path[len + 2] = 'T';
         has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
       }
 
-      extra_path[len] = 'w';
+      extra_path[len]     = 'w';
       extra_path[len + 1] = 'a';
       extra_path[len + 2] = 'v';
       gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
 
       if(!has_wav)
       {
-        extra_path[len] = 'W';
+        extra_path[len]     = 'W';
         extra_path[len + 1] = 'A';
         extra_path[len + 2] = 'V';
         has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
@@ -343,6 +367,62 @@ GList *dt_control_crawler_run(void)
     }
   }
 
+  //ab
+  _new_dups= g_list_sort(_new_dups, (GCompareFunc)g_strcmp0);
+  for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
+  {
+    char *xmp_item = (char *)(list_iter->data);
+    gboolean img_exists = FALSE;
+
+    size_t len = strlen(xmp_item);
+    const char *c = xmp_item + len;
+    while((c > xmp_item) && (*c != '.')) c--;
+    len = c - xmp_item;
+    char *img_path = calloc(len, sizeof(char));
+    if(img_path)
+    {
+      g_strlcpy(img_path, xmp_item, len + 1);
+      img_exists = g_file_test(img_path, G_FILE_TEST_EXISTS);
+    }
+    if(!img_exists)
+    {
+      c = img_path + len;
+      while((c > img_path) && (*c != '.')) c--;
+      size_t len_c = strlen(c);
+
+      len = c - img_path;
+      while((c > img_path) && (*c != '_')) c--;
+      size_t vers_len = c - img_path;
+
+      char *img_vers_path = calloc(vers_len + len_c, sizeof(char));
+
+      g_strlcpy(img_vers_path, img_path, vers_len + 1);
+      while(len_c)
+      {
+        img_vers_path[vers_len++] =  img_path[len++];
+        len_c--;
+      }
+      img_exists = g_file_test(img_vers_path, G_FILE_TEST_EXISTS);
+    }
+
+    //TODO если оригинала не существует, то подчистить хвосты
+    if(img_exists)
+    {
+      dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+      item->id = 0;
+      item->timestamp_xmp = 0;
+      item->timestamp_db = 0;
+      item->image_path = g_strdup("");
+      item->xmp_path = g_strdup(xmp_item);
+      item->dir_path = g_strdup("");
+      item->condition = DT_XMP_CONDITION_NEW;
+      item->version = 0;
+      result = g_list_prepend(result, item);
+
+      dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' found on storage but not in image library", xmp_item);
+    }
+    //ba
+  }
 
 
   dt_database_release_transaction(darktable.db);
@@ -871,8 +951,6 @@ GList *_get_list_xmp(void)
   }
   return _list;
 }
-//ba
-
 
 // show a popup window with a list of updated images/xmp files and allow the user to tell dt what to do about them
 void dt_control_crawler_show_image_list(GList *images)
@@ -907,7 +985,9 @@ void dt_control_crawler_show_image_list(GList *images)
   gui->model = GTK_TREE_MODEL(store);
 
   //ab
-    GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
+  GList *_new_dups = _get_list_xmp();
+
+  GtkWidget *missing_scroll = gtk_scrolled_window_new(NULL, NULL);
   gtk_widget_set_vexpand(missing_scroll, TRUE);
   GtkListStore *missing_store = gtk_list_store_new(3,
                                            G_TYPE_INT,     // id
@@ -936,7 +1016,7 @@ void dt_control_crawler_show_image_list(GList *images)
     const time_t time_delta = llabs(item->timestamp_db - item->timestamp_xmp);
     gchar *timestamp_delta = str_time_delta(time_delta);
 
-    if(!item->missing)
+    if(item->condition == DT_XMP_CONDITION_CHANGED)
     {
       gtk_list_store_append(store, &iter);
       gtk_list_store_set
@@ -954,7 +1034,7 @@ void dt_control_crawler_show_image_list(GList *images)
            DT_CONTROL_CRAWLER_COL_TIME_DELTA, timestamp_delta,
            -1);
     }
-    else  //ab
+    else if(item->condition == DT_XMP_CONDITION_MISSING) //ab
     {
       gtk_list_store_append(missing_store, &iter);
       gtk_list_store_set
@@ -963,25 +1043,21 @@ void dt_control_crawler_show_image_list(GList *images)
            1, item->image_path,
            2, item->version,
            -1);
+    }
+    else if(item->condition == DT_XMP_CONDITION_NEW) //ab
+    {
+      gtk_list_store_append(new_dups_store, &iter);
+      gtk_list_store_set
+          (new_dups_store, &iter,
+           0, item->xmp_path,
+           -1);
     }  //ba
     _free_crawler_result(item);
     g_free(timestamp_delta);
   }
-  g_list_free_full(images, g_free);
 
   //ab
-  GList *_new_dups = _get_list_xmp();
-  for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
-  {
-    GtkTreeIter iter;
-    char *item = (char *)(list_iter->data);
-    g_printf("%s\n", item);
-    gtk_list_store_append(new_dups_store, &iter);
-    gtk_list_store_set
-        (new_dups_store, &iter,
-         0, item,
-         -1);
-  }
+  g_list_free_full(images, g_free);
   g_list_free_full(_new_dups, g_free);
 
   GtkWidget *new_dups_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(new_dups_store));
