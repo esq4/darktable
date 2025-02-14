@@ -24,7 +24,6 @@
 
 #include "common/darktable.h"
 #include "common/database.h"
-#include "common/datetime.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image.h"
@@ -36,6 +35,7 @@
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
+#include <dirent.h>
 
 // how many seconds may the sidecar file's timestamp differ from that recorded in the database?
 #define MAX_TIME_SKEW 2
@@ -119,8 +119,7 @@ static void _set_modification_time(char *filename,
 #define FAST_UPDATE 0.2
 #define SLOW_UPDATE 1.0
 
-//ab
-GList *_get_list_xmp(void);
+GList *_get_list_xmp(void); //ab
 
 GList *dt_control_crawler_run(void)
 {
@@ -162,7 +161,15 @@ GList *dt_control_crawler_run(void)
   // appear when done with zero delay) while minimizing the delay
   double last_time = start_time - (FAST_UPDATE-0.01);
 
-  GList *_new_dups = _get_list_xmp(); //ab
+
+  typedef struct _xmp0_
+  {
+    dt_imgid_t id;
+    char *image_path;
+  } _xmp0_;
+
+  GList *_xmp_list = _get_list_xmp(); // get xmp files list
+  GList *_not_edited_list = NULL; // list for images w/o xmp file vers.0
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -221,13 +228,14 @@ GList *dt_control_crawler_run(void)
       xmp_path[len++] = 'p';
       xmp_path[len] = '\0';
 
-      //ab
-      for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
+      //ab elements existing in the db are removed from the list.
+      // only new elements will remain in the list.
+      for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
       {
-        char *item = (char *)(list_iter->data);
-        if(strcmp(item, xmp_path) == 0 ? TRUE : FALSE)
+        if(strcmp((char *)list_rec->data, xmp_path) == 0 ? TRUE : FALSE)
         {
-          _new_dups = g_list_delete_link(_new_dups, list_iter);
+          _xmp_list = g_list_delete_link(_xmp_list, list_rec);
+          break;
         }
       }
       //ba
@@ -253,21 +261,6 @@ GList *dt_control_crawler_run(void)
       if(stat_res)
       {
         //ab
-        //ab TODO обработка случая когда через управление копиями удалён основной (version==0) XMP
-        //ab в.1) запретить его удалять (так себе :/ )
-        //        +++ остальной функционал уже есть (удаление копий)
-        //        -- разбираться с управлением копиями
-        //        --- ограничение действий пользователя (хочу оставить только 99-ю копию)
-        //        --- скорее всего не согласятся
-        //ab в.2) переименовывать минимальную копию в "0" (???)
-        //        +++ остальной функционал уже есть (удаление копий)
-        //        --- разбираться с управлением копиями
-        //        - изменение нумерации копий (но, возможно, никто ею не пользуется.? или нет?)
-        //        !! учесть что timestamp_xmp д.б. > timestamp_db
-        //        ! только на уровне изменения штатного функционала управления копиями
-        //        --- вероятно не согласятся
-        //ab в.3) ввести в main.images новое поле "xmp" (??? изменения в БД ради чуть-чуть)
-        //ab
         dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
         if(version)
         {
@@ -283,8 +276,39 @@ GList *dt_control_crawler_run(void)
 
           dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, id);
         }
+        else
+        {
+          _xmp0_ *_item = malloc(sizeof(_xmp0_));
+          _item->id = id;
+          _item->image_path = g_strdup(image_path);
+          _not_edited_list = g_list_append(_not_edited_list, _item); // put image in "black" list
+        }
         //ba
         continue; // TODO: shall we report these?
+      }
+
+      // maybe it's duplicate of image from "black" list
+      for(GList *list_rec = _not_edited_list; list_rec; list_rec = g_list_next(list_rec))
+      {
+        _xmp0_ *_item = list_rec->data;
+        if(strcmp(_item->image_path, image_path) == 0 ? TRUE : FALSE)
+        {
+          _not_edited_list = g_list_delete_link(_not_edited_list, list_rec); // remove image from "black" list
+          // and mark [version=0] for delete from db
+          dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+            item->id = _item->id;
+            item->timestamp_xmp = 0;
+            item->timestamp_db = timestamp;
+            item->image_path = g_strdup(_item->image_path);
+            item->xmp_path = g_strdup("");
+            item->dir_path = g_strdup("");
+            item->condition = DT_XMP_CONDITION_MISSING;
+            item->version = 0;
+            result = g_list_prepend(result, item);
+
+            dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, version);
+          break;
+        }
       }
 
       // step 1: check if the xmp is newer than our db entry
@@ -369,12 +393,21 @@ GList *dt_control_crawler_run(void)
   }
 
   //ab
-  _new_dups= g_list_sort(_new_dups, (GCompareFunc)g_strcmp0);
-  for(GList *list_iter = _new_dups; list_iter; list_iter = g_list_next(list_iter))
+  for(GList *list0_rec = _not_edited_list; list0_rec; list0_rec = g_list_next(list0_rec))
   {
-    char *xmp_item = (char *)(list_iter->data);
+
+
+  }
+
+
+
+
+  for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
+  {
+    char *xmp_item = (char *)list_rec->data;
     gboolean img_exists = FALSE;
 
+    // check original image
     size_t len = strlen(xmp_item);
     const char *c = xmp_item + len;
     while((c > xmp_item) && (*c != '.')) c--;
@@ -385,7 +418,8 @@ GList *dt_control_crawler_run(void)
       g_strlcpy(img_path, xmp_item, len + 1);
       img_exists = g_file_test(img_path, G_FILE_TEST_EXISTS);
     }
-    if(!img_exists) // maybe a duplicate
+
+    if(!img_exists) // maybe xmp is a duplicate
     {
       c = img_path + len;
       while((c > img_path) && (*c != '.')) c--;
@@ -394,9 +428,7 @@ GList *dt_control_crawler_run(void)
       len = c - img_path;
       while((c > img_path) && (*c != '_')) c--;
       size_t vers_len = c - img_path;
-
       char *img_vers_path = calloc(vers_len + len_c, sizeof(char));
-
       g_strlcpy(img_vers_path, img_path, vers_len + 1);
       while(len_c)
       {
@@ -405,6 +437,7 @@ GList *dt_control_crawler_run(void)
       }
       img_path = img_vers_path;
       img_exists = g_file_test(img_path, G_FILE_TEST_EXISTS);
+      g_free(img_vers_path);
     }
 
     //TODO если оригинала не существует, то подчистить хвосты
@@ -416,7 +449,7 @@ GList *dt_control_crawler_run(void)
       item->timestamp_db = 0;
       item->image_path = g_strdup(img_path);
       item->xmp_path = g_strdup(xmp_item);
-      item->dir_path = g_strdup("");
+      item->dir_path = "";
       item->condition = DT_XMP_CONDITION_NEW;
       item->version = 0;
       result = g_list_prepend(result, item);
@@ -449,6 +482,7 @@ typedef struct dt_control_crawler_gui_t
   GtkTreeView *new_dups_tree;
   GtkTreeModel *new_dups_model;
   GList *new_dups_rows_to_remove;
+  GtkNotebook *nb;
   //ba
 } dt_control_crawler_gui_t;
 
@@ -490,7 +524,18 @@ static void _select_all_callback(GtkButton *button,
                                  gpointer user_data)
 {
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(gui->tree);
+  GtkTreeSelection *selection = NULL;
+  switch (gtk_notebook_get_current_page(gui->nb))
+  {
+    case 0:
+      selection = gtk_tree_view_get_selection(gui->missing_tree);
+      break;
+    case 1:
+     selection = gtk_tree_view_get_selection(gui->tree);
+      break;
+    case 2:
+      selection = gtk_tree_view_get_selection(gui->new_dups_tree);
+  }
   gtk_tree_selection_select_all(selection);
 }
 
@@ -498,7 +543,18 @@ static void _select_all_callback(GtkButton *button,
 static void _select_none_callback(GtkButton *button, gpointer user_data)
 {
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(gui->tree);
+  GtkTreeSelection *selection = NULL;
+  switch (gtk_notebook_get_current_page(gui->nb))
+  {
+    case 0:
+      selection = gtk_tree_view_get_selection(gui->missing_tree);
+      break;
+    case 1:
+      selection = gtk_tree_view_get_selection(gui->tree);
+      break;
+    case 2:
+      selection = gtk_tree_view_get_selection(gui->new_dups_tree);
+  }
   gtk_tree_selection_unselect_all(selection);
 }
 
@@ -506,10 +562,26 @@ static void _select_none_callback(GtkButton *button, gpointer user_data)
 static void _select_invert_callback(GtkButton *button, gpointer user_data)
 {
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
-  GtkTreeSelection *selection = gtk_tree_view_get_selection(gui->tree);
-
+  GtkTreeModel *model = NULL;
+  GtkTreeSelection *selection = NULL;
   GtkTreeIter iter;
-  gboolean valid = gtk_tree_model_get_iter_first(gui->model, &iter);
+  gboolean valid = FALSE;
+  switch (gtk_notebook_get_current_page(gui->nb))
+  {
+    case 0:
+      selection = gtk_tree_view_get_selection(gui->missing_tree);
+      model = gui->missing_model;
+      break;
+    case 1:
+      selection = gtk_tree_view_get_selection(gui->tree);
+      model = gui->model;
+      break;
+    case 2:
+      selection = gtk_tree_view_get_selection(gui->new_dups_tree);
+      model = gui->new_dups_model;
+  }
+
+  valid = gtk_tree_model_get_iter_first(model, &iter);
   while(valid)
   {
     if(gtk_tree_selection_iter_is_selected(selection, &iter))
@@ -517,7 +589,7 @@ static void _select_invert_callback(GtkButton *button, gpointer user_data)
     else
       gtk_tree_selection_select_iter(selection, &iter);
 
-    valid = gtk_tree_model_iter_next(gui->model, &iter);
+    valid = gtk_tree_model_iter_next(model, &iter);
   }
 }
 
@@ -945,6 +1017,7 @@ static gchar* str_time_delta(const int time_delta)
 GList *_get_list_xmp(void)
 {
   GList *_list = NULL;
+
   sqlite3_stmt *stmt;
   const gboolean look_for_xmp = dt_image_get_xmp_mode() != DT_WRITE_XMP_NEVER;
 
@@ -957,27 +1030,34 @@ GList *_get_list_xmp(void)
     // clang-format on
 
     dt_database_start_transaction(darktable.db);
-
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
       const gchar *dir_path = (char *)sqlite3_column_text(stmt, 0);
-      DIR *dir;
-      struct dirent *de;
-      dir = opendir(dir_path);
-      if (dir) {
-        while ((de = readdir(dir)) != NULL)
+      GError *error = NULL;
+      GFile *gfolder = g_file_new_for_path(dir_path);
+      GFileEnumerator *dir_files = g_file_enumerate_children(gfolder,
+                                                             G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                                             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                                             G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+      if(dir_files)
+      {
+        GFileInfo *info = NULL;
+        while((info = g_file_enumerator_next_file(dir_files, NULL, &error)))
         {
-          size_t name_len = strlen(de->d_name);
-          const gchar *ext = (de->d_name) + name_len - 4;
-          if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+          const char *filename = g_file_info_get_display_name(info);
+          if(!filename) continue;
+          const GFileType filetype = g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_STANDARD_TYPE);
+          if(filetype == G_FILE_TYPE_REGULAR)
           {
-            //printf("%s%s\n", dir_path, de->d_name);
-            /*gchar *full_name = g_strconcat(dir_path, de->d_name, NULL);
-            _list = g_list_prepend(_list, g_strdup(full_name));*/
-            _list = g_list_append(_list, g_strconcat(dir_path, de->d_name, NULL));
+            size_t name_len = strlen(filename);
+            const char *ext = filename + name_len - 4;
+            if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+            {
+              _list = g_list_append(_list, g_strconcat(dir_path, filename, NULL));
+            }
           }
         }
-        closedir(dir);
       }
     }
     dt_database_release_transaction(darktable.db);
@@ -998,9 +1078,10 @@ void dt_control_crawler_show_image_list(GList *images)
   GtkNotebook *nb = GTK_NOTEBOOK(gtk_notebook_new());
   GtkWidget *page1 = dt_ui_notebook_page(nb, N_("missing"), NULL);
   GtkWidget *page2 = dt_ui_notebook_page(nb, N_("changed"), NULL);
-  GtkWidget *page3 = dt_ui_notebook_page(nb, N_("new dups"), NULL);
+  GtkWidget *page3 = dt_ui_notebook_page(nb, N_("new"), NULL);
   gtk_widget_show(gtk_notebook_get_nth_page(nb, 1));
   gtk_notebook_set_current_page(nb, 1);
+  gui->nb = GTK_NOTEBOOK(nb);
   //ba
 
   // a list with all the images
@@ -1178,7 +1259,7 @@ void dt_control_crawler_show_image_list(GList *images)
   // build a dialog window that contains the list of images
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
   GtkWidget *dialog = gtk_dialog_new_with_buttons
-    (_("updated XMP sidecar files found"), GTK_WINDOW(win),
+    (_("manage XMP sidecar files"), GTK_WINDOW(win),
      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("_close"),
      GTK_RESPONSE_CLOSE, NULL);
 
@@ -1192,28 +1273,9 @@ void dt_control_crawler_show_image_list(GList *images)
   GtkWidget *content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(content_area), content_box);
 
-  //ab
-  gtk_box_pack_start(GTK_BOX(content_box), GTK_WIDGET(nb), TRUE, TRUE, 0);
-  gtk_container_add(GTK_CONTAINER(page1), missing_scroll);
-  gtk_container_add(GTK_CONTAINER(page3), new_dups_scroll);
-
-  GtkWidget *missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(page1), missing_box, FALSE, FALSE, 1);
-  GtkWidget *remove_button = gtk_button_new_with_label(_("remove selected entries from image library"));
-  gtk_box_pack_start(GTK_BOX(missing_box), remove_button, FALSE, FALSE, 0);
-  g_signal_connect(remove_button, "clicked", G_CALLBACK(_remove_button_clicked), gui);
-
-  GtkWidget *new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(page3), new_box, FALSE, FALSE, 1);
-  GtkWidget *add_dups_button = gtk_button_new_with_label(_("add selected entries to image library"));
-  gtk_box_pack_start(GTK_BOX(new_box), add_dups_button, FALSE, FALSE, 0);
-  g_signal_connect(add_dups_button, "clicked", G_CALLBACK(_add_dups_button_clicked), gui);
-  //ba
-
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(page2), box, FALSE, FALSE, 0); //ab
+  gtk_box_pack_start(GTK_BOX(content_box), box, FALSE, FALSE, 0); //ab -------
+  gtk_widget_set_margin_bottom(GTK_WIDGET(box), 10); //ab -------
   GtkWidget *select_all = gtk_button_new_with_label(_("select all"));
   GtkWidget *select_none = gtk_button_new_with_label(_("select none"));
   GtkWidget *select_invert = gtk_button_new_with_label(_("invert selection"));
@@ -1224,8 +1286,19 @@ void dt_control_crawler_show_image_list(GList *images)
   g_signal_connect(select_none, "clicked", G_CALLBACK(_select_none_callback), gui);
   g_signal_connect(select_invert, "clicked", G_CALLBACK(_select_invert_callback), gui);
 
-  gtk_box_pack_start(GTK_BOX(page2), scroll, TRUE, TRUE, 0); //ab
+  gtk_box_pack_start(GTK_BOX(content_box), GTK_WIDGET(nb), TRUE, TRUE, 0); //ab -------
 
+  //ab
+  gtk_container_add(GTK_CONTAINER(page1), missing_scroll); //ab
+  GtkWidget *missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  missing_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(page1), missing_box, FALSE, FALSE, 1);
+  GtkWidget *remove_button = gtk_button_new_with_label(_("remove selected entries from image library"));
+  gtk_box_pack_start(GTK_BOX(missing_box), remove_button, FALSE, FALSE, 0);
+  g_signal_connect(remove_button, "clicked", G_CALLBACK(_remove_button_clicked), gui);
+  //ba
+
+  gtk_container_add(GTK_CONTAINER(page2), scroll); //ab
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(page2), box, FALSE, FALSE, 1);//ab
   GtkWidget *label = gtk_label_new_with_mnemonic(_("on the selection:"));
@@ -1242,6 +1315,18 @@ void dt_control_crawler_show_image_list(GList *images)
   g_signal_connect(overwrite_button, "clicked", G_CALLBACK(_overwrite_button_clicked), gui);
   g_signal_connect(newest_button, "clicked", G_CALLBACK(_newest_button_clicked), gui);
   g_signal_connect(oldest_button, "clicked", G_CALLBACK(_oldest_button_clicked), gui);
+
+  //ab
+  gtk_container_add(GTK_CONTAINER(page3), new_dups_scroll); //ab
+  GtkWidget *new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  new_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(page3), new_box, FALSE, FALSE, 1);
+  GtkWidget *add_dups_button = gtk_button_new_with_label(_("add selected entries to image library"));
+  gtk_box_pack_start(GTK_BOX(new_box), add_dups_button, FALSE, FALSE, 0);
+  g_signal_connect(add_dups_button, "clicked", G_CALLBACK(_add_dups_button_clicked), gui);
+  //ba
+
+  // gtk_box_pack_start(GTK_BOX(page2), scroll, TRUE, TRUE, 0); //ab
 
   /* Log report */
   scroll = gtk_scrolled_window_new(NULL, NULL);
@@ -1265,7 +1350,11 @@ void dt_control_crawler_show_image_list(GList *images)
   gtk_tree_view_set_model(GTK_TREE_VIEW(gui->log), model_log);
   g_object_unref(model_log);
 
-  gtk_window_resize(GTK_WINDOW(dialog), 1500, 1000); //TODO save and restore
+  GdkRectangle workarea;
+  GdkDisplay *display = gtk_widget_get_display(dt_ui_main_window(darktable.gui->ui));
+  GdkMonitor *mon = gdk_display_get_monitor_at_window(display, gtk_widget_get_window(win));
+  gdk_monitor_get_workarea(mon, &workarea);
+  gtk_window_resize(GTK_WINDOW(dialog), workarea.width*3/4, workarea.height*3/4); //TODO save and restore
   gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER); //ab
   gtk_widget_show_all(dialog);
 
