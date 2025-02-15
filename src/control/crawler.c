@@ -729,6 +729,8 @@ static void sync_xmp_to_db(GtkTreeModel *model,
   _get_crawler_entry_from_model(model, iter, &entry);
   _db_update_timestamp(entry.id, entry.timestamp_xmp);
 
+  while(gtk_events_pending()) gtk_main_iteration(); // TODO hook for dialog refresh: make it better
+
   const gboolean error = dt_history_load_and_apply(entry.id, entry.xmp_path, 0);
 
   if(error)
@@ -756,6 +758,8 @@ static void sync_db_to_xmp(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { NO_IMGID };
   _get_crawler_entry_from_model(model, iter, &entry);
+
+  while(gtk_events_pending()) gtk_main_iteration(); // TODO hook for dialog refresh: make it better
 
   // write the XMP and make sure it get the last modified timestamp of the db
   const gboolean error = dt_image_write_sidecar_file(entry.id);
@@ -787,6 +791,8 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   _get_crawler_entry_from_model(model, iter, &entry);
 
   gboolean error = FALSE;
+
+  while(gtk_events_pending()) gtk_main_iteration(); // TODO hook for dialog refresh: make it better
 
   if(entry.timestamp_xmp > entry.timestamp_db)
   {
@@ -857,6 +863,8 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   dt_control_crawler_result_t entry = { NO_IMGID };
   _get_crawler_entry_from_model(model, iter, &entry);
   gboolean error = FALSE;
+
+  while(gtk_events_pending()) gtk_main_iteration(); // TODO hook for dialog refresh: make it better
 
   if(entry.timestamp_xmp < entry.timestamp_db)
   {
