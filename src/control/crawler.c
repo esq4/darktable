@@ -999,7 +999,8 @@ GList *_get_list_xmp(void)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT folder || '" G_DIR_SEPARATOR_S "' FROM main.film_rolls",
+                                "SELECT folder || '" G_DIR_SEPARATOR_S "', access_timestamp"
+                                " FROM main.film_rolls",
                                 -1, &stmt, NULL);
     // clang-format on
 
@@ -1015,28 +1016,12 @@ GList *_get_list_xmp(void)
       GFile *gfolder = g_file_new_for_path(dir_path);
       GFileEnumerator *dir_files = g_file_enumerate_children(gfolder,
                                                              G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                                             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                                              G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
 
-     // here we will find the directories that have not changed and remove them from the list.
-       const gchar *_folder = dir_path;
-      gfolder = g_file_new_for_path(_folder);
-       GFileInfo *__dir = g_file_query_info(gfolder,
-                                           G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                           G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
-                                           G_FILE_ATTRIBUTE_TIME_MODIFIED ","
-                                           G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                           G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
-    const char *dirname = g_file_info_get_attribute_string(__dir, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+      dt_diratime_action(dir_path, "create", g_date);
 
-
-      GFile *new = g_file_new_for_path(g_strconcat(dir_path, dirname, NULL));
-      if (!new)
-        continue;
-      g_file_delete(new, NULL, NULL);
-      g_object_unref(new);
-
+      // here we will find the directories that have not changed and remove them from the list.
 
       if(dir_files)
       {

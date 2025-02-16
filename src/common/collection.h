@@ -278,6 +278,11 @@ void dt_collection_memory_update();
 /** save the current collection for recentcollect module and collect history */
 void dt_collection_history_save();
 
+/** actions on directory access mark file.
+ 'act' must be one of "create", "update", "delete".
+ 'timestamp' can be NULL when "delete". */
+void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

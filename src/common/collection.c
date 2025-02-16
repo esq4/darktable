@@ -3111,6 +3111,45 @@ void dt_collection_history_save()
   // save current history
   dt_conf_set_string("plugins/lighttable/collect/history0", buf);
 }
+
+void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
+{
+  const gchar *_folder = dir_path;
+  GError *error = NULL;
+  GFile *gfolder = g_file_new_for_path(_folder);
+  GFileInfo *__dir = g_file_query_info(gfolder,
+                                       G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                       G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                       G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+  const char *dirname = g_file_info_get_attribute_string(__dir, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+
+  const char *diratime = g_strconcat(dir_path, dirname, ".dt", NULL);
+
+  GFile *new = g_file_new_for_path(diratime);
+  if (!g_strcmp0(act, "create"))
+  {
+    if(!g_file_test(diratime, G_FILE_TEST_EXISTS))
+    {
+      GFileOutputStream *out = g_file_replace(new, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+      g_object_unref(out);
+    }
+  }
+  else if (!g_strcmp0(act, "update"))
+  {
+    GFileOutputStream *out = g_file_replace(new, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+    g_object_unref(out);
+  }
+  else if (!g_strcmp0(act, "delete"))
+  {
+    if(!g_file_test(diratime, G_FILE_TEST_EXISTS))
+    {
+      g_file_delete(new, FALSE, &error);
+    }
+  }
+  g_object_unref(new);
+
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
