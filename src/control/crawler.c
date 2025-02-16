@@ -1006,6 +1006,10 @@ GList *_get_list_xmp(void)
     dt_database_start_transaction(darktable.db);
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
+      const char *config = dt_conf_get_string_const("write_sidecar_files");
+      if(!config)
+        continue;
+
       const gchar *dir_path = (char *)sqlite3_column_text(stmt, 0);
       GError *error = NULL;
       GFile *gfolder = g_file_new_for_path(dir_path);
@@ -1014,6 +1018,26 @@ GList *_get_list_xmp(void)
                                                              G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                                              G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+
+     // here we will find the directories that have not changed and remove them from the list.
+       const gchar *_folder = dir_path;
+      gfolder = g_file_new_for_path(_folder);
+       GFileInfo *__dir = g_file_query_info(gfolder,
+                                           G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                           G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                           G_FILE_ATTRIBUTE_TIME_MODIFIED ","
+                                           G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                           G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+    const char *dirname = g_file_info_get_attribute_string(__dir, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+
+
+      GFile *new = g_file_new_for_path(g_strconcat(dir_path, dirname, NULL));
+      if (!new)
+        continue;
+      g_file_delete(new, NULL, NULL);
+      g_object_unref(new);
+
+
       if(dir_files)
       {
         GFileInfo *info = NULL;
