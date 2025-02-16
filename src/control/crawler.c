@@ -1019,7 +1019,7 @@ GList *_get_list_xmp(void)
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                                              G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
 
-      dt_diratime_action(dir_path, "create", g_date);
+      dt_diratime_action(dir_path, "create", 0);
 
       // here we will find the directories that have not changed and remove them from the list.
 

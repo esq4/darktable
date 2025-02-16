@@ -3116,6 +3116,7 @@ void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
 {
   const gchar *_folder = dir_path;
   GError *error = NULL;
+  GFileInfo *info = NULL;
   GFile *gfolder = g_file_new_for_path(_folder);
   GFileInfo *__dir = g_file_query_info(gfolder,
                                        G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
@@ -3130,8 +3131,39 @@ void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
   {
     if(!g_file_test(diratime, G_FILE_TEST_EXISTS))
     {
+      time_t timestamp_max = 0;
+      GFileEnumerator *dir_files = g_file_enumerate_children(gfolder,
+                                                             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                                             G_FILE_ATTRIBUTE_TIME_MODIFIED ","
+                                                             G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+      if(dir_files)
+      {
+        while((info = g_file_enumerator_next_file(dir_files, NULL, &error)))
+        {
+          const char *filename = g_file_info_get_display_name(info);
+          if(!filename) continue;
+          const GFileType filetype = g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_STANDARD_TYPE);
+          if(filetype == G_FILE_TYPE_REGULAR)
+          {
+            size_t name_len = strlen(filename);
+            const char *ext = filename + name_len - 4;
+            if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+            {
+              time_t _timestamp = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+              if (_timestamp > timestamp_max)
+                timestamp_max = _timestamp;
+            }
+          }
+        }
+      }
+
       GFileOutputStream *out = g_file_replace(new, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
       g_object_unref(out);
+      info = g_file_query_info(new,
+                               G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                               G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+      g_file_set_attribute_uint64(new, G_FILE_ATTRIBUTE_TIME_MODIFIED, timestamp_max, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
     }
   }
   else if (!g_strcmp0(act, "update"))
