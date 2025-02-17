@@ -1000,13 +1000,18 @@ GList *_get_list_xmp(void)
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT folder || '" G_DIR_SEPARATOR_S "', access_timestamp"
-                                " FROM main.film_rolls",
+                                " FROM main.film_rolls"
+                                " ORDER BY access_timestamp DESC",
                                 -1, &stmt, NULL);
     // clang-format on
 
     dt_database_start_transaction(darktable.db);
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
+      const time_t datetime = sqlite3_column_int64(stmt, 1);
+      GDateTime *dt_datetime = g_date_time_new_from_unix_local(datetime);
+      gchar *dt_txt = g_date_time_format(dt_datetime, "%x %X");
+
       const char *config = dt_conf_get_string_const("write_sidecar_files");
       if(!config)
         continue;
@@ -1018,6 +1023,8 @@ GList *_get_list_xmp(void)
                                                              G_FILE_ATTRIBUTE_STANDARD_NAME ","
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                                              G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+
+      printf("%s := %s\n", dir_path, dt_txt);
 
       dt_diratime_action(dir_path, "create", 0);
 
