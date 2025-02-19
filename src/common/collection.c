@@ -3112,27 +3112,26 @@ void dt_collection_history_save()
   dt_conf_set_string("plugins/lighttable/collect/history0", buf);
 }
 
-void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
+time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
 {
-  const gchar *_folder = dir_path;
+  const gchar *_dir = dir_path;
   GError *error = NULL;
-  GFileInfo *info = NULL;
-  GFile *gfolder = g_file_new_for_path(_folder);
-  GFileInfo *__dir = g_file_query_info(gfolder,
+  GFile *_g_dir = g_file_new_for_path(_dir);
+  GFileInfo *info = g_file_query_info(_g_dir,
                                        G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                        G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                        G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
-  const char *dirname = g_file_info_get_attribute_string(__dir, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+  const char *dirname = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
 
-  const char *diratime = g_strconcat(dir_path, dirname, ".dt", NULL);
+  const char *dir_mark = g_strconcat(dir_path, dirname, ".dt", NULL);
+  time_t dir_mark_time = 0;
 
-  GFile *new = g_file_new_for_path(diratime);
+  GFile *_g_dir_mark = g_file_new_for_path(dir_mark);
   if (!g_strcmp0(act, "create"))
   {
-    if(!g_file_test(diratime, G_FILE_TEST_EXISTS))
+    if(!g_file_test(dir_mark, G_FILE_TEST_EXISTS))
     {
-      time_t timestamp_max = 0;
-      GFileEnumerator *dir_files = g_file_enumerate_children(gfolder,
+      GFileEnumerator *dir_files = g_file_enumerate_children(_g_dir,
                                                              G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                                              G_FILE_ATTRIBUTE_TIME_MODIFIED ","
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
@@ -3151,35 +3150,44 @@ void dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
             if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
             {
               time_t _timestamp = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
-              if (_timestamp > timestamp_max)
-                timestamp_max = _timestamp;
+              if (_timestamp > dir_mark_time)
+                dir_mark_time = _timestamp;
             }
           }
         }
       }
 
-      GFileOutputStream *out = g_file_replace(new, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+      GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
       g_object_unref(out);
-      info = g_file_query_info(new,
+      info = g_file_query_info(_g_dir_mark,
                                G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
-      g_file_set_attribute_uint64(new, G_FILE_ATTRIBUTE_TIME_MODIFIED, timestamp_max, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
+      g_file_set_attribute_uint64(_g_dir_mark, G_FILE_ATTRIBUTE_TIME_MODIFIED, dir_mark_time, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
     }
   }
   else if (!g_strcmp0(act, "update"))
   {
-    GFileOutputStream *out = g_file_replace(new, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+    GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
     g_object_unref(out);
   }
   else if (!g_strcmp0(act, "delete"))
   {
-    if(!g_file_test(diratime, G_FILE_TEST_EXISTS))
+    if(!g_file_test(dir_mark, G_FILE_TEST_EXISTS))
     {
-      g_file_delete(new, FALSE, &error);
+      g_file_delete(_g_dir_mark, FALSE, &error);
     }
   }
-  g_object_unref(new);
+  info = g_file_query_info(_g_dir_mark,
+                           G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                           G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+  dir_mark_time = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
 
+  g_object_unref(error);
+  g_object_unref(info);
+  g_object_unref(_g_dir_mark);
+  g_object_unref(_g_dir);
+
+  return dir_mark_time;
 }
 
 // clang-format off

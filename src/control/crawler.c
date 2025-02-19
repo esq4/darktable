@@ -25,6 +25,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/database.h"
+#include "common/datetime.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image.h"
@@ -170,6 +171,7 @@ GList *dt_control_crawler_run(void)
   GList *_xmp_list = _get_list_xmp(); // get xmp files list
   GList *_not_edited_list = NULL; // list for images w/o xmp file vers.0
 
+
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const dt_imgid_t id = sqlite3_column_int(stmt, 0);
@@ -240,13 +242,13 @@ GList *dt_control_crawler_run(void)
       // UTF8 paths fail in this context, but converting to UTF16 works
       struct _stati64 statbuf;
       if(xmp_path_locale) // in Windows dt_util_normalize_path returns
-                          // NULL if file does not exist
+        // NULL if file does not exist
       {
         wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
         stat_res = _wstati64(wfilename, &statbuf);
         g_free(wfilename);
       }
- #else
+#else
       struct stat statbuf;
       stat_res = stat(xmp_path_locale, &statbuf);
 #endif
@@ -286,16 +288,16 @@ GList *dt_control_crawler_run(void)
           _not_edited_list = g_list_delete_link(_not_edited_list, list_rec); // remove image from "black" list
           // and mark [version=0] for delete from db
           dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
-            item->id = _item->id;
-            item->timestamp_xmp = 0;
-            item->timestamp_db = timestamp;
-            item->image_path = g_strdup(_item->image_path);
-            item->xmp_path = g_strdup("");
-            item->condition = DT_XMP_CONDITION_MISSING;
-            item->version = 0;
-            result = g_list_prepend(result, item);
+          item->id = _item->id;
+          item->timestamp_xmp = 0;
+          item->timestamp_db = timestamp;
+          item->image_path = g_strdup(_item->image_path);
+          item->xmp_path = g_strdup("");
+          item->condition = DT_XMP_CONDITION_MISSING;
+          item->version = 0;
+          result = g_list_prepend(result, item);
 
-            dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, version);
+          dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, version);
           break;
         }
       }
@@ -460,13 +462,28 @@ typedef struct dt_control_crawler_gui_t
   GtkNotebook *nb;
 } dt_control_crawler_gui_t;
 
+
 // close the window and clean up
 static void dt_control_crawler_response_callback(GtkWidget *dialog,
                                                  const gint response_id,
                                                  gpointer user_data)
 {
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
+  int _number = gtk_tree_model_iter_n_children(GTK_TREE_MODEL(gui->missing_model), NULL);
+  _number = _number + gtk_tree_model_iter_n_children(GTK_TREE_MODEL(gui->model), NULL);
+  _number = _number + gtk_tree_model_iter_n_children(GTK_TREE_MODEL(gui->new_dups_model), NULL);
+
+  if(_number == 0) // db is synchronized
+  {
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    time_t __time = time.tv_sec;
+    dt_conf_set_int64("db_synchronized", __time);
+  }
+
   g_object_unref(G_OBJECT(gui->model));
+  g_object_unref(G_OBJECT(gui->missing_model));
+  g_object_unref(G_OBJECT(gui->new_dups_model));
   gtk_widget_destroy(dialog);
   free(gui);
 }
@@ -1007,7 +1024,7 @@ GList *_get_list_xmp(void)
 
     dt_database_start_transaction(darktable.db);
     while(sqlite3_step(stmt) == SQLITE_ROW)
-    {
+          {
       const time_t datetime = sqlite3_column_int64(stmt, 1);
       GDateTime *dt_datetime = g_date_time_new_from_unix_local(datetime);
       gchar *dt_txt = g_date_time_format(dt_datetime, "%x %X");
@@ -1026,11 +1043,11 @@ GList *_get_list_xmp(void)
 
       printf("%s := %s\n", dir_path, dt_txt);
 
-      dt_diratime_action(dir_path, "create", 0);
+      time_t dir_time_mark = dt_diratime_action(dir_path, "create", 0);
 
-      // here we will find the directories that have not changed and remove them from the list.
+      time_t _db_synch = dt_conf_get_int64("db_synchronized");
 
-      if(dir_files)
+      if(dir_files && _db_synch < dir_time_mark)
       {
         GFileInfo *info = NULL;
         while((info = g_file_enumerator_next_file(dir_files, NULL, &error)))
