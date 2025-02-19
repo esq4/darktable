@@ -262,6 +262,11 @@ gboolean dt_control_running();
 dt_imgid_t dt_control_get_mouse_over_id();
 void dt_control_set_mouse_over_id(const dt_imgid_t value);
 
+/** actions on directory access mark file.
+ 'act' must be one of "create", "update", "delete".
+ 'timestamp' can be NULL when "delete". */
+time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestamp);
+
 G_END_DECLS
 
 // clang-format off

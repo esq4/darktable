@@ -933,6 +933,84 @@ void dt_control_set_mouse_over_id(const dt_imgid_t imgid)
     dt_pthread_mutex_unlock(&dc->global_mutex);
 }
 
+time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
+{
+  const gchar *_dir = dir_path;
+  GError *error = NULL;
+  GFile *_g_dir = g_file_new_for_path(_dir);
+  GFileInfo *info = g_file_query_info(_g_dir,
+                                       G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                       G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                       G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+  const char *dirname = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+
+  const char *dir_mark = g_strconcat(dir_path, dirname, ".dt", NULL);
+  time_t dir_mark_time = 0;
+
+  GFile *_g_dir_mark = g_file_new_for_path(dir_mark);
+  if (!g_strcmp0(act, "create"))
+  {
+    if(!g_file_test(dir_mark, G_FILE_TEST_EXISTS))
+    {
+      GFileEnumerator *dir_files = g_file_enumerate_children(_g_dir,
+                                                             G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
+                                                             G_FILE_ATTRIBUTE_TIME_MODIFIED ","
+                                                             G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+      if(dir_files)
+      {
+        while((info = g_file_enumerator_next_file(dir_files, NULL, &error)))
+        {
+          const char *filename = g_file_info_get_display_name(info);
+          if(!filename) continue;
+          const GFileType filetype = g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_STANDARD_TYPE);
+          if(filetype == G_FILE_TYPE_REGULAR)
+          {
+            size_t name_len = strlen(filename);
+            const char *ext = filename + name_len - 4;
+            if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+            {
+              time_t _timestamp = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+              if (_timestamp > dir_mark_time)
+                dir_mark_time = _timestamp;
+            }
+          }
+        }
+      }
+
+      GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+      g_object_unref(out);
+      info = g_file_query_info(_g_dir_mark,
+                               G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                               G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+      g_file_set_attribute_uint64(_g_dir_mark, G_FILE_ATTRIBUTE_TIME_MODIFIED, dir_mark_time, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
+    }
+  }
+  else if (!g_strcmp0(act, "update"))
+  {
+    GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+    g_object_unref(out);
+  }
+  else if (!g_strcmp0(act, "delete"))
+  {
+    if(!g_file_test(dir_mark, G_FILE_TEST_EXISTS))
+    {
+      g_file_delete(_g_dir_mark, FALSE, &error);
+    }
+  }
+  info = g_file_query_info(_g_dir_mark,
+                           G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                           G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+  dir_mark_time = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+
+  g_object_unref(error);
+  g_object_unref(info);
+  g_object_unref(_g_dir_mark);
+  g_object_unref(_g_dir);
+
+  return dir_mark_time;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
