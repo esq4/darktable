@@ -933,16 +933,21 @@ void dt_control_set_mouse_over_id(const dt_imgid_t imgid)
     dt_pthread_mutex_unlock(&dc->global_mutex);
 }
 
-time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestamp)
+time_t dt_diratime_action(const char *dir_path, const char *action, time_t timestamp)
 {
-  const gchar *_dir = dir_path;
+  gchar *_dir = g_strdup(dir_path);
   size_t name_len = strlen(dir_path);
   const char *ext = dir_path + name_len - 4;
-  if (!g_strcmp0(act, "update") && (strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
+  if (!g_strcmp0(action, "update") && (!g_strcmp0(ext, ".xmp") || !g_strcmp0(ext, ".XMP")) && name_len > 4)
   {
-
+    size_t len = strlen(dir_path);
+    const char *c  = dir_path + len;
+    size_t len_c = strlen(c);
+    while((c > dir_path) && ((*c) != G_DIR_SEPARATOR)) c--;
+    size_t vers_len = c - dir_path + 1;
+    _dir = calloc(vers_len + len_c, sizeof(char));
+    g_strlcpy(_dir, dir_path, vers_len + 1);
   }
-
 
   GError *error = NULL;
   GFile *_g_dir = g_file_new_for_path(_dir);
@@ -952,11 +957,11 @@ time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestam
                                        G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
   const char *dirname = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
 
-  const char *dir_mark = g_strconcat(dir_path, dirname, ".dt", NULL);
+  const char *dir_mark = g_strconcat(_dir, dirname, ".dt", NULL);
   time_t dir_mark_time = 0;
 
   GFile *_g_dir_mark = g_file_new_for_path(dir_mark);
-  if (!g_strcmp0(act, "create"))
+  if (!g_strcmp0(action, "create"))
   {
     if(!g_file_test(dir_mark, G_FILE_TEST_EXISTS))
     {
@@ -994,9 +999,10 @@ time_t dt_diratime_action(const char *dir_path, const char *act, time_t timestam
       g_file_set_attribute_uint64(_g_dir_mark, G_FILE_ATTRIBUTE_TIME_MODIFIED, dir_mark_time, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
     }
   }
-  else if (!g_strcmp0(act, "update"))
+  else if (!g_strcmp0(action, "update"))
   {
-    GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
+    GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE,
+                                            G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
     g_object_unref(out);
   }
 //  else if (!g_strcmp0(act, "delete"))
