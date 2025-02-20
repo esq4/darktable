@@ -1151,6 +1151,7 @@ static _dt_delete_status_t delete_file_from_disk
        || g_error_matches(gerror, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
     {
       delete_status = _DT_DELETE_STATUS_DELETED;
+      dt_diratime_action(filename,"update",0);
     }
     else
     {
