@@ -2906,7 +2906,7 @@ gboolean dt_image_write_sidecar_file(const dt_imgid_t imgid)
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    dt_diratime_action(filename, "update");
+    //dt_diratime_action(filename, "update");
   }
   return error;
 }
