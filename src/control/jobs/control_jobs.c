@@ -360,6 +360,7 @@ static int32_t dt_control_write_sidecar_files_job_run(dt_job_t *job)
       sqlite3_step(stmt);
       sqlite3_reset(stmt);
       sqlite3_clear_bindings(stmt);
+      dt_diratime_action(dtfilename, "update");
     }
     dt_image_cache_read_release(darktable.image_cache, img);
     const double fraction = ++count / (double)nb_imgs;
@@ -1151,7 +1152,7 @@ static _dt_delete_status_t delete_file_from_disk
        || g_error_matches(gerror, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
     {
       delete_status = _DT_DELETE_STATUS_DELETED;
-      dt_diratime_action(filename,"update",0);
+      dt_diratime_action(filename, "update");
     }
     else
     {

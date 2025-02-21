@@ -1042,7 +1042,7 @@ GList *_get_list_xmp(void)
 
       printf("%s := %s\n", dir_path, dt_txt);
 
-      time_t dir_time_mark = dt_diratime_action(dir_path, "create", 0);
+      time_t dir_time_mark = dt_diratime_action(dir_path, "create");
 
       time_t _db_synch = dt_conf_get_int64("db_synchronized");
 

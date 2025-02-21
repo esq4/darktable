@@ -19,6 +19,7 @@
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/utility.h"
+#include "control/control.h"
 #include "imageio/imageio_module.h"
 #include "imageio/format/imageio_format_api.h"
 #include "gui/gtk.h"
@@ -59,6 +60,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     g_unlink(targetfile);
     goto END;
   }
+  dt_diratime_action(xmpfile, "update");
 
   status = 0;
 END:

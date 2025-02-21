@@ -933,8 +933,9 @@ void dt_control_set_mouse_over_id(const dt_imgid_t imgid)
     dt_pthread_mutex_unlock(&dc->global_mutex);
 }
 
-time_t dt_diratime_action(const char *dir_path, const char *action, time_t timestamp)
+time_t dt_diratime_action(const char *dir_path, const char *action)
 {
+  time_t timestamp = 0;
   gchar *_dir = g_strdup(dir_path);
   size_t name_len = strlen(dir_path);
   const char *ext = dir_path + name_len - 4;
@@ -942,10 +943,10 @@ time_t dt_diratime_action(const char *dir_path, const char *action, time_t times
   {
     size_t len = strlen(dir_path);
     const char *c  = dir_path + len;
-    size_t len_c = strlen(c);
+    //size_t len_c = strlen(c);
     while((c > dir_path) && ((*c) != G_DIR_SEPARATOR)) c--;
     size_t vers_len = c - dir_path + 1;
-    _dir = calloc(vers_len + len_c, sizeof(char));
+    //_dir = calloc(vers_len + len_c, sizeof(char));
     g_strlcpy(_dir, dir_path, vers_len + 1);
   }
 
@@ -954,7 +955,7 @@ time_t dt_diratime_action(const char *dir_path, const char *action, time_t times
   GFileInfo *info = g_file_query_info(_g_dir,
                                        G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                        G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                       G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
+                                       G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, NULL);
   const char *dirname = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
 
   const char *dir_mark = g_strconcat(_dir, dirname, ".dt", NULL);
@@ -990,13 +991,13 @@ time_t dt_diratime_action(const char *dir_path, const char *action, time_t times
           }
         }
       }
-
       GFileOutputStream *out = g_file_replace(_g_dir_mark, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &error);
       g_object_unref(out);
       info = g_file_query_info(_g_dir_mark,
                                G_FILE_ATTRIBUTE_TIME_MODIFIED,
                                G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
       g_file_set_attribute_uint64(_g_dir_mark, G_FILE_ATTRIBUTE_TIME_MODIFIED, dir_mark_time, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,FALSE,&error);
+      g_object_unref(dir_files);
     }
   }
   else if (!g_strcmp0(action, "update"))
@@ -1015,14 +1016,16 @@ time_t dt_diratime_action(const char *dir_path, const char *action, time_t times
   info = g_file_query_info(_g_dir_mark,
                            G_FILE_ATTRIBUTE_TIME_MODIFIED,
                            G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
-  dir_mark_time = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+  timestamp = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
 
   g_object_unref(error);
   g_object_unref(info);
   g_object_unref(_g_dir_mark);
   g_object_unref(_g_dir);
 
-  return dir_mark_time;
+//  g_free(_dir);
+
+  return timestamp;
 }
 
 // clang-format off
