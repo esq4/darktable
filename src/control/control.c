@@ -1017,8 +1017,6 @@ time_t dt_diratime_action(const char *dir_path, const char *action)
                            G_FILE_ATTRIBUTE_TIME_MODIFIED,
                            G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
   timestamp = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
-
-  g_object_unref(error);
   g_object_unref(info);
   g_object_unref(_g_dir_mark);
   g_object_unref(_g_dir);

@@ -63,7 +63,7 @@ typedef enum xmp_condition
 
 typedef struct dt_control_crawler_result_t
 {
-  dt_imgid_t id, version;
+  dt_imgid_t id, version, count;
   time_t timestamp_xmp;
   time_t timestamp_db;
   char *image_path, *xmp_path;
@@ -119,7 +119,15 @@ static void _set_modification_time(char *filename,
 #define FAST_UPDATE 0.2
 #define SLOW_UPDATE 1.0
 
+GList *_get_list_dir(void);
 GList *_get_list_xmp(void);
+
+typedef struct _dir_
+{
+  dt_filmid_t id;
+  char *dir_path;
+} _dir_;
+
 
 GList *dt_control_crawler_run(void)
 {
@@ -138,22 +146,6 @@ GList *dt_control_crawler_run(void)
     sqlite3_finalize(stmt);
   }
 
-  // clang-format off
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
-                     "SELECT i.id, write_timestamp, version,"
-                     "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
-                     " FROM main.images i, main.film_rolls f"
-                     " ON i.film_id = f.id"
-                     " ORDER BY f.id, filename",
-                     -1, &stmt, NULL);
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
-                     "UPDATE main.images SET flags = ?1 WHERE id = ?2", -1,
-                     &inner_stmt, NULL);
-  // clang-format on
-
-  // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction(darktable.db);
-
   int image_count = 0;
   const double start_time = dt_get_wtime();
   // set the "previous update" time to 10ms after a notional previous
@@ -170,290 +162,339 @@ GList *dt_control_crawler_run(void)
   GList *_xmp_list = _get_list_xmp(); // get xmp files list
   GList *_not_edited_list = NULL; // list for images w/o xmp file vers.0
 
-  int ll = g_list_length(_xmp_list);
+  GList *_dir_list = _get_list_dir();
+  int ll= g_list_length(_xmp_list);
+  int dd= g_list_length(_dir_list);
 
-  if(_xmp_list)
+  if(_dir_list && dd)
   {
-    while(sqlite3_step(stmt) == SQLITE_ROW)
+    for(GList *_dir_iter = _dir_list; _dir_iter; _dir_iter = g_list_next(_dir_iter))
     {
-      const dt_imgid_t id = sqlite3_column_int(stmt, 0);
-      const time_t timestamp = sqlite3_column_int64(stmt, 1);
-      const int version = sqlite3_column_int(stmt, 2);
-      const gchar *image_path = (char *)sqlite3_column_text(stmt, 3);
-      int flags = sqlite3_column_int(stmt, 4);
-      ++image_count;
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                 "SELECT i.id, write_timestamp, version,"
+                                 " folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
+                                 " FROM main.images i, main.film_rolls f"
+                                 " ON i.film_id = f.id"
+                                 " WHERE f.id = ?1"
+                                 " ORDER BY f.id, filename",
+                                 -1, &stmt, 0);
+      sqlite3_prepare_v2(dt_database_get(darktable.db),
+                         "UPDATE main.images SET flags = ?1 WHERE id = ?2", -1,
+                         &inner_stmt, NULL);
+      // clang-format on
 
-      // update the progress message - five times per second for first four seconds, then once per second
-      const double curr_time = dt_get_wtime();
-      if(curr_time >= last_time + ((curr_time - start_time > 4.0) ? SLOW_UPDATE : FAST_UPDATE))
+      _dir_ *dir_path = _dir_iter->data;
+      sqlite3_bind_int(stmt, 1, dir_path->id);
+
+      // let's wrap this into a transaction, it might make it a little faster.
+      dt_database_start_transaction(darktable.db);
+      while(sqlite3_step(stmt) == SQLITE_ROW)
       {
-        const double fraction = image_count / (double)total_images;
-        darktable_splash_screen_set_progress_percent(_("checking for updated sidecar files (%d%%)"),
-                                                     fraction,
-                                                     curr_time - start_time);
-        last_time = curr_time;
-      }
+        const dt_imgid_t id = sqlite3_column_int(stmt, 0);
+        const time_t timestamp = sqlite3_column_int64(stmt, 1);
+        const int version = sqlite3_column_int(stmt, 2);
+        const gchar *image_path = (char *)sqlite3_column_text(stmt, 3);
+        int flags = sqlite3_column_int(stmt, 4);
+        ++image_count;
 
-      // if the image is missing we suggest removing it.
-      if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
-      {
-        dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
-        item->id = id;
-        item->timestamp_xmp = 0;
-        item->timestamp_db = timestamp;
-        item->image_path = g_strdup(image_path);
-        item->xmp_path = g_strdup("");
-        item->condition = DT_XMP_CONDITION_MISSING;
-        item->version = version;
-        result = g_list_prepend(result, item);
-
-        dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing", image_path, id);
-        //g_free(item);
-        continue;
-      }
-
-      // no need to look for xmp files if none get written anyway.
-      if(look_for_xmp)
-      {
-        // construct the xmp filename for this image
-        gchar xmp_path[PATH_MAX] = { 0 };
-        g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
-        dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
-        size_t len = strlen(xmp_path);
-        if(len + 4 >= PATH_MAX) continue;
-        xmp_path[len++] = '.';
-        xmp_path[len++] = 'x';
-        xmp_path[len++] = 'm';
-        xmp_path[len++] = 'p';
-        xmp_path[len] = '\0';
-
-        // elements existing in the db are removed from the list.
-        // only new elements will remain in the list.
-        for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
+        // update the progress message - five times per second for first four seconds, then once per second
+        const double curr_time = dt_get_wtime();
+        if(curr_time >= last_time + ((curr_time - start_time > 4.0) ? SLOW_UPDATE : FAST_UPDATE))
         {
-          if(strcmp((char *)list_rec->data, xmp_path) == 0 ? TRUE : FALSE)
-          {
-            _xmp_list = g_list_delete_link(_xmp_list, list_rec);
-            break;
-          }
+          const double fraction = image_count / (double)total_images;
+          darktable_splash_screen_set_progress_percent(_("checking for updated sidecar files (%d%%)"),
+                                                       fraction,
+                                                       curr_time - start_time);
+          last_time = curr_time;
         }
 
-        // on Windows the encoding might not be UTF8
-        gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
-        int stat_res = -1;
-#ifdef _WIN32
-        // UTF8 paths fail in this context, but converting to UTF16 works
-        struct _stati64 statbuf;
-        if(xmp_path_locale) // in Windows dt_util_normalize_path returns
-          // NULL if file does not exist
-        {
-          wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
-          stat_res = _wstati64(wfilename, &statbuf);
-          g_free(wfilename);
-        }
-#else
-        struct stat statbuf;
-        stat_res = stat(xmp_path_locale, &statbuf);
-#endif
-        g_free(xmp_path_locale);
-        if(stat_res)
-        {
-          if(version)
-          {
-            dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
-            item->id = id;
-            item->timestamp_xmp = 0;
-            item->timestamp_db = timestamp;
-            item->image_path = g_strdup(image_path);
-            item->xmp_path = g_strdup("");
-            item->condition = DT_XMP_CONDITION_MISSING;
-            item->version = version;
-            result = g_list_prepend(result, item);
-
-            dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, id);
-            //g_free(item);
-          }
-          else
-          {
-            _xmp0_ *_item = malloc(sizeof(_xmp0_));
-            _item->id = id;
-            _item->image_path = g_strdup(image_path);
-            _not_edited_list = g_list_append(_not_edited_list, _item); // put image in "black" list
-            //g_free(_item);
-          }
-          continue;
-        }
-
-        // maybe it's duplicate of image from "black" list
-        for(GList *list_rec = _not_edited_list; list_rec; list_rec = g_list_next(list_rec))
-        {
-          _xmp0_ *_item = list_rec->data;
-          if(strcmp(_item->image_path, image_path) == 0 ? TRUE : FALSE)
-          {
-            _not_edited_list = g_list_delete_link(_not_edited_list, list_rec); // remove image from "black" list
-            // and mark [version=0] for delete from db
-            dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
-            item->id = _item->id;
-            item->timestamp_xmp = 0;
-            item->timestamp_db = timestamp;
-            item->image_path = g_strdup(_item->image_path);
-            item->xmp_path = g_strdup("");
-            item->condition = DT_XMP_CONDITION_MISSING;
-            item->version = 0;
-            result = g_list_prepend(result, item);
-
-            dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, version);
-            //g_free(item);
-            break;
-          }
-        }
-
-        // step 1: check if the xmp is newer than our db entry
-        if(timestamp + MAX_TIME_SKEW < statbuf.st_mtime)
+        // if the image is missing we suggest removing it.
+        if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
         {
           dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
           item->id = id;
-          item->timestamp_xmp = statbuf.st_mtime;
+          item->timestamp_xmp = 0;
           item->timestamp_db = timestamp;
           item->image_path = g_strdup(image_path);
-          item->xmp_path = g_strdup(xmp_path);
-          item->condition = DT_XMP_CONDITION_CHANGED;
+          item->xmp_path = g_strdup("");
+          item->condition = DT_XMP_CONDITION_MISSING;
           item->version = version;
           result = g_list_prepend(result, item);
-          dt_print(DT_DEBUG_CONTROL,
-                   "[crawler] `%s' (id: %d) is a newer XMP file", xmp_path, id);
+
+          dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing", image_path, id);
           //g_free(item);
+          continue;
         }
-        // older timestamps are the case for all images after the db
-        // upgrade. better not report these
-      }
 
-      // step 2: check if the image has associated files (.txt, .wav)
-      size_t len = strlen(image_path);
-      const char *c = image_path + len;
-      while((c > image_path) && (*c != '.')) c--;
-      len = c - image_path + 1;
-
-      char *extra_path = calloc(len + 3 + 1, sizeof(char));
-      if(extra_path)
-      {
-        g_strlcpy(extra_path, image_path, len + 1);
-
-        extra_path[len]     = 't';
-        extra_path[len + 1] = 'x';
-        extra_path[len + 2] = 't';
-        gboolean has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-
-        if(!has_txt)
+        // no need to look for xmp files if none get written anyway.
+        if(look_for_xmp)
         {
-          extra_path[len]     = 'T';
-          extra_path[len + 1] = 'X';
-          extra_path[len + 2] = 'T';
-          has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+          // construct the xmp filename for this image
+          gchar xmp_path[PATH_MAX] = { 0 };
+          g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
+          dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
+          size_t len = strlen(xmp_path);
+          if(len + 4 >= PATH_MAX) continue;
+          xmp_path[len++] = '.';
+          xmp_path[len++] = 'x';
+          xmp_path[len++] = 'm';
+          xmp_path[len++] = 'p';
+          xmp_path[len] = '\0';
+
+          // elements existing in the db are removed from the list.
+          // only new elements will remain in the list.
+          for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
+          {
+            char *_xmp_file = list_rec->data;
+            if(strcmp(_xmp_file, xmp_path) == 0 ? TRUE : FALSE)
+            {
+              _xmp_list = g_list_delete_link(_xmp_list, list_rec);
+              break;
+            }
+          }
+          ll= g_list_length(_xmp_list);
+
+          // on Windows the encoding might not be UTF8
+          gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
+          int stat_res = -1;
+#ifdef _WIN32
+          // UTF8 paths fail in this context, but converting to UTF16 works
+          struct _stati64 statbuf;
+          if(xmp_path_locale) // in Windows dt_util_normalize_path returns
+            // NULL if file does not exist
+          {
+            wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
+            stat_res = _wstati64(wfilename, &statbuf);
+            g_free(wfilename);
+          }
+#else
+          struct stat statbuf;
+          stat_res = stat(xmp_path_locale, &statbuf);
+#endif
+          g_free(xmp_path_locale);
+          if(stat_res)
+          {
+            if(version)
+            {
+              dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+              item->id = id;
+              item->timestamp_xmp = 0;
+              item->timestamp_db = timestamp;
+              item->image_path = g_strdup(image_path);
+              item->xmp_path = g_strdup("");
+              item->condition = DT_XMP_CONDITION_MISSING;
+              item->version = version;
+              result = g_list_prepend(result, item);
+
+              dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, id);
+              //g_free(item);
+            }
+            else
+            {
+              _xmp0_ *_item = malloc(sizeof(_xmp0_));
+              _item->id = id;
+              _item->image_path = g_strdup(image_path);
+              _not_edited_list = g_list_append(_not_edited_list, _item); // put image in "black" list
+              //g_free(_item);
+            }
+            continue;
+          }
+
+          // maybe it's duplicate of image from "black" list
+          for(GList *list_rec = _not_edited_list; list_rec; list_rec = g_list_next(list_rec))
+          {
+            _xmp0_ *_item = list_rec->data;
+            if(strcmp(_item->image_path, image_path) == 0 ? TRUE : FALSE)
+            {
+              _not_edited_list = g_list_delete_link(_not_edited_list, list_rec); // remove image from "black" list
+              // and mark [version=0] for delete from db
+              dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+              item->id = _item->id;
+              item->timestamp_xmp = 0;
+              item->timestamp_db = timestamp;
+              item->image_path = g_strdup(_item->image_path);
+              item->xmp_path = g_strdup("");
+              item->condition = DT_XMP_CONDITION_MISSING;
+              item->version = 0;
+              result = g_list_prepend(result, item);
+
+              dt_print(DT_DEBUG_CONTROL, "[crawler] duplicate of `%s' (id: %d) removed from storage", image_path, version);
+              //g_free(item);
+              break;
+            }
+          }
+
+          // step 1: check if the xmp is newer than our db entry
+          if(timestamp + MAX_TIME_SKEW < statbuf.st_mtime)
+          {
+            dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+            item->id = id;
+            item->timestamp_xmp = statbuf.st_mtime;
+            item->timestamp_db = timestamp;
+            item->image_path = g_strdup(image_path);
+            item->xmp_path = g_strdup(xmp_path);
+            item->condition = DT_XMP_CONDITION_CHANGED;
+            item->version = version;
+            result = g_list_prepend(result, item);
+            dt_print(DT_DEBUG_CONTROL,
+                     "[crawler] `%s' (id: %d) is a newer XMP file", xmp_path, id);
+            //g_free(item);
+          }
+          // older timestamps are the case for all images after the db
+          // upgrade. better not report these
         }
 
-        extra_path[len]     = 'w';
-        extra_path[len + 1] = 'a';
-        extra_path[len + 2] = 'v';
-        gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+        // step 2: check if the image has associated files (.txt, .wav)
+        size_t len = strlen(image_path);
+        const char *c = image_path + len;
+        while((c > image_path) && (*c != '.')) c--;
+        len = c - image_path + 1;
 
-        if(!has_wav)
+        char *extra_path = calloc(len + 3 + 1, sizeof(char));
+        if(extra_path)
         {
-          extra_path[len]     = 'W';
-          extra_path[len + 1] = 'A';
-          extra_path[len + 2] = 'V';
-          has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+          g_strlcpy(extra_path, image_path, len + 1);
+
+          extra_path[len]     = 't';
+          extra_path[len + 1] = 'x';
+          extra_path[len + 2] = 't';
+          gboolean has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+
+          if(!has_txt)
+          {
+            extra_path[len]     = 'T';
+            extra_path[len + 1] = 'X';
+            extra_path[len + 2] = 'T';
+            has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+          }
+
+          extra_path[len]     = 'w';
+          extra_path[len + 1] = 'a';
+          extra_path[len + 2] = 'v';
+          gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+
+          if(!has_wav)
+          {
+            extra_path[len]     = 'W';
+            extra_path[len + 1] = 'A';
+            extra_path[len + 2] = 'V';
+            has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+          }
+
+          // TODO: decide if we want to remove the flag for images that lost
+          // their extra file. currently we do (the else cases)
+          int new_flags = flags;
+          if(has_txt)
+            new_flags |= DT_IMAGE_HAS_TXT;
+          else
+            new_flags &= ~DT_IMAGE_HAS_TXT;
+          if(has_wav)
+            new_flags |= DT_IMAGE_HAS_WAV;
+          else
+            new_flags &= ~DT_IMAGE_HAS_WAV;
+          if(flags != new_flags)
+          {
+            sqlite3_bind_int(inner_stmt, 1, new_flags);
+            sqlite3_bind_int(inner_stmt, 2, id);
+            sqlite3_step(inner_stmt);
+            sqlite3_reset(inner_stmt);
+            sqlite3_clear_bindings(inner_stmt);
+          }
+
+          free(extra_path);
         }
-
-        // TODO: decide if we want to remove the flag for images that lost
-        // their extra file. currently we do (the else cases)
-        int new_flags = flags;
-        if(has_txt)
-          new_flags |= DT_IMAGE_HAS_TXT;
-        else
-          new_flags &= ~DT_IMAGE_HAS_TXT;
-        if(has_wav)
-          new_flags |= DT_IMAGE_HAS_WAV;
-        else
-          new_flags &= ~DT_IMAGE_HAS_WAV;
-        if(flags != new_flags)
-        {
-          sqlite3_bind_int(inner_stmt, 1, new_flags);
-          sqlite3_bind_int(inner_stmt, 2, id);
-          sqlite3_step(inner_stmt);
-          sqlite3_reset(inner_stmt);
-          sqlite3_clear_bindings(inner_stmt);
-        }
-
-        free(extra_path);
       }
-    }
+      dt_database_release_transaction(darktable.db);
 
-    if (ll) ll = g_list_length(_xmp_list);
+      sqlite3_finalize(stmt);
+      sqlite3_finalize(inner_stmt);
 
-    for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
-    {
-      char *xmp_item = (char *)list_rec->data;
-      gboolean img_exists = FALSE;
-
-      // check original image
-      size_t len = strlen(xmp_item);
-      const char *c = xmp_item + len;
-      while((c > xmp_item) && (*c != '.')) c--;
-      len = c - xmp_item;
-      char *img_path = calloc(len, sizeof(char));
-      //char *img_path = xmp_item;
-      if(img_path)
-      {
-        g_strlcpy(img_path, xmp_item, len + 1);
-        img_exists = g_file_test((const gchar *)img_path, G_FILE_TEST_EXISTS);
-      }
-
-      if(!img_exists) // maybe xmp is a duplicate
-      {
-        c = img_path + len;
-        while((c > img_path) && (*c != '.')) c--;
-        size_t len_c = strlen(c);
-
-        len = c - img_path;
-        while((c > img_path) && (*c != '_')) c--;
-        size_t vers_len = c - img_path;
-        char *img_vers_path = calloc(vers_len + len_c, sizeof(char));
-        //char *img_vers_path = img_path;
-        g_strlcpy(img_vers_path, img_path, vers_len + 1);
-        while(len_c)
-        {
-          img_vers_path[vers_len++] =  img_path[len++];
-          len_c--;
-        }
-        img_path = g_strdup(img_vers_path);
-        img_exists = g_file_test(img_path, G_FILE_TEST_EXISTS);
-        //g_free(img_vers_path);
-      }
-
-      if(img_exists)
-      {
-        dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
-        item->id = 0;
-        item->timestamp_xmp = 0;
-        item->timestamp_db = 0;
-        item->image_path = g_strdup(img_path);
-        item->xmp_path = g_strdup(xmp_item);
-        item->condition = DT_XMP_CONDITION_NEW;
-        item->version = 0;
-        result = g_list_prepend(result, item);
-
-        dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' found on storage but not in image library", xmp_item);
-        //g_free(item);
-      }
     }
   }
 
-  dt_database_release_transaction(darktable.db);
+    ll= g_list_length(_xmp_list);
+  dd= g_list_length(_dir_list);
+      for(GList *list_rec = _xmp_list; list_rec; list_rec = g_list_next(list_rec))
+      {
+        char *xmp_item = (char *)list_rec->data;
+        gboolean img_exists = FALSE;
 
-  sqlite3_finalize(stmt);
-  sqlite3_finalize(inner_stmt);
+        // check original image
+        size_t len = strlen(xmp_item);
+        const char *c = xmp_item + len;
+        while((c > xmp_item) && (*c != '.')) c--;
+        len = c - xmp_item;
+        char *img_path = calloc(len, sizeof(char));
+        //char *img_path = xmp_item;
+        if(img_path)
+        {
+          g_strlcpy(img_path, xmp_item, len + 1);
+          img_exists = g_file_test((const gchar *)img_path, G_FILE_TEST_EXISTS);
+        }
 
+                      if(!img_exists) // maybe xmp is a duplicate
+        {
+          c = img_path + len;
+          while((c > img_path) && (*c != '.')) c--;
+          size_t len_c = strlen(c);
+
+          len = c - img_path;
+          while((c > img_path) && (*c != '_')) c--;
+          size_t vers_len = c - img_path;
+          char *img_vers_path = calloc(vers_len + len_c, sizeof(char));
+          //char *img_vers_path = img_path;
+          g_strlcpy(img_vers_path, img_path, vers_len + 1);
+          while(len_c)
+          {
+            img_vers_path[vers_len++] =  img_path[len++];
+            len_c--;
+          }
+          img_path = g_strdup(img_vers_path);
+          img_exists = g_file_test(img_path, G_FILE_TEST_EXISTS);
+          //g_free(img_vers_path);
+        }
+
+        if(img_exists && ll)
+        {
+          dt_control_crawler_result_t *item = malloc(sizeof(dt_control_crawler_result_t));
+          item->id = 0;
+          item->timestamp_xmp = 0;
+          item->timestamp_db = 0;
+          item->image_path = g_strdup(img_path);
+          item->xmp_path = g_strdup(xmp_item);
+          item->condition = DT_XMP_CONDITION_NEW;
+          item->version = 0;
+          result = g_list_prepend(result, item);
+
+          dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' found on storage but not in image library", xmp_item);
+        }
+      }
+
+      ll= g_list_length(result);
+//int iii=0;
+//dt_control_crawler_result_t *xmp_item = NULL;
+//GList *list_bak= result;
+
+////result=g_list_last(result);
+//      for(; result; result = g_list_next(result))
+//      {
+//        xmp_item = result->data;
+//        xmp_item->count = ++iii;
+//        ll= g_list_length(result);
+//      }
+
+//      ll= g_list_length(result);
+//      result=g_list_last(result);
+//      for(GList *list_rec= list_bak; list_rec; list_rec = g_list_next(list_rec))
+//      {
+//        xmp_item = list_rec->data;
+//        printf("%i - s \n",xmp_item->count);//,(char *)xmp_item->image_path);
+//        ll= g_list_length(list_bak);
+//      }
+
+//      ll= g_list_length(list_bak);
+//      result=list_bak;
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
 
@@ -1019,40 +1060,66 @@ static gchar* str_time_delta(const int time_delta)
   return g_strdup_printf(_("%id %02dh %02dm %02ds"), days, hours, minutes, seconds);
 }
 
-GList *_get_list_xmp(void)
+
+GList *_get_list_dir(void)
 {
   GList *_list = NULL;
 
   sqlite3_stmt *stmt;
   const gboolean look_for_xmp = dt_image_get_xmp_mode() != DT_WRITE_XMP_NEVER;
+  time_t _db_synch = dt_conf_get_int64("db_synchronized");
 
-  int ll = 0;
   if(look_for_xmp)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT folder || '" G_DIR_SEPARATOR_S "'"
+                                "SELECT id, folder || '" G_DIR_SEPARATOR_S "'"
                                 " FROM main.film_rolls"
-                                " ORDER BY access_timestamp DESC",
+                                " ORDER BY folder ASC",
                                 -1, &stmt, NULL);
     // clang-format on
 
     dt_database_start_transaction(darktable.db);
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
-      const gchar *dir_path = (char *)sqlite3_column_text(stmt, 0);
+      _dir_ *_item = malloc(sizeof(_dir_));
+      _item->id = sqlite3_column_int(stmt, 0);
+      _item->dir_path = g_strdup((char *)sqlite3_column_text(stmt, 1));
+
+      time_t dir_time_mark = dt_diratime_action(_item->dir_path, "create");
+
+      if(_item->dir_path && _db_synch <= dir_time_mark)
+      {
+        _list = g_list_append(_list, _item);
+      }
+    }
+    dt_database_release_transaction(darktable.db);
+    sqlite3_finalize(stmt);
+  }
+  return _list;
+}
+
+GList *_get_list_xmp(void)
+{
+  GList *_list = NULL;
+  GList *_dir = NULL;
+  const gboolean look_for_xmp = dt_image_get_xmp_mode() != DT_WRITE_XMP_NEVER;
+
+  _dir = _get_list_dir();
+
+  if(look_for_xmp)
+  {
+    for(GList *_dir_iter = _dir; _dir_iter; _dir_iter = g_list_next(_dir_iter))
+    {
+      _dir_ *_item = _dir_iter->data;
       GError *error = NULL;
-      GFile *gfolder = g_file_new_for_path(dir_path);
+      GFile *gfolder = g_file_new_for_path(_item->dir_path);
       GFileEnumerator *dir_files = g_file_enumerate_children(gfolder,
                                                              G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
                                                              G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
-
-      time_t dir_time_mark = dt_diratime_action(dir_path, "create");
-
-      time_t _db_synch = dt_conf_get_int64("db_synchronized");
-
-      if(dir_files && _db_synch <= dir_time_mark)
+                                                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+                                                             NULL, &error);
+      if(dir_files)
       {
         GFileInfo *info = NULL;
         while((info = g_file_enumerator_next_file(dir_files, NULL, &error)))
@@ -1066,17 +1133,13 @@ GList *_get_list_xmp(void)
             const char *ext = filename + name_len - 4;
             if ((strcmp(ext, ".xmp") == 0 || strcmp(ext, ".XMP") == 0) && name_len > 4)
             {
-              _list = g_list_append(_list, g_strconcat(dir_path, filename, NULL));
+              _list = g_list_append(_list, g_strconcat(_item->dir_path, filename, NULL));
             }
-            ll = g_list_length(_list);
           }
         }
       }
     }
-    dt_database_release_transaction(darktable.db);
-    sqlite3_finalize(stmt);
   }
-  if(ll) ll = g_list_length(_list);
   return _list;
 }
 
