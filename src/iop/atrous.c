@@ -1088,6 +1088,7 @@ static gboolean area_enter_leave_notify(GtkWidget *widget,
   if(!g->dragging)
     g->x_move = -1;
 
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(widget);
   return FALSE;
 }
@@ -1544,6 +1545,10 @@ static gboolean area_button_press(GtkWidget *widget,
     g->dragging = 1;
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -1567,7 +1572,7 @@ static gboolean area_scrolled(GtkWidget *widget,
 {
   dt_iop_atrous_gui_data_t *g = self->gui_data;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(dt_modifier_is(event->state, GDK_MOD1_MASK))
     return gtk_widget_event(GTK_WIDGET(g->channel_tabs), (GdkEvent*)event);
