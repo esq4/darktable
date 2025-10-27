@@ -812,7 +812,7 @@ int main(int argc, char *arg[])
     dt_export_metadata_t metadata;
     metadata.flags = dt_lib_export_metadata_default_flags();
     metadata.list = NULL;
-    if (custom_presets)
+    if(custom_presets)
     {
       metadata.flags = dt_lib_export_metadata_get_conf_flags();
       metadata.list = dt_util_str_to_glist("\1", dt_lib_export_metadata_get_conf());
