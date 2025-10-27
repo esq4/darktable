@@ -644,6 +644,49 @@ int main(int argc, char *arg[])
           g_free(output_ext);
         exit(1);
       }
+
+      gchar *imagename = strndup(image->filename, strlen(image->filename) - strlen(strrchr(image->filename, '.')));
+      gchar *pattern = g_strdup_printf("%s_", imagename);
+      if(strstr(xmp_filename, pattern) != NULL)
+      {
+        int version = 0;
+        gchar *c3 = xmp_filename + strlen(xmp_filename) - 5;
+
+        while(*c3 != '.' && c3 > xmp_filename)
+          c3--;
+        gchar *c4 = c3;
+
+        while(*c4 != '_' && c4 > xmp_filename)
+          c4--;
+        c4++;
+
+        gchar *idfield = g_strndup(c4, c3 - c4);
+        version = atoi(idfield);
+        g_free(idfield);
+
+        dt_film_t film;
+        dt_filmid_t filmid = NO_FILMID;
+        gchar *directory = g_path_get_dirname(xmp_filename);
+        filmid = dt_film_new(&film, directory);
+        dt_imgid_t id_img = NO_IMGID;
+        sqlite3_stmt *stmt;
+        // clang-format off
+        DT_DEBUG_SQLITE3_PREPARE_V2
+            (dt_database_get(darktable.db),
+             "SELECT id FROM main.images WHERE film_id = ?1 AND filename = ?2 AND version = ?3",
+             -1, &stmt, NULL);
+        // clang-format on
+        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
+        DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, image->filename, -1, SQLITE_TRANSIENT);
+        DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
+        if(sqlite3_step(stmt) == SQLITE_ROW)
+        {
+          id_img=sqlite3_column_int(stmt, 0);
+          iter->data = GINT_TO_POINTER(id_img);
+          image = dt_image_cache_get(id_img, 'w');
+        }
+        sqlite3_finalize(stmt);
+      }
       // don't write new xmp:
       dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
     }
