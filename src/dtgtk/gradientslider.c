@@ -260,6 +260,7 @@ static gboolean _gradient_slider_enter_notify_event(GtkWidget *widget, GdkEventC
 static gboolean _gradient_slider_leave_notify_event(GtkWidget *widget, GdkEventCrossing *event)
 {
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), FALSE);
+  darktable.gui->scroll_input = FALSE;
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
   if(!(gslider->is_dragging))
@@ -328,6 +329,10 @@ static gboolean _gradient_slider_button_press(GtkWidget *widget, GdkEventButton 
       gtk_widget_queue_draw(widget);
     }
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
 
   return TRUE;
 }
@@ -391,7 +396,7 @@ static gboolean _gradient_slider_scroll_event(GtkWidget *widget, GdkEventScroll 
 {
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), TRUE);
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
   const gint selected = _get_active_marker(gslider);

@@ -160,6 +160,11 @@ static int tostring_member(lua_State *L)
   return 1;
 }
 
+static void leave_notify_event_callback(GtkWidget *widget, GdkEventCrossing *event)
+{
+  if(event->type == GDK_LEAVE_NOTIFY) darktable.gui->scroll_input = FALSE;
+}
+
 int dt_lua_init_widget_slider(lua_State* L)
 {
   dt_lua_init_widget_type(L,&slider_type,lua_slider,DT_BAUHAUS_WIDGET_TYPE);
@@ -191,6 +196,7 @@ int dt_lua_init_widget_slider(lua_State* L)
   lua_pushcfunction(L,label_member);
   dt_lua_gtk_wrap(L);
   dt_lua_type_register(L, lua_slider, "label");
+  dt_lua_widget_register_gtk_callback(L, lua_slider, "leave_notify_event", "leave_notify_event_callback", G_CALLBACK(leave_notify_event_callback));
   return 0;
 }
 // clang-format off

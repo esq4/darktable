@@ -366,6 +366,7 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget,
   dt_iop_rgblevels_gui_data_t *g = self->gui_data;
   g->mouse_x = g->mouse_y = -1.0;
   gtk_widget_queue_draw(widget);
+  darktable.gui->scroll_input = FALSE;
   return TRUE;
 }
 
@@ -633,6 +634,10 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
     }
     return TRUE;
   }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
   return FALSE;
 }
 
@@ -656,7 +661,7 @@ static gboolean _area_scroll_callback(GtkWidget *widget,
   dt_iop_rgblevels_gui_data_t *g = self->gui_data;
   dt_iop_rgblevels_params_t *p = self->params;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   _turn_selregion_picker_off(self);
 
