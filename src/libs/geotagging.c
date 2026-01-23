@@ -743,7 +743,7 @@ static void _apply_gpx(GtkWidget *widget, dt_lib_module_t *self)
     dt_control_gpx_apply(gtk_label_get_text(GTK_LABEL(d->map.gpx_file)), -1, tz, imgs);
   }
   g_free(tz);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), FALSE);
+  //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), FALSE);
 }
 
 static void _update_layout(dt_lib_module_t *self)
