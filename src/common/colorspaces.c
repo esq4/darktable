@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2026 darktable developers.
+    Copyright (C) 2010-2025 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,11 +35,6 @@
 
 #ifdef USE_COLORDGTK
 #include "colord-gtk.h"
-#endif
-
-#ifdef _WIN32
-#include <dwmapi.h>
-#include <gdk/gdkwin32.h>
 #endif
 
 #if 0
@@ -2083,7 +2078,7 @@ void dt_colorspaces_set_display_profile
       }
     }
     g_free(wpath);
-    DeleteDC(hdc);
+    ReleaseDC(NULL, hdc);
   }
   profile_source = g_strdup("windows color profile api");
 #endif
