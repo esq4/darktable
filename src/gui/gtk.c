@@ -4023,7 +4023,7 @@ static gboolean _notebook_scroll_callback(GtkNotebook *notebook,
                                           GdkEventScroll *event,
                                           gpointer user_data)
 {
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   int delta = 0;
   if(dt_gui_get_scroll_unit_delta(event, &delta) && delta)
@@ -4803,7 +4803,7 @@ static gboolean _scroll_sidebar(GtkEventControllerScroll* controller,
     panel = darktable.gui->ui->panels[DT_UI_PANEL_LEFT];
   else if(dt_ui_panel_ancestor(darktable.gui->ui, DT_UI_PANEL_RIGHT, widget))
     panel = darktable.gui->ui->panels[DT_UI_PANEL_RIGHT];
-  if(panel && dt_gui_ignore_scroll(&event->scroll))
+  if(panel && dt_gui_ignore_scroll(&event->scroll) && !darktable.gui->scroll_input)
   {
     // FIXME: do we need to even check if in left/right panel? will this break if mouse over a widget within a GtkScrolledWindow within the panel GtkScrolledWindow?
     GtkWidget *const sw = gtk_widget_get_ancestor(widget, GTK_TYPE_SCROLLED_WINDOW);

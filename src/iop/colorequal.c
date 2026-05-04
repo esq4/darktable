@@ -2739,7 +2739,11 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
 {
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
 
-  if(event->button == GDK_BUTTON_MIDDLE
+  if(event->button == 2 && g->on_node)
+  {
+    darktable.gui->scroll_input = TRUE;
+  }
+  else if(event->button == GDK_BUTTON_MIDDLE
      || (event->button == GDK_BUTTON_PRIMARY // Ctrl+Click alias for macOS
          && dt_modifier_is(event->state, GDK_CONTROL_MASK)))
   {
@@ -2786,6 +2790,12 @@ static void _area_size_callback(GtkWidget *widget,
 {
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   g->gradients_cached = FALSE;
+}
+
+static gboolean _area_leave_event(GtkWidget *widget, GdkEventCrossing *event, const dt_iop_module_t *self)
+{
+  if(event->type == GDK_LEAVE_NOTIFY) darktable.gui->scroll_input = FALSE;
+  return FALSE;
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -2998,6 +3008,8 @@ void gui_init(dt_iop_module_t *self)
                    G_CALLBACK(_area_scrolled_callback), self);
   g_signal_connect(G_OBJECT(g->area), "size-allocate",
                    G_CALLBACK(_area_size_callback), self);
+  g_signal_connect(G_OBJECT(g->area), "leave_notify_event",
+                   G_CALLBACK(_area_leave_event), self);
 
   GtkWidget *box = self->widget = dt_gui_vbox(g->notebook, g->area);
   g->hue_shift = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA | DT_COLOR_PICKER_DENOISE,
