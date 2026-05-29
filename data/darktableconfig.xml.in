@@ -4282,4 +4282,16 @@
     <shortdescription>order or exclude MIDI devices</shortdescription>
     <longdescription>comma-separated list of device name fragments that if matched load MIDI device at id given by location in list\nadd encoding and number of knobs like 'Loupedeck:127,BeatStep:63:16'\nprefix with '-' to ignore matching devices\njust '-' stops loading all further devices or on its own disables MIDI completely</longdescription>
   </dtconfig>
+  <dtconfig prefs="misc" section="interface">
+    <name>ui/show_thumbs_tips</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>always show thumbnail tooltips</shortdescription>
+  </dtconfig>
+  <dtconfig prefs="misc" section="interface">
+    <name>ui/hide_tooltips</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>hide tooltips</shortdescription>
+  </dtconfig>
 </dtconfiglist>
