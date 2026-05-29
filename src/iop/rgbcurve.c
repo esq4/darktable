@@ -651,7 +651,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
 
   gdouble delta_y;
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(dt_gui_ignore_scroll(event) && !darktable.gui->scroll_input) return FALSE;
 
   if(darktable.develop->darkroom_skip_mouse_events)
   {
@@ -754,6 +754,7 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget,
     g->selected = -1;
 
   gtk_widget_queue_draw(widget);
+  darktable.gui->scroll_input = FALSE;
   return FALSE;
 }
 
@@ -1427,6 +1428,10 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
     dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget + ch);
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     return TRUE;
+  }
+  else if(event->button == 2)
+  {
+    darktable.gui->scroll_input = TRUE;
   }
   return FALSE;
 }

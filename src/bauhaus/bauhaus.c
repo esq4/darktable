@@ -724,6 +724,9 @@ static void _window_show(GtkWidget *w, gpointer user_data)
 static void _widget_leave(GtkEventControllerMotion *controller,
                           GtkWidget *widget)
 {
+  const gchar *widget_name = gtk_widget_get_name(widget);
+  if(!strcmp(widget_name, "bauhaus-slider")) //ab && (event->type == GDK_LEAVE_NOTIFY))
+    darktable.gui->scroll_input = FALSE;
   // gtk_widget_set_state_flags triggers resize&draw avalanche
   // instead add GTK_STATE_FLAG_PRELIGHT in _widget_draw
   darktable.bauhaus->hovered = !controller ? widget : NULL;
@@ -3584,6 +3587,7 @@ static void _widget_button_press(GtkGestureSingle *gesture,
   {
     _slider_zoom_range(w, 0); // reset zoom range to soft min/max
     _slider_zoom_toast(w);
+    darktable.gui->scroll_input = TRUE;
   }
   else
   {
