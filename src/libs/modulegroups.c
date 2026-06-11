@@ -3139,7 +3139,7 @@ static void _buttons_update(dt_lib_module_t *self)
     g_object_set_data(G_OBJECT(bt), "group", gr);
     g_signal_connect(bt, "button-press-event", G_CALLBACK(_manage_direct_popup), self);
     g_signal_connect(bt, "toggled", G_CALLBACK(_lib_modulegroups_toggle), self);
-    char *tooltip = g_strdup_printf(_("%s\nright-click tab icon to add/remove modules"), gr->name);
+    char *tooltip = g_strdup_printf(_("%s\nright-click tab icon to add/remove modules"), _(gr->name));
     gtk_widget_set_tooltip_text(bt, tooltip);
     g_free(tooltip);
     gr->button = bt;
@@ -3477,7 +3477,7 @@ static GtkWidget *_manage_editor_group_init_modules_box(dt_lib_module_t *self,
   gtk_widget_set_sensitive(tb, !d->edit_ro);
   g_signal_connect(G_OBJECT(tb), "changed",
                    G_CALLBACK(_manage_editor_group_name_changed), self);
-  gtk_entry_set_text(GTK_ENTRY(tb), gr->name);
+  gtk_entry_set_text(GTK_ENTRY(tb), _(gr->name));
   gtk_box_pack_start(GTK_BOX(hb3), tb, TRUE, TRUE, 0);
 
   // remove button
