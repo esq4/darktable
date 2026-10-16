@@ -364,6 +364,7 @@ void gui_post_expose(dt_iop_module_t *self,
 static void _area_leave_notify_callback(GtkEventControllerMotion *controller,
                                          dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_rgblevels_gui_data_t *g = self->gui_data;
   g->mouse_x = g->mouse_y = -1.0;
   gtk_widget_queue_draw(dt_gui_get_widget(controller));
@@ -603,6 +604,11 @@ static void _area_button_press_callback(GtkGestureSingle *gesture,
                                          gdouble y,
                                          dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
     return;
 
@@ -653,6 +659,7 @@ static void _area_scroll_callback(GtkEventControllerScroll *controller,
                                    gdouble dy,
                                    dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   dt_iop_rgblevels_gui_data_t *g = self->gui_data;
   dt_iop_rgblevels_params_t *p = self->params;
   GtkWidget *widget = dt_gui_get_widget(controller);

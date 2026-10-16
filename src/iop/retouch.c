@@ -1232,6 +1232,7 @@ static void rt_merge_from_scale_update(const int _merge_from_scale,
 
 static void rt_wdbar_leave_notify(GtkEventControllerMotion *controller, dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_retouch_gui_data_t *g = self->gui_data;
 
   g->wdbar_mouse_x = g->wdbar_mouse_y = -1;
@@ -1242,8 +1243,17 @@ static void rt_wdbar_leave_notify(GtkEventControllerMotion *controller, dt_iop_m
   gtk_widget_queue_draw(g->wd_bar);
 }
 
-static void rt_wdbar_button_press(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void rt_wdbar_button_press(GtkGestureSingle *gesture,
+                                  gint n_press,
+                                  gdouble x,
+                                  gdouble y,
+                                  dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   if(DT_IN_GUI_UPDATE())
     return;
 
@@ -1279,7 +1289,11 @@ static void rt_wdbar_button_press(GtkGestureSingle *gesture, gint n_press, gdoub
   gtk_widget_queue_draw(g->wd_bar);
 }
 
-static void rt_wdbar_button_release(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void rt_wdbar_button_release(GtkGestureSingle *gesture,
+                                    gint n_press,
+                                    gdouble x,
+                                    gdouble y,
+                                    dt_iop_module_t *self)
 {
   dt_iop_retouch_gui_data_t *g = self->gui_data;
 
@@ -1289,8 +1303,12 @@ static void rt_wdbar_button_release(GtkGestureSingle *gesture, gint n_press, gdo
   gtk_widget_queue_draw(g->wd_bar);
 }
 
-static void rt_wdbar_scrolled(GtkEventControllerScroll *controller, gdouble dx, gdouble dy, dt_iop_module_t *self)
+static void rt_wdbar_scrolled(GtkEventControllerScroll *controller,
+                              gdouble dx,
+                              gdouble dy,
+                              dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   if(DT_IN_GUI_UPDATE())
     return;
 

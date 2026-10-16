@@ -1052,6 +1052,7 @@ static void area_leave_notify(GtkEventControllerMotion *controller,
 {
   dt_iop_atrous_gui_data_t *g = self->gui_data;
   g->in_curve = FALSE;
+  darktable.gui->scroll_input = FALSE;
   if(!g->dragging)
     g->x_move = -1;
   gtk_widget_queue_draw(dt_gui_get_widget(controller));
@@ -1483,6 +1484,11 @@ static void area_button_press(GtkGestureSingle *gesture,
                                gdouble y,
                                dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
     return;
 
@@ -1541,6 +1547,7 @@ static void area_scrolled(GtkEventControllerScroll *controller,
 {
   dt_iop_atrous_gui_data_t *g = self->gui_data;
   GtkWidget *widget = dt_gui_get_widget(controller);
+  if(!darktable.gui->scroll_input) return;
 
   if(dt_modifier_eq(controller, GDK_MOD1_MASK))
   {

@@ -3449,6 +3449,7 @@ static void _area_scrolled_callback(GtkEventControllerScroll *controller,
                                     gdouble dy,
                                     dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   GtkWidget *const widget = dt_gui_get_widget(controller);
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   dt_iop_colorequal_params_t   *p = self->params;
@@ -3562,6 +3563,7 @@ static void _area_leave_callback(GtkEventControllerMotion *controller,
                                  dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  darktable.gui->scroll_input = FALSE;
   g->graph_cursor_valid = FALSE;
 }
 
@@ -3580,6 +3582,8 @@ static void _area_button_press_callback(GtkGestureSingle *gesture,
   {
     GtkToggleButton *toggle = GTK_TOGGLE_BUTTON(g->cs_sliders.toggle);
     gtk_toggle_button_set_active(toggle, !gtk_toggle_button_get_active(toggle));
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
   }
   else if(button == GDK_BUTTON_PRIMARY)
   {

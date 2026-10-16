@@ -421,6 +421,7 @@ static void _gradient_slider_leave(GtkEventControllerMotion *controller,
                                    gpointer user_data)
 {
   GtkWidget *widget = dt_gui_get_widget(controller);
+  darktable.gui->scroll_input = FALSE;
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
   if(!(gslider->is_dragging))
   {
@@ -493,6 +494,11 @@ static void _gradient_slider_button_pressed(GtkGestureSingle *gesture,
         gslider->selected = -1;
 
       gtk_widget_queue_draw(widget);
+    }
+    else if(button == GDK_BUTTON_MIDDLE)
+    {
+      if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+        darktable.gui->scroll_input = !darktable.gui->scroll_input;
     }
   }
 

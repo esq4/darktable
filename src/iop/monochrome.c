@@ -484,8 +484,17 @@ static void _monochrome_motion_notify(GtkEventControllerMotion *controller, gdou
   }
 }
 
-static void _monochrome_button_press(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void _monochrome_button_press(GtkGestureSingle *gesture,
+                                     gint n_press,
+                                     gdouble x,
+                                     gdouble y,
+                                     dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
     return;
 
@@ -518,7 +527,11 @@ static void _monochrome_button_press(GtkGestureSingle *gesture, gint n_press, gd
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static void _monochrome_button_release(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void _monochrome_button_release(GtkGestureSingle *gesture,
+                                       gint n_press,
+                                       gdouble x,
+                                       gdouble y,
+                                       dt_iop_module_t *self)
 {
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
     return;
@@ -533,13 +546,18 @@ static void _monochrome_button_release(GtkGestureSingle *gesture, gint n_press, 
 
 static void _monochrome_leave_notify(GtkEventControllerMotion *controller, dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_monochrome_gui_data_t *g = self->gui_data;
   g->dragging = 0;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static void _monochrome_scrolled(GtkEventControllerScroll *controller, gdouble dx, gdouble dy, dt_iop_module_t *self)
+static void _monochrome_scrolled(GtkEventControllerScroll *controller,
+                                 gdouble dx,
+                                 gdouble dy,
+                                 dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   dt_iop_monochrome_params_t *p = self->params;
 
   dt_iop_color_picker_reset(self, TRUE);

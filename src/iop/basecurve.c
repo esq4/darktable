@@ -1545,6 +1545,7 @@ static void dt_iop_basecurve_leave_notify(GtkEventControllerMotion *controller,
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
   if(!(dt_key_modifier_state() & GDK_BUTTON1_MASK))
     g->selected = -1;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(dt_gui_get_widget(controller));
 }
 
@@ -1969,6 +1970,11 @@ static void dt_iop_basecurve_button_press(GtkGestureSingle *gesture,
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
   }
+  else if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
 }
 
 static gboolean _move_point_internal(dt_iop_module_t *self,
@@ -1999,8 +2005,12 @@ static gboolean _move_point_internal(dt_iop_module_t *self,
 
 #define BASECURVE_DEFAULT_STEP (0.001f)
 
-static void _scrolled(GtkEventControllerScroll *controller, gdouble dx, gdouble dy, dt_iop_module_t *self)
+static void _scrolled(GtkEventControllerScroll *controller,
+                      gdouble dx,
+                      gdouble dy,
+                      dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
   GtkWidget *widget = dt_gui_get_widget(controller);
 
