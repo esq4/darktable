@@ -791,6 +791,14 @@ static void _lib_preferences_button_clicked(GtkWidget *widget, gpointer user_dat
   dt_gui_preferences_show();
   darktable.gui->scroll_input = FALSE;
   darktable. gui->hide_tooltips = (dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0);
+  if(darktable. gui->hide_tooltips)
+  {
+    darktable. gui->show_thumbs_tips = (dt_conf_get_bool("ui/show_thumbs_tips") ? 1 : 0);
+  }
+  else
+  {
+    darktable. gui->show_thumbs_tips = 1;
+  }
 }
 
 static void _lib_filter_grouping_button_clicked(GtkWidget *widget, gpointer user_data)
