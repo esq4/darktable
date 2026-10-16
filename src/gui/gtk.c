@@ -561,6 +561,7 @@ static gboolean _dt_gui_ignore_scroll(const GdkModifierType mods_pressed)
 {
   const gboolean ignore_without_mods =
     dt_conf_get_bool("darkroom/ui/sidebar_scroll_default");
+  if(!ignore_without_mods) darktable.gui->scroll_input = TRUE;
 
   if(mods_pressed == 0)
     return ignore_without_mods;
@@ -580,7 +581,7 @@ gboolean dt_gui_ignore_scroll(GdkEventScroll *event)
   if(!ignore && mods_pressed == darktable.gui->sidebar_scroll_mask)
     event->state &= ~darktable.gui->sidebar_scroll_mask;
 
-  return ignore;
+  return ignore && !darktable.gui->scroll_input;
 }
 
 gboolean dt_gui_ignore_scroll_controller(GtkEventControllerScroll *controller)

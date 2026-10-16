@@ -776,8 +776,17 @@ static void rawdenoise_motion_notify(GtkEventControllerMotion *controller, gdoub
   }
 }
 
-static void rawdenoise_button_press(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void rawdenoise_button_press(GtkGestureSingle *gesture,
+                                    gint n_press,
+                                    gdouble x,
+                                    gdouble y,
+                                    dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   dt_iop_rawdenoise_gui_data_t *g = self->gui_data;
   const int ch = g->channel;
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
@@ -812,7 +821,11 @@ static void rawdenoise_button_press(GtkGestureSingle *gesture, gint n_press, gdo
   }
 }
 
-static void rawdenoise_button_release(GtkGestureSingle *gesture, gint n_press, gdouble x, gdouble y, dt_iop_module_t *self)
+static void rawdenoise_button_release(GtkGestureSingle *gesture,
+                                      gint n_press,
+                                      gdouble x,
+                                      gdouble y,
+                                      dt_iop_module_t *self)
 {
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
     return;
@@ -823,13 +836,18 @@ static void rawdenoise_button_release(GtkGestureSingle *gesture, gint n_press, g
 
 static void rawdenoise_leave_notify(GtkEventControllerMotion *controller, dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_rawdenoise_gui_data_t *g = self->gui_data;
   if(!g->dragging) g->mouse_y = -1.0;
   gtk_widget_queue_draw(dt_gui_get_widget(controller));
 }
 
-static void rawdenoise_scrolled(GtkEventControllerScroll *controller, gdouble dx, gdouble dy, dt_iop_module_t *self)
+static void rawdenoise_scrolled(GtkEventControllerScroll *controller,
+                                gdouble dx,
+                                gdouble dy,
+                                dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   dt_iop_rawdenoise_gui_data_t *g = self->gui_data;
 
   if(dt_modifier_eq(controller, GDK_MOD1_MASK))

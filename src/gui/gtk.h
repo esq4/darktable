@@ -149,6 +149,9 @@ typedef struct dt_gui_gtk_t
 
   gint scroll_mask;
   guint sidebar_scroll_mask;
+  /** when "mouse wheel scrolls modules side panel by default" is enable,
+  *  MMB-click to use the mouse wheel for data entry just like ctrl+alt . */
+  gboolean scroll_input;
 
   GMainLoop *main_loop;
 

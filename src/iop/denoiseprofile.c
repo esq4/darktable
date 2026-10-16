@@ -3496,6 +3496,11 @@ static void denoiseprofile_button_press(GtkGestureSingle *gesture,
                                          gdouble y,
                                          dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   dt_iop_denoiseprofile_gui_data_t *g = self->gui_data;
   const int ch = g->channel;
   if(gtk_gesture_single_get_current_button(gesture) != GDK_BUTTON_PRIMARY)
@@ -3548,6 +3553,7 @@ static void denoiseprofile_button_release(GtkGestureSingle *gesture,
 static void denoiseprofile_leave_notify(GtkEventControllerMotion *controller,
                                          dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_denoiseprofile_gui_data_t *g = self->gui_data;
   if(!g->dragging) g->mouse_y = -1.0;
   gtk_widget_queue_draw(dt_gui_get_widget(controller));
@@ -3558,6 +3564,7 @@ static void denoiseprofile_scrolled(GtkEventControllerScroll *controller,
                                      gdouble dy,
                                      dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   dt_iop_denoiseprofile_gui_data_t *g = self->gui_data;
 
   if(dt_modifier_eq(controller, GDK_MOD1_MASK))

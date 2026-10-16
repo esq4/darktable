@@ -1178,6 +1178,7 @@ static void _scrolled(GtkEventControllerScroll *controller,
                           gdouble dy,
                           dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   GtkWidget *widget = dt_gui_get_widget(controller);
   dt_iop_tonecurve_params_t *p = self->params;
   dt_iop_tonecurve_gui_data_t *g = self->gui_data;
@@ -1356,6 +1357,7 @@ void gui_cleanup(dt_iop_module_t *self)
 static void dt_iop_tonecurve_leave_notify(GtkEventControllerMotion *controller,
                                                dt_iop_module_t *self)
 {
+  darktable.gui->scroll_input = FALSE;
   dt_iop_tonecurve_gui_data_t *g = self->gui_data;
   if(!(dt_key_modifier_state() & GDK_BUTTON1_MASK))
     g->selected = -1;
@@ -1845,6 +1847,11 @@ static void dt_iop_tonecurve_button_press(GtkGestureSingle *gesture,
                                                gdouble y,
                                                dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   GtkWidget *widget = dt_gui_get_widget(gesture);
   dt_iop_tonecurve_params_t *p = self->params;
   const dt_iop_tonecurve_params_t *const d = self->default_params;

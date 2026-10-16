@@ -751,7 +751,7 @@ static void _apply_gpx(GtkWidget *widget, dt_lib_module_t *self)
     dt_control_gpx_apply(gtk_label_get_text(GTK_LABEL(d->map.gpx_file)), -1, tz, imgs);
   }
   g_free(tz);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), FALSE);
+  //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), FALSE);
 }
 
 static void _update_layout(dt_lib_module_t *self)
@@ -1278,12 +1278,28 @@ static void _display_offset(const GTimeSpan offset_int, const gboolean valid, dt
 #endif
 }
 
+static gboolean _datetime_button_pressed(GtkWidget *entry, GdkEventButton *event, dt_lib_module_t *self)
+{
+  if(event->button == 2) darktable.gui->scroll_input = TRUE;
+  return FALSE;
+}
+
+static gboolean _datetime_leave_event(GtkWidget *widget, GdkEventCrossing *event, dt_lib_module_t *self)
+{
+  if(event->type == GDK_LEAVE_NOTIFY) darktable.gui->scroll_input = FALSE;
+  return FALSE;
+}
+
+
 static void _display_datetime(dt_lib_datetime_t *dtw, GDateTime *datetime,
                               const gboolean lock, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = self->data;
   for(int i = 0; lock && i < DT_GEOTAG_PARTS_NB; i++)
+  {
     g_signal_handlers_block_by_func(d->dt.widget[i], _datetime_entry_changed, self);
+    g_signal_connect(d->dt.widget[i], "leave_notify_event", G_CALLBACK(_datetime_leave_event), self);
+  }
   if(datetime)
   {
     char value[8] = {0};
@@ -2017,6 +2033,7 @@ void gui_init(dt_lib_module_t *self)
   {
     g_signal_connect(d->dt.widget[i], "changed", G_CALLBACK(_datetime_entry_changed), self);
     dt_gui_connect_key(d->dt.widget[i], _datetime_key_pressed, self);
+    g_signal_connect(d->dt.widget[i], "button-press-event", G_CALLBACK(_datetime_button_pressed), self);
     dt_gui_connect_scroll(d->dt.widget[i],
                           GTK_EVENT_CONTROLLER_SCROLL_VERTICAL
                           | GTK_EVENT_CONTROLLER_SCROLL_DISCRETE,
