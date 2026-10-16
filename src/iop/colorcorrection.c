@@ -408,6 +408,11 @@ static void dt_iop_colorcorrection_button_press(GtkGestureSingle *gesture,
                                                      gdouble y,
                                                      dt_iop_module_t *self)
 {
+  if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_MIDDLE)
+  {
+    if(dt_conf_get_bool("darkroom/ui/sidebar_scroll_default"))
+      darktable.gui->scroll_input = !darktable.gui->scroll_input;
+  }
   if(gtk_gesture_single_get_current_button(gesture) == GDK_BUTTON_PRIMARY && n_press >= 2)
   {
     // double click resets:
@@ -437,11 +442,16 @@ static void dt_iop_colorcorrection_leave_notify(GtkEventControllerMotion *contro
                                                      dt_iop_module_t *self)
 {
   dt_iop_colorcorrection_gui_data_t *g = self->gui_data;
+  darktable.gui->scroll_input = FALSE;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static void dt_iop_colorcorrection_scrolled(GtkEventControllerScroll *controller, gdouble dx, gdouble dy, dt_iop_module_t *self)
+static void dt_iop_colorcorrection_scrolled(GtkEventControllerScroll *controller,
+                                            gdouble dx,
+                                            gdouble dy,
+                                            dt_iop_module_t *self)
 {
+  if(!darktable.gui->scroll_input) return;
   GtkWidget *widget = dt_gui_get_widget(controller);
   dt_iop_colorcorrection_gui_data_t *g = self->gui_data;
   dt_iop_colorcorrection_params_t *p = self->params;
