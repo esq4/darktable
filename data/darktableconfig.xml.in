@@ -4062,14 +4062,14 @@
     <shortdescription>look for updated XMP files on startup</shortdescription>
     <longdescription>check file modification times of all XMP files on startup to check if any got updated in the meantime</longdescription>
   </dtconfig>
-  <dtconfig>
+  <dtconfig prefs="storage" section="XMP">
     <name>run_crawler_in_background</name>
     <type>bool</type>
-    <default>true</default>
+    <default>false</default>
     <shortdescription>look for updated XMP files in the background</shortdescription>
     <longdescription>examine one film roll at a time from a background job, most recently opened film roll first, instead of examining the whole library before the user interface appears. opening a film roll that has not been examined yet moves it to the front of the queue.</longdescription>
   </dtconfig>
-  <dtconfig>
+  <dtconfig prefs="storage" section="XMP">
     <name>crawler_threads</name>
     <type>int</type>
     <default>16</default>
